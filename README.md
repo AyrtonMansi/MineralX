@@ -1,11 +1,18 @@
-# MineralX
+# MineralX Resources — Corporate Website
 
-Mineral exploration and mining services platform.
+A premium, dark corporate website for **MineralX Resources**, an Australian
+mining and exploration company focused on disciplined gold exploration and
+development in Queensland.
+
+Single-page, investor-grade marketing site built for speed, clarity and easy
+content editing.
 
 ## Tech Stack
 
-- **Frontend:** Next.js 14 + React + Tailwind CSS
-- **Backend:** Supabase (PostgreSQL + Auth + Storage)
+- **Framework:** [Next.js 14](https://nextjs.org/) (App Router)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS
+- **Animation:** Framer Motion (subtle, reduced-motion aware)
 - **Hosting:** Vercel
 - **Domain:** mineral-x.com.au
 
@@ -16,6 +23,68 @@ npm install
 npm run dev
 ```
 
-## Environment Variables
+Open [http://localhost:3000](http://localhost:3000).
 
-See `.env.local.example` for required environment variables.
+```bash
+npm run build   # production build
+npm run start   # serve the production build
+npm run lint    # lint
+```
+
+## Project Structure
+
+```
+app/
+  layout.tsx           Root layout, fonts, SEO metadata, JSON-LD
+  page.tsx             Homepage composition (section order)
+  globals.css          Design tokens + shared component classes
+  opengraph-image.tsx  Auto-generated Open Graph / social image
+  icon.tsx             Auto-generated favicon
+  robots.ts            robots.txt
+  sitemap.ts           sitemap.xml
+components/
+  Preloader.tsx        Loading screen (wordmark reveal + progress)
+  Navbar.tsx           Sticky nav with scroll state + mobile menu
+  Hero.tsx             Full-bleed hero (preserved concept)
+  TerrainBackground.tsx Generated aerial-survey hero backdrop
+  Overview.tsx         Company overview + credentials strip
+  OperatingFocus.tsx   Three operating-focus cards
+  Queensland.tsx       Operating region section
+  Capability.tsx       Six capability blocks
+  Investors.tsx        Investors / partnerships + disclaimer
+  Contact.tsx          Contact section + enquiry form
+  Footer.tsx           Footer + legal
+lib/
+  content.ts           ← All site copy lives here
+```
+
+## Editing Content
+
+Nearly all text — headings, body copy, cards, contact details, nav and
+footer — is centralised in [`lib/content.ts`](lib/content.ts). Edit that file
+to update copy without touching component code.
+
+To change the **section order**, edit the JSX in [`app/page.tsx`](app/page.tsx).
+
+## Design Notes
+
+- **Palette:** black / charcoal / white, thin hairline borders. No metallic gold.
+- **Type:** Inter, with tracked uppercase eyebrows and bold display headings.
+- **Loading screen** and **hero concept** are preserved from the original site.
+- The hero backdrop is generated (SVG contour field) — no stock photography.
+- Animations are intentionally subtle and respect `prefers-reduced-motion`.
+
+The contact form is backend-free: it composes an email to
+`info@mineral-x.com.au` via the visitor's mail client. Wire it to a form
+service or API route if server-side handling is required later.
+
+## Deploying to Vercel
+
+1. Push this repository to GitHub.
+2. Import the project in [Vercel](https://vercel.com/new) — framework is
+   auto-detected (Next.js); no extra configuration required.
+3. Add the `mineral-x.com.au` domain in the Vercel project settings.
+
+## License
+
+© MineralX Resources Pty Ltd. All rights reserved.
