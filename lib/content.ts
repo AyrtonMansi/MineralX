@@ -41,12 +41,16 @@ export const nav = [
 ];
 
 export const hero = {
-  eyebrow: "MineralX Resources",
-  headline: "Australian mining and exploration.",
+  // Hero copy + CTA preserved to match the original site's hero exactly.
   supporting:
-    "MineralX Resources is building a disciplined gold exploration and development platform.",
-  primaryCta: { label: "Company Overview", href: "#overview" },
-  secondaryCta: { label: "Contact", href: "#contact" },
+    "MineralX Resources is an Australian mining, exploration and R&D company which holds a strategic portfolio of mineral assets in North Queensland's minerals province.",
+  cta: { label: "Latest Exploration Update", href: "#overview" },
+  /**
+   * Optional path to the original hero background image (place in /public).
+   * When null, a faithful generated aerial-terrain backdrop is used instead.
+   * e.g. set to "/hero.jpg" once the original asset is added.
+   */
+  backgroundImage: null as string | null,
 };
 
 export const overview = {
