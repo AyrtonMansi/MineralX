@@ -2,9 +2,11 @@ import { Preloader } from "@/components/Preloader";
 import { Navbar } from "@/components/Navbar";
 import { Hero } from "@/components/Hero";
 import { Overview } from "@/components/Overview";
+import { MissionStatement } from "@/components/MissionStatement";
 import { OperatingFocus } from "@/components/OperatingFocus";
-import { Queensland } from "@/components/Queensland";
-import { Capability } from "@/components/Capability";
+import { Commodities } from "@/components/Commodities";
+import { Approach } from "@/components/Approach";
+import { Operate } from "@/components/Operate";
 import { Investors } from "@/components/Investors";
 import { Contact } from "@/components/Contact";
 import { Footer } from "@/components/Footer";
@@ -17,9 +19,11 @@ export default function Home() {
       <main>
         <Hero />
         <Overview />
+        <MissionStatement />
         <OperatingFocus />
-        <Queensland />
-        <Capability />
+        <Commodities />
+        <Approach />
+        <Operate />
         <Investors />
         <Contact />
       </main>

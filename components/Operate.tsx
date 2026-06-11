@@ -1,15 +1,15 @@
-import { queensland } from "@/lib/content";
+import { operate } from "@/lib/content";
 import { Reveal } from "./Reveal";
 
-export function Queensland() {
+export function Operate() {
   return (
     <section
-      id="queensland"
+      id="operate"
       className="relative overflow-hidden border-t border-line bg-black py-24 md:py-32"
     >
       {/* Faint contour map texture on the right to evoke the operating region. */}
       <div
-        className="pointer-events-none absolute right-0 top-0 hidden h-full w-1/2 opacity-[0.18] lg:block"
+        className="pointer-events-none absolute right-0 top-0 hidden h-full w-1/2 opacity-[0.16] lg:block"
         aria-hidden="true"
       >
         <svg
@@ -38,15 +38,15 @@ export function Queensland() {
             <Reveal>
               <p className="eyebrow flex items-center gap-3">
                 <span className="h-px w-8 bg-white/25" aria-hidden="true" />
-                {queensland.eyebrow}
+                {operate.eyebrow}
               </p>
-              <h2 className="display mt-5 text-3xl sm:text-4xl lg:text-[2.75rem]">
-                {queensland.heading}
+              <h2 className="display mt-5 text-3xl sm:text-4xl lg:text-[2.6rem]">
+                {operate.heading}
               </h2>
             </Reveal>
 
             <div className="mt-7 max-w-xl space-y-5">
-              {queensland.body.map((p, i) => (
+              {operate.body.map((p, i) => (
                 <Reveal key={i} delay={0.1 + i * 0.08}>
                   <p className="body-copy text-white/75">{p}</p>
                 </Reveal>
@@ -57,12 +57,15 @@ export function Queensland() {
           <div className="lg:col-span-5 lg:pl-6">
             <Reveal delay={0.15}>
               <ul className="divide-y divide-line border-y border-line">
-                {queensland.attributes.map((attr) => (
+                {operate.attributes.map((attr) => (
                   <li
                     key={attr}
                     className="flex items-center gap-4 py-4 text-sm text-white/85"
                   >
-                    <span className="h-1 w-1 shrink-0 bg-white/50" aria-hidden="true" />
+                    <span
+                      className="h-1 w-1 shrink-0 bg-white/50"
+                      aria-hidden="true"
+                    />
                     {attr}
                   </li>
                 ))}

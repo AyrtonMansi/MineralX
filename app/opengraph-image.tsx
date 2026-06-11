@@ -65,8 +65,8 @@ export default function OpengraphImage() {
               lineHeight: 1.35,
             }}
           >
-            Building a disciplined gold exploration and development platform in
-            Queensland.
+            Building long-term value through gold, silver and critical
+            minerals.
           </div>
         </div>
 
