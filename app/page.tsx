@@ -5,6 +5,7 @@ import { Overview } from "@/components/Overview";
 import { MissionStatement } from "@/components/MissionStatement";
 import { OperatingFocus } from "@/components/OperatingFocus";
 import { Commodities } from "@/components/Commodities";
+import { SectionBreak } from "@/components/SectionBreak";
 import { Approach } from "@/components/Approach";
 import { Investors } from "@/components/Investors";
 import { Contact } from "@/components/Contact";
@@ -21,6 +22,7 @@ export default function Home() {
         <MissionStatement />
         <OperatingFocus />
         <Commodities />
+        <SectionBreak />
         <Approach />
         <Investors />
         <Contact />

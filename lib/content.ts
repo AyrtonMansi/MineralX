@@ -134,6 +134,17 @@ export const commodities = {
   ],
 };
 
+export const sectionBreak = {
+  /**
+   * Optional full-bleed image (place an unedited drone shot in /public and set
+   * e.g. "/break.jpg"). The component's dark treatment matches it to the theme
+   * automatically. When null, a dark gradient stands in.
+   */
+  image: null as string | null,
+  caption: "MineralX Resources",
+  statement: "Building enduring value from real assets, responsibly.",
+};
+
 export const approach = {
   eyebrow: "Our Approach",
   heading: "How we build value.",
