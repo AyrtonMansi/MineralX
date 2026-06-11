@@ -7,6 +7,8 @@ type RevealProps = {
   children: ReactNode;
   className?: string;
   delay?: number;
+  /** Adds a subtle lift on hover (framer-driven, avoids transform conflicts). */
+  lift?: boolean;
   /** Render as a different element while keeping the animation. */
   as?: "div" | "section" | "li" | "article" | "header";
 };
@@ -15,7 +17,13 @@ type RevealProps = {
  * Subtle, investor-grade entrance: a small fade + rise as the element scrolls
  * into view, played once. Respects reduced-motion preferences.
  */
-export function Reveal({ children, className, delay = 0, as = "div" }: RevealProps) {
+export function Reveal({
+  children,
+  className,
+  delay = 0,
+  lift = false,
+  as = "div",
+}: RevealProps) {
   const reduce = useReducedMotion();
 
   const variants: Variants = {
@@ -40,6 +48,10 @@ export function Reveal({ children, className, delay = 0, as = "div" }: RevealPro
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true, margin: "-80px" }}
+      whileHover={lift && !reduce ? { y: -4 } : undefined}
+      transition={
+        lift ? { type: "spring", stiffness: 300, damping: 24 } : undefined
+      }
     >
       {children}
     </MotionTag>
