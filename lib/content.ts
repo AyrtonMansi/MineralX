@@ -158,21 +158,6 @@ export const approach = {
   ],
 };
 
-export const operate = {
-  eyebrow: "Where We Operate",
-  heading: "Anchored in a premier mining jurisdiction.",
-  body: [
-    "MineralX operates in Australia — one of the world's most stable, well-regulated and prospective mining jurisdictions, with the infrastructure, services and operating environment to support disciplined development.",
-    "Our activities are focused in Queensland, a region with a long and continuing history of mineral production.",
-  ],
-  attributes: [
-    "Stable, transparent jurisdiction",
-    "Established mining sector",
-    "Quality infrastructure & access",
-    "Skilled local workforce",
-  ],
-};
-
 export const investors = {
   eyebrow: "Investors & Partnerships",
   heading: "Partnering to build value.",
@@ -208,7 +193,6 @@ export const contact = {
   heading: "Get in touch.",
   intro:
     "For investor, partnership and corporate enquiries, contact the MineralX team.",
-  enquiryTypes: ["Investor enquiry", "Partnership", "Corporate / project", "General"],
 };
 
 export const footer = {

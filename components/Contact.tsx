@@ -5,19 +5,16 @@ import { company, contact } from "@/lib/content";
 import { Reveal } from "./Reveal";
 import { ArrowRight } from "./icons";
 
-const MAX = 1000;
-
 export function Contact() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [type, setType] = useState(contact.enquiryTypes[0]);
   const [message, setMessage] = useState("");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     // No backend required: compose an email to the MineralX inbox.
-    const subject = `${type} — ${name || "Website enquiry"}`;
-    const body = `Name: ${name}\nEmail: ${email}\nEnquiry type: ${type}\n\n${message}`;
+    const subject = `Website enquiry — ${name || "MineralX"}`;
+    const body = `Name: ${name}\nEmail: ${email}\n\n${message}`;
     window.location.href = `mailto:${company.email}?subject=${encodeURIComponent(
       subject,
     )}&body=${encodeURIComponent(body)}`;
@@ -60,16 +57,6 @@ export function Contact() {
                   ))}
                 </p>
               </div>
-              <div>
-                <p className="eyebrow">{company.operations.label}</p>
-                <p className="mt-2 leading-relaxed text-muted">
-                  {company.operations.lines.map((l) => (
-                    <span key={l} className="block">
-                      {l}
-                    </span>
-                  ))}
-                </p>
-              </div>
             </div>
           </Reveal>
         </div>
@@ -104,44 +91,19 @@ export function Contact() {
               </div>
 
               <div className="mt-8">
-                <Field label="Enquiry type">
-                  <div className="flex flex-wrap gap-2">
-                    {contact.enquiryTypes.map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setType(t)}
-                        className={`border px-4 py-2 text-[12px] uppercase tracking-wide transition-colors ${
-                          type === t
-                            ? "border-white bg-white text-black"
-                            : "border-line text-muted hover:border-line-strong hover:text-white"
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-              </div>
-
-              <div className="mt-8">
                 <Field label="Message" required>
                   <textarea
                     required
                     rows={5}
-                    maxLength={MAX}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Tell us about your enquiry…"
+                    placeholder="How can we help?"
                     className="input resize-none"
                   />
-                  <div className="mt-2 text-right text-[11px] tabular-nums text-muted-dim">
-                    {message.length}/{MAX}
-                  </div>
                 </Field>
               </div>
 
-              <button type="submit" className="btn btn-primary group mt-4">
+              <button type="submit" className="btn btn-primary group mt-8">
                 Send message
                 <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
               </button>

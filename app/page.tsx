@@ -6,7 +6,6 @@ import { MissionStatement } from "@/components/MissionStatement";
 import { OperatingFocus } from "@/components/OperatingFocus";
 import { Commodities } from "@/components/Commodities";
 import { Approach } from "@/components/Approach";
-import { Operate } from "@/components/Operate";
 import { Investors } from "@/components/Investors";
 import { Contact } from "@/components/Contact";
 import { Footer } from "@/components/Footer";
@@ -23,7 +22,6 @@ export default function Home() {
         <OperatingFocus />
         <Commodities />
         <Approach />
-        <Operate />
         <Investors />
         <Contact />
       </main>
