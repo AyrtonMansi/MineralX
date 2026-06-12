@@ -13,7 +13,7 @@ export function Overview() {
             <span className="h-px w-8 bg-white/25" aria-hidden="true" />
             {overview.eyebrow}
           </p>
-          <p className="mt-7 max-w-4xl text-2xl font-medium leading-[1.3] tracking-[-0.01em] text-white sm:text-3xl md:text-[2.5rem] md:leading-[1.25]">
+          <p className="mt-6 max-w-3xl text-lg font-medium leading-relaxed text-white md:text-2xl md:leading-[1.4]">
             {overview.mission}
           </p>
         </Reveal>

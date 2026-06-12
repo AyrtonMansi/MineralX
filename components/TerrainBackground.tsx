@@ -78,10 +78,10 @@ export function TerrainBackground() {
           alt=""
           className="absolute inset-0 h-full w-full animate-drift object-cover [filter:brightness(0.9)_contrast(1.03)] will-change-transform"
         />
-        {/* Black gradient overlay — darken left + bottom for legible copy,
-            fade the top so the navigation reads cleanly. */}
-        <div className="absolute inset-0 bg-black/20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/35 to-transparent" />
+        {/* Black overlay — heavier across the whole image, with extra
+            darkening left/bottom for legible copy and a clean top for nav. */}
+        <div className="absolute inset-0 bg-black/50" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/70 to-transparent" />
         <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/85 to-transparent" />
       </div>
