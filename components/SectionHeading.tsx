@@ -28,7 +28,7 @@ export function SectionHeading({
         {eyebrow}
       </p>
       <h2
-        className={`display mt-5 text-3xl sm:text-4xl lg:text-[2.75rem] ${
+        className={`display mt-5 text-3xl sm:text-4xl lg:text-[3.25rem] ${
           isCenter ? "max-w-3xl" : "max-w-2xl"
         }`}
       >

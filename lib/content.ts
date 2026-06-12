@@ -123,11 +123,11 @@ export const commodities = {
 
 export const sectionBreak = {
   /**
-   * Optional full-bleed image (place an unedited drone shot in /public and set
-   * e.g. "/break.jpg"). The component's dark treatment matches it to the theme
-   * automatically. When null, a dark gradient stands in.
+   * Full-bleed image for the cinematic band. Reuses the hero asset with a
+   * different crop + near-monochrome treatment so it reads as a second frame.
+   * Replace with a dedicated drone shot when available.
    */
-  image: null as string | null,
+  image: "/hero.webp" as string | null,
   caption: "MineralX Resources",
   statement: "Building enduring value from real assets, responsibly.",
 };

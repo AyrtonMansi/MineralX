@@ -76,6 +76,8 @@ export function TerrainBackground() {
         <img
           src={hero.backgroundImage}
           alt=""
+          fetchPriority="high"
+          decoding="async"
           className="absolute inset-0 h-full w-full animate-drift object-cover [filter:brightness(0.9)_contrast(1.03)] will-change-transform"
         />
         {/* Black overlay — heavier across the whole image, with extra

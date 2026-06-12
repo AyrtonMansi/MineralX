@@ -23,7 +23,7 @@ export function Commodities() {
               delay={i * 0.1}
               className="group flex flex-col bg-ink-900 p-8 transition-colors duration-500 hover:bg-ink-800 md:p-10"
             >
-              <span className="flex h-14 w-14 items-center justify-center border border-line-strong text-lg font-medium text-white/90 transition-colors duration-500 group-hover:border-white/45 group-hover:bg-white/[0.04]">
+              <span className="flex h-20 w-20 items-center justify-center border border-line-strong text-2xl font-light tracking-tight text-white transition-colors duration-500 group-hover:border-white/45 group-hover:bg-white/[0.04]">
                 {item.symbol}
               </span>
               <h3 className="mt-7 text-xl font-semibold text-white md:text-2xl">

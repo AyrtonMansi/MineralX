@@ -20,7 +20,9 @@ export function SectionBreak() {
         <img
           src={sectionBreak.image}
           alt=""
-          className="absolute inset-0 h-full w-full animate-drift object-cover [filter:grayscale(0.65)_brightness(0.5)_contrast(1.12)_saturate(0.7)] will-change-transform"
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full animate-drift object-cover object-bottom [filter:grayscale(0.85)_brightness(0.42)_contrast(1.15)_saturate(0.55)] will-change-transform"
         />
       ) : (
         <div className="absolute inset-0 animate-drift bg-[radial-gradient(120%_120%_at_50%_0%,#1b1b20,#0a0a0b_58%,#000_100%)] will-change-transform" />
@@ -43,7 +45,7 @@ export function SectionBreak() {
             <span className="h-px w-8 bg-white/40" aria-hidden="true" />
             {sectionBreak.caption}
           </p>
-          <p className="display mt-5 max-w-3xl text-2xl leading-[1.15] sm:text-3xl md:text-[2.5rem]">
+          <p className="display mt-5 max-w-4xl text-3xl leading-[1.1] sm:text-4xl md:text-[3.25rem]">
             {sectionBreak.statement}
           </p>
         </Reveal>

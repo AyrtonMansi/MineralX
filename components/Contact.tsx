@@ -32,7 +32,7 @@ export function Contact() {
               <span className="h-px w-8 bg-white/25" aria-hidden="true" />
               {contact.eyebrow}
             </p>
-            <h2 className="display mt-5 text-3xl sm:text-4xl lg:text-[2.6rem]">
+            <h2 className="display mt-5 text-3xl sm:text-4xl lg:text-[3.25rem]">
               {contact.heading}
             </h2>
             <p className="body-copy mt-6 max-w-sm">{contact.intro}</p>

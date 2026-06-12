@@ -20,7 +20,10 @@ export function OperatingFocus() {
               delay={i * 0.1}
               className="group flex min-h-[20rem] flex-col justify-between bg-black p-8 transition-colors duration-500 hover:bg-ink-800 md:p-10"
             >
-              <span className="text-[11px] font-medium tracking-wide text-muted-dim">
+              <span
+                className="text-6xl font-extralight leading-none tracking-tight text-white/[0.13] transition-colors duration-500 [font-variant-numeric:tabular-nums] group-hover:text-white/25 md:text-7xl"
+                aria-hidden="true"
+              >
                 {card.index}
               </span>
               <div>
