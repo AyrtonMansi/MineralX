@@ -36,28 +36,6 @@ export function Contact() {
               {contact.heading}
             </h2>
             <p className="body-copy mt-6 max-w-sm">{contact.intro}</p>
-
-            <div className="mt-10 space-y-8 text-sm">
-              <div>
-                <p className="eyebrow">Email</p>
-                <a
-                  href={`mailto:${company.email}`}
-                  className="mt-2 block text-white transition-opacity hover:opacity-70"
-                >
-                  {company.email}
-                </a>
-              </div>
-              <div>
-                <p className="eyebrow">{company.postal.label}</p>
-                <p className="mt-2 leading-relaxed text-muted">
-                  {company.postal.lines.map((l) => (
-                    <span key={l} className="block">
-                      {l}
-                    </span>
-                  ))}
-                </p>
-              </div>
-            </div>
           </Reveal>
         </div>
 
