@@ -71,16 +71,19 @@ export function TerrainBackground() {
   if (hero.backgroundImage) {
     return (
       <div className="absolute inset-0 -z-10 overflow-hidden bg-black">
+        {/* Original warm aerial image, zoomed to fill the viewport. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={hero.backgroundImage}
           alt=""
-          className="absolute inset-0 h-full w-full animate-drift object-cover [filter:grayscale(0.6)_brightness(0.55)_contrast(1.1)_saturate(0.72)] will-change-transform"
+          className="absolute inset-0 h-full w-full animate-drift object-cover [filter:brightness(0.9)_contrast(1.03)] will-change-transform"
         />
-        <div className="absolute inset-0 bg-black/20 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_38%,transparent_25%,rgba(0,0,0,0.5)_74%,#000_100%)]" />
-        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/80 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/75 to-transparent" />
+        {/* Black gradient overlay — darken left + bottom for legible copy,
+            fade the top so the navigation reads cleanly. */}
+        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/35 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/70 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/85 to-transparent" />
       </div>
     );
   }

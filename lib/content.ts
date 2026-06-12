@@ -54,10 +54,9 @@ export const hero = {
 };
 
 export const overview = {
-  eyebrow: "Company Overview",
-  heading: "A mining and exploration company built to create value.",
+  eyebrow: "Our Mission",
   mission:
-    "Our mission is to responsibly discover, develop and deliver the gold, silver and critical minerals the world needs — creating enduring value for our shareholders, partners and the communities in which we operate.",
+    "To responsibly discover, develop and deliver the gold, silver and critical minerals the world needs — creating enduring value for our shareholders, partners and the communities in which we operate.",
   pillars: [
     {
       title: "Build",
