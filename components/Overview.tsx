@@ -23,14 +23,9 @@ export function Overview() {
 
           <div className="lg:col-span-7">
             <Reveal delay={0.1}>
-              <p className="text-lg leading-relaxed text-white/80 md:text-xl">
-                {overview.lead}
-              </p>
-            </Reveal>
-            <Reveal delay={0.18}>
-              <div className="mt-8 border-l-2 border-line-strong pl-6">
+              <div className="border-l-2 border-line-strong pl-6">
                 <p className="eyebrow">Our mission</p>
-                <p className="mt-3 text-base leading-relaxed text-white/90 md:text-lg">
+                <p className="mt-3 text-lg leading-relaxed text-white/90 md:text-xl">
                   {overview.mission}
                 </p>
               </div>
@@ -38,24 +33,8 @@ export function Overview() {
           </div>
         </div>
 
-        {/* Credentials */}
-        <Reveal delay={0.1}>
-          <dl className="mt-16 grid grid-cols-2 gap-px overflow-hidden border border-line bg-line sm:grid-cols-4">
-            {overview.credentials.map((c) => (
-              <div key={c.label} className="bg-ink-900 p-5">
-                <dt className="text-[10px] uppercase tracking-wide text-muted-dim">
-                  {c.label}
-                </dt>
-                <dd className="mt-2 text-sm font-medium text-white">
-                  {c.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </Reveal>
-
         {/* Build / Advance / Deliver pillars */}
-        <div className="mt-14 grid gap-10 border-t border-line pt-12 md:grid-cols-3">
+        <div className="mt-16 grid gap-10 border-t border-line pt-12 md:grid-cols-3">
           {overview.pillars.map((p, i) => (
             <Reveal key={p.title} delay={i * 0.1}>
               <span className="text-[11px] tabular-nums tracking-wide text-muted-dim">

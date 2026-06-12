@@ -56,15 +56,8 @@ export const hero = {
 export const overview = {
   eyebrow: "Company Overview",
   heading: "A mining and exploration company built to create value.",
-  lead: "MineralX Resources is an Australian mining and exploration company focused on the discovery and development of gold, silver and critical minerals — building a disciplined platform that advances quality opportunities with operational focus and capital discipline.",
   mission:
     "Our mission is to responsibly discover, develop and deliver the gold, silver and critical minerals the world needs — creating enduring value for our shareholders, partners and the communities in which we operate.",
-  credentials: [
-    { label: "Ownership", value: "Australian" },
-    { label: "Commodities", value: "Gold · Silver · Critical minerals" },
-    { label: "Focus", value: "Discovery & development" },
-    { label: "Discipline", value: "Capital & operational" },
-  ],
   pillars: [
     {
       title: "Build",
