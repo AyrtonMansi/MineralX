@@ -50,7 +50,7 @@ export const hero = {
    * When null, a faithful generated aerial-terrain backdrop is used instead.
    * e.g. set to "/hero.jpg" once the original asset is added.
    */
-  backgroundImage: null as string | null,
+  backgroundImage: "/hero.webp" as string | null,
 };
 
 export const overview = {
