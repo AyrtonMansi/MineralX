@@ -2,7 +2,6 @@ import { Preloader } from "@/components/Preloader";
 import { Navbar } from "@/components/Navbar";
 import { Hero } from "@/components/Hero";
 import { Overview } from "@/components/Overview";
-import { MissionStatement } from "@/components/MissionStatement";
 import { OperatingFocus } from "@/components/OperatingFocus";
 import { Commodities } from "@/components/Commodities";
 import { SectionBreak } from "@/components/SectionBreak";
@@ -19,7 +18,6 @@ export default function Home() {
       <main>
         <Hero />
         <Overview />
-        <MissionStatement />
         <OperatingFocus />
         <Commodities />
         <SectionBreak />
