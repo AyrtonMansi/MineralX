@@ -26,7 +26,7 @@ export function Hero() {
   return (
     <section
       id="top"
-      className="relative flex min-h-[100svh] items-center overflow-hidden"
+      className="relative flex min-h-screen-dyn items-center overflow-hidden"
     >
       <TerrainBackground />
 

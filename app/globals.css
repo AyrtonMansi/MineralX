@@ -66,6 +66,14 @@ body {
     @apply mx-auto w-full max-w-site px-6 md:px-10;
   }
 
+  /* Full visible-viewport height that tracks the mobile browser UI.
+     Cascades vh -> svh -> dvh so the last value the browser understands wins. */
+  .min-h-screen-dyn {
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
+  }
+
   /* Small tracked uppercase label used for eyebrows, nav and captions. */
   .eyebrow {
     @apply text-[11px] font-medium uppercase tracking-wide text-muted;
