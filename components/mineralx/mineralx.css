@@ -457,6 +457,40 @@
 .mx-custom-wms-row { display: flex; gap: 8px; margin-top: 6px; }
 .mx-custom-wms-row .mx-input { flex: 1; }
 
+/* ── Import feedback ──────────────────────────────────────────── */
+.mx-import-msg {
+  font-size: 11.5px; line-height: 1.4;
+  padding: 8px 11px; margin-top: 10px;
+  border-radius: 8px;
+}
+.mx-import-ok { background: rgba(110,122,94,0.14); color: #4A5540; border: 1px solid rgba(110,122,94,0.3); }
+.mx-import-err { background: rgba(139,58,58,0.1); color: #8B3A3A; border: 1px solid rgba(139,58,58,0.25); }
+
+/* ── Sample popup ─────────────────────────────────────────────── */
+.mx-popup .leaflet-popup-content-wrapper {
+  background: rgba(247,245,238,0.96);
+  backdrop-filter: blur(14px);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: 0 12px 32px rgba(33,30,26,0.28);
+  color: #211E1A;
+}
+.mx-popup .leaflet-popup-content { margin: 12px 14px; font-family: 'Instrument Sans', sans-serif; }
+.mx-popup .leaflet-popup-tip { background: rgba(247,245,238,0.96); }
+.mx-pop-id { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8A857A; }
+.mx-pop-assay { font-family: 'Newsreader', serif; font-size: 17px; margin: 3px 0 5px; }
+.mx-pop-pending { color: #8A4A2E; font-style: italic; font-size: 13px; }
+.mx-pop-row { font-size: 12px; font-weight: 500; }
+.mx-pop-notes { font-size: 11px; color: #6B655B; margin-top: 3px; line-height: 1.4; }
+.mx-pop-coords { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #9A9488; margin-top: 7px; }
+
+/* Pending legend dot: dashed outline, matches map style */
+.mx-legend-pending {
+  background: #F3F1E9 !important;
+  border: 2px dashed #8A857A !important;
+  opacity: 0.8;
+}
+
 /* ── Scrollbar styling ────────────────────────────────────────── */
 .mx-workspace ::-webkit-scrollbar { width: 7px; height: 7px; }
 .mx-workspace ::-webkit-scrollbar-thumb { background: rgba(120,114,102,0.35); border-radius: 8px; }

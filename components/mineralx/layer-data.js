@@ -44,11 +44,42 @@ export const PUBLIC_DATA_CATALOG = [
   },
 ];
 
+// ── Demo field data ─────────────────────────────────────────────
+// Samples: au in g/t; au === null means awaiting assay.
+export const DEMO_SAMPLES = [
+  { id: 'TN-RC-0428', lat: -20.5501, lng: 129.7455, au: 4.2, lith: 'Quartz vein float', notes: 'Coarse visible sulphides' },
+  { id: 'TN-RC-0431', lat: -20.5555, lng: 129.7431, au: 1.1, lith: 'Sheared BIF', notes: '' },
+  { id: 'TN-RC-0433', lat: -20.5522, lng: 129.7521, au: 0.2, lith: 'Silicified siltstone', notes: 'Background' },
+  { id: 'TN-RC-0440', lat: -20.5468, lng: 129.7402, au: 3.6, lith: 'Quartz reef', notes: 'Sampled at reef contact' },
+  { id: 'TN-RC-0442', lat: -20.5588, lng: 129.7498, au: 0.8, lith: 'Ferruginous quartz', notes: '' },
+  { id: 'TN-RC-0447', lat: -20.5539, lng: 129.7385, au: null, lith: 'Quartz-sericite schist', notes: 'Dispatched to ALS 14 Jun' },
+];
+
+export const DEMO_COLLARS = [
+  { id: 'TNDD-001', lat: -20.5489, lng: 129.7440 },
+  { id: 'TNDD-002', lat: -20.5531, lng: 129.7472 },
+  { id: 'TNDD-003', lat: -20.5567, lng: 129.7458 },
+];
+
+export const DEMO_BOUNDARY = [
+  [-20.5430, 129.7368], [-20.5432, 129.7566], [-20.5612, 129.7560], [-20.5606, 129.7372],
+];
+
+// Grade classification: single source of truth for legend, markers, stats.
+export function gradeOf(au) {
+  if (au == null || Number.isNaN(au)) return 'pending';
+  if (au >= 3.0) return 'high';
+  if (au >= 0.5) return 'anom';
+  return 'bg';
+}
+
+export const GRADE_COLORS = { high: '#C15F3C', anom: '#B08A3E', bg: '#A39C8C', pending: '#F3F1E9' };
+
 export function createDemoProject() {
   return {
     id: 'proj-1',
     type: LAYER_TYPES.PROJECT,
-    name: 'Pilbara Au Prospect',
+    name: 'Tanami North Prospect',
     color: '#E67E22',
     visible: true,
     expanded: true,
@@ -58,7 +89,6 @@ export function createDemoProject() {
         type: LAYER_TYPES.ROCK_CHIPS,
         name: 'Rock Chips',
         color: '#E74C3C',
-        count: 47,
         visible: true,
         expanded: false,
         children: [],
@@ -68,7 +98,6 @@ export function createDemoProject() {
         type: LAYER_TYPES.DRILL_HOLES,
         name: 'Drill Holes',
         color: '#3498DB',
-        count: 12,
         visible: true,
         expanded: false,
         children: [],

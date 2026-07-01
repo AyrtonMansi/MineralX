@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
-import { LAYER_TYPES, PUBLIC_DATA_CATALOG } from './layer-data';
+import { useRef, useState } from 'react';
+import { LAYER_TYPES } from './layer-data';
 import { MxIcons } from './MineralXIcons';
+import { nextSampleId, parseSampleCsv } from './MineralXWorkspace';
 
-export default function ManageDrawer({ node, onClose, catalog, onAddPublicLayer }) {
+export default function ManageDrawer({ node, onClose, catalog, onAddPublicLayer, samples, onAddSamples }) {
   if (!node) return null;
 
   return (
@@ -18,7 +19,7 @@ export default function ManageDrawer({ node, onClose, catalog, onAddPublicLayer 
         </div>
         <div className="mx-manage-body">
           {node.type === LAYER_TYPES.PROJECT && <ProjectManager node={node} />}
-          {node.type === LAYER_TYPES.ROCK_CHIPS && <RockChipManager node={node} />}
+          {node.type === LAYER_TYPES.ROCK_CHIPS && <RockChipManager samples={samples} onAddSamples={onAddSamples} onClose={onClose} />}
           {node.type === LAYER_TYPES.DRILL_HOLES && <DrillHoleManager node={node} />}
           {node.type === LAYER_TYPES.BOUNDARY && <BoundaryManager node={node} />}
           {node.type === LAYER_TYPES.BASEMAP && <BasemapManager catalog={catalog} onAddPublicLayer={onAddPublicLayer} />}
@@ -59,8 +60,58 @@ function ProjectManager({ node }) {
 }
 
 // ── Rock chip manager ──────────────────────────────────────────────────
-function RockChipManager({ node }) {
+function RockChipManager({ samples, onAddSamples, onClose }) {
   const [tab, setTab] = useState('add');
+  const [form, setForm] = useState({ id: '', lith: '', lng: '', lat: '', au: '', notes: '' });
+  const [error, setError] = useState(null);
+  const [importMsg, setImportMsg] = useState(null);
+  const fileInput = useRef(null);
+  const autoId = nextSampleId(samples);
+
+  const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  const addSample = () => {
+    const lat = parseFloat(form.lat);
+    const lng = parseFloat(form.lng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      setError('Easting and northing are required (decimal degrees).');
+      return;
+    }
+    const au = form.au.trim() === '' ? null : parseFloat(form.au);
+    onAddSamples([{
+      id: form.id.trim() || autoId,
+      lat, lng,
+      au: Number.isNaN(au) ? null : au,
+      lith: form.lith.trim(),
+      notes: form.notes.trim(),
+    }]);
+    onClose();
+  };
+
+  const importFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { samples: parsed, error: err } = parseSampleCsv(String(reader.result), samples);
+      if (err) { setImportMsg({ error: true, text: err }); return; }
+      onAddSamples(parsed);
+      setImportMsg({ error: false, text: `Imported ${parsed.length} sample${parsed.length === 1 ? '' : 's'}.` });
+    };
+    reader.readAsText(file);
+  };
+
+  const exportCsv = () => {
+    const rows = [
+      'sample_id,lat,lng,au_gpt,lithology,notes',
+      ...samples.map(s => [s.id, s.lat, s.lng, s.au ?? '', s.lith || '', (s.notes || '').replace(/,/g, ';')].join(',')),
+    ].join('\n');
+    const blob = new Blob([rows], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'rock_chips.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   return (
     <div className="mx-manage-sections">
@@ -72,50 +123,55 @@ function RockChipManager({ node }) {
 
       {tab === 'add' && (
         <div className="mx-manage-form">
-          <ManageField label="Sample ID" value="" placeholder="Auto: TN-RC-0448" />
-          <ManageField label="Lithology" value="" placeholder="e.g. Quartz vein float" />
+          <ManageField label="Sample ID" value={form.id} onChange={setField('id')} placeholder={`Auto: ${autoId}`} />
+          <ManageField label="Lithology" value={form.lith} onChange={setField('lith')} placeholder="e.g. Quartz vein float" />
           <div className="mx-manage-row-2">
-            <ManageField label="Easting" value="" placeholder="129.7402" />
-            <ManageField label="Northing" value="" placeholder="-20.5468" />
+            <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="129.7402" />
+            <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.5468" />
           </div>
-          <ManageField label="Elevation (m)" value="" placeholder="498" />
-          <ManageField label="Alteration" value="" placeholder="Qz-sericite" />
-          <ManageField label="Notes" value="" placeholder="Surface float, quartz reef" multiline />
-          <button type="button" className="mx-btn-primary mx-btn-full">Add sample</button>
+          <ManageField label="Au (g/t) — blank if awaiting assay" value={form.au} onChange={setField('au')} placeholder="e.g. 3.2" />
+          <ManageField label="Notes" value={form.notes} onChange={setField('notes')} placeholder="Surface float, quartz reef" multiline />
+          {error && <div className="mx-import-msg mx-import-err">{error}</div>}
+          <button type="button" className="mx-btn-primary mx-btn-full" onClick={addSample}>Add sample</button>
         </div>
       )}
 
       {tab === 'import' && (
         <div className="mx-manage-form">
-          <div className="mx-drop-area mx-drop-area-sm">
+          <div
+            className="mx-drop-area mx-drop-area-sm"
+            onClick={() => fileInput.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files?.[0]); }}
+          >
             <div className="mx-drop-icon">&#8593;</div>
             <div className="mx-drop-text">Drop CSV or <span className="mx-drop-browse">browse</span></div>
             <div className="mx-drop-hint">Headers auto-mapped to fields</div>
+            <input ref={fileInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
+          {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
           <div className="mx-column-map">
-            <div className="mx-section-label">COLUMN MAPPING</div>
-            <ColumnMapRow from="sample_id" to="Sample ID" />
-            <ColumnMapRow from="easting" to="Easting" />
-            <ColumnMapRow from="northing" to="Northing" />
-            <ColumnMapRow from="lith" to="Lithology" />
-            <ColumnMapRow from="au_ppm" to="Au (g/t)" />
+            <div className="mx-section-label">RECOGNISED COLUMNS</div>
+            <ColumnMapRow from="sample_id / id" to="Sample ID (auto if missing)" />
+            <ColumnMapRow from="lng / easting" to="Easting" />
+            <ColumnMapRow from="lat / northing" to="Northing" />
+            <ColumnMapRow from="lith / lithology" to="Lithology" />
+            <ColumnMapRow from="au / au_gpt" to="Au (g/t)" />
           </div>
-          <button type="button" className="mx-btn-primary mx-btn-full">Import rows</button>
         </div>
       )}
 
       {tab === 'scheme' && (
         <div className="mx-manage-form">
-          <ManageField label="Prefix" value="TN-RC-" />
-          <ManageField label="Next number" value="0448" />
-          <ManageField label="Padding" value="4 digits" />
-          <p className="mx-scheme-preview">Next ID: <strong>TN-RC-0448</strong></p>
+          <ManageField label="Prefix" value="TN-RC-" readOnly />
+          <ManageField label="Padding" value="4 digits" readOnly />
+          <p className="mx-scheme-preview">Next ID: <strong>{autoId}</strong></p>
         </div>
       )}
 
       <div className="mx-manage-actions">
-        <button type="button" className="mx-btn-secondary mx-btn-sm">{MxIcons.download} Export CSV</button>
-        <span className="mx-manage-count">{node.count || 0} samples</span>
+        <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportCsv}>{MxIcons.download} Export CSV</button>
+        <span className="mx-manage-count">{samples.length} samples</span>
       </div>
     </div>
   );
@@ -255,14 +311,16 @@ function PublicDataManager({ catalog, onAddPublicLayer }) {
 }
 
 // ── Shared form components ─────────────────────────────────────────────
-function ManageField({ label, value, placeholder, readOnly, multiline }) {
+function ManageField({ label, value, onChange, placeholder, readOnly, multiline }) {
+  // Controlled when onChange is provided; static display otherwise.
+  const valueProps = onChange ? { value, onChange } : { defaultValue: value };
   return (
     <div className="mx-field">
       <label className="mx-field-label">{label}</label>
       {multiline ? (
-        <textarea className="mx-input mx-textarea" defaultValue={value} placeholder={placeholder} readOnly={readOnly} rows={3} />
+        <textarea className="mx-input mx-textarea" {...valueProps} placeholder={placeholder} readOnly={readOnly} rows={3} />
       ) : (
-        <input type="text" className="mx-input" defaultValue={value} placeholder={placeholder} readOnly={readOnly} />
+        <input type="text" className="mx-input" {...valueProps} placeholder={placeholder} readOnly={readOnly} />
       )}
     </div>
   );
