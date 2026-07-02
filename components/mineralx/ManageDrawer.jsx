@@ -1,72 +1,152 @@
 'use client';
 import { useRef, useState } from 'react';
-import { LAYER_TYPES } from './layer-data';
 import { MxIcons } from './MineralXIcons';
-import { nextSampleId, parseSampleCsv } from './MineralXWorkspace';
+import {
+  nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv,
+  samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  compressImage, today,
+} from './project-store';
 
-export default function ManageDrawer({ node, onClose, catalog, onAddPublicLayer, samples, onAddSamples }) {
-  if (!node) return null;
+const TYPE_LABELS = {
+  project: 'PROJECT SETTINGS',
+  chips: 'ROCK CHIP MANAGER',
+  holes: 'DRILL HOLE MANAGER',
+  boundary: 'BOUNDARY MANAGER',
+  newProject: 'NEW PROJECT',
+};
+
+export default function ManageDrawer({ target, store, api, onClose }) {
+  const project = store.projects.find(p => p.id === target.projectId);
+  if (target.type !== 'newProject' && !project) return null;
+
+  const titles = {
+    project: project?.name,
+    chips: 'Rock chips',
+    holes: 'Drill holes',
+    boundary: project?.boundary?.name || 'Boundary',
+    newProject: 'New project',
+  };
 
   return (
     <div className="mx-manage-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="mx-manage-drawer mx-anim-rise">
         <div className="mx-manage-header">
           <div>
-            <div className="mx-eyebrow">{typeLabel(node.type)}</div>
-            <h2 className="mx-manage-title">{node.name}</h2>
+            <div className="mx-eyebrow">{TYPE_LABELS[target.type]}{project && target.type !== 'project' ? ` · ${project.name.toUpperCase()}` : ''}</div>
+            <h2 className="mx-manage-title">{titles[target.type]}</h2>
           </div>
           <button type="button" className="mx-close-btn" onClick={onClose}>&times;</button>
         </div>
         <div className="mx-manage-body">
-          {node.type === LAYER_TYPES.PROJECT && <ProjectManager node={node} />}
-          {node.type === LAYER_TYPES.ROCK_CHIPS && <RockChipManager samples={samples} onAddSamples={onAddSamples} onClose={onClose} />}
-          {node.type === LAYER_TYPES.DRILL_HOLES && <DrillHoleManager node={node} />}
-          {node.type === LAYER_TYPES.BOUNDARY && <BoundaryManager node={node} />}
-          {node.type === LAYER_TYPES.BASEMAP && <BasemapManager catalog={catalog} onAddPublicLayer={onAddPublicLayer} />}
-          {node.type === LAYER_TYPES.PUBLIC_GROUP && <PublicDataManager catalog={catalog} onAddPublicLayer={onAddPublicLayer} />}
+          {target.type === 'newProject' && <NewProjectManager api={api} onClose={onClose} />}
+          {target.type === 'project' && <ProjectManager project={project} api={api} onClose={onClose} />}
+          {target.type === 'chips' && <RockChipManager project={project} api={api} onClose={onClose} />}
+          {target.type === 'holes' && <DrillHoleManager project={project} api={api} onClose={onClose} />}
+          {target.type === 'boundary' && <BoundaryManager project={project} api={api} />}
         </div>
       </div>
     </div>
   );
 }
 
-function typeLabel(type) {
-  const map = {
-    [LAYER_TYPES.PROJECT]: 'PROJECT SETTINGS',
-    [LAYER_TYPES.ROCK_CHIPS]: 'ROCK CHIP MANAGER',
-    [LAYER_TYPES.DRILL_HOLES]: 'DRILL HOLE MANAGER',
-    [LAYER_TYPES.BOUNDARY]: 'BOUNDARY MANAGER',
-    [LAYER_TYPES.BASEMAP]: 'BASEMAP & PUBLIC DATA',
-    [LAYER_TYPES.PUBLIC_GROUP]: 'PUBLIC DATA CATALOG',
+// ── New project ────────────────────────────────────────────────────────
+function NewProjectManager({ api, onClose }) {
+  const [name, setName] = useState('');
+  const [kmlText, setKmlText] = useState(null);
+  const [kmlName, setKmlName] = useState(null);
+  const [error, setError] = useState(null);
+  const fileInput = useRef(null);
+
+  const readKml = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { error: err } = parseKmlBoundary(String(reader.result));
+      if (err) { setError(err); setKmlText(null); setKmlName(null); return; }
+      setError(null);
+      setKmlText(String(reader.result));
+      setKmlName(file.name);
+    };
+    reader.readAsText(file);
   };
-  return map[type] || 'MANAGE';
+
+  const create = () => {
+    if (!name.trim()) { setError('Give the project a name.'); return; }
+    const { boundaryError } = api.createProject(name.trim(), kmlText);
+    if (boundaryError) { setError(boundaryError); return; }
+    onClose();
+  };
+
+  return (
+    <div className="mx-manage-sections">
+      <div className="mx-manage-form">
+        <ManageField label="Project name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ravenswood South" />
+        <div
+          className="mx-drop-area mx-drop-area-sm"
+          onClick={() => fileInput.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); readKml(e.dataTransfer.files?.[0]); }}
+        >
+          <div className="mx-drop-icon">&#8593;</div>
+          <div className="mx-drop-text">{kmlName ? kmlName : <>Tenement KML (optional) — drop or <span className="mx-drop-browse">browse</span></>}</div>
+          <div className="mx-drop-hint">{kmlName ? 'Boundary ready — will zoom to it' : 'You can add or replace it later'}</div>
+          <input ref={fileInput} type="file" accept=".kml" style={{ display: 'none' }} onChange={(e) => { readKml(e.target.files?.[0]); e.target.value = ''; }} />
+        </div>
+        {error && <div className="mx-import-msg mx-import-err">{error}</div>}
+        <button type="button" className="mx-btn-primary mx-btn-full" onClick={create}>Create project</button>
+      </div>
+    </div>
+  );
 }
 
 // ── Project settings ───────────────────────────────────────────────────
-function ProjectManager({ node }) {
+function ProjectManager({ project, api, onClose }) {
+  const [name, setName] = useState(project.name);
+
   return (
     <div className="mx-manage-sections">
-      <ManageField label="Project name" value={node.name} />
-      <ManageField label="Tenement ID" value="E45/1234" />
-      <ManageField label="Datum" value="GDA2020 Zone 52" />
-      <ManageField label="Team" value="Field team Alpha" />
-      <ManageField label="Boundary source" value="Uploaded KML" />
+      <div className="mx-manage-form">
+        <ManageField
+          label="Project name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => { if (name.trim() && name !== project.name) api.renameProject(project.id, name.trim()); }}
+        />
+        <ManageField label="Sample ID prefix" value={project.idPrefix} readOnly />
+        <ManageField label="Datum" value="GDA2020 (lat/lng)" readOnly />
+        <ManageField label="Created" value={project.createdAt || '—'} readOnly />
+        <ManageField label="Boundary" value={project.boundary ? project.boundary.name : 'None — add via KML upload'} readOnly />
+      </div>
       <div className="mx-manage-actions">
-        <button type="button" className="mx-btn-secondary mx-btn-sm">{MxIcons.download} Export all data</button>
-        <button type="button" className="mx-btn-danger mx-btn-sm">{MxIcons.trash} Delete project</button>
+        <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={() => api.exportProject(project)}>
+          {MxIcons.download} Export all data
+        </button>
+        <button
+          type="button" className="mx-btn-danger mx-btn-sm"
+          onClick={() => {
+            if (window.confirm(`Delete “${project.name}” and all its data? This cannot be undone.`)) {
+              api.deleteProject(project.id);
+              onClose();
+            }
+          }}
+        >
+          {MxIcons.trash} Delete project
+        </button>
       </div>
     </div>
   );
 }
 
 // ── Rock chip manager ──────────────────────────────────────────────────
-function RockChipManager({ samples, onAddSamples, onClose }) {
+function RockChipManager({ project, api, onClose }) {
   const [tab, setTab] = useState('add');
   const [form, setForm] = useState({ id: '', lith: '', lng: '', lat: '', au: '', notes: '' });
+  const [photo, setPhoto] = useState(null);
   const [error, setError] = useState(null);
   const [importMsg, setImportMsg] = useState(null);
   const fileInput = useRef(null);
-  const autoId = nextSampleId(samples);
+  const photoInput = useRef(null);
+  const autoId = nextId(project.samples, project.idPrefix);
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
@@ -78,39 +158,35 @@ function RockChipManager({ samples, onAddSamples, onClose }) {
       return;
     }
     const au = form.au.trim() === '' ? null : parseFloat(form.au);
-    onAddSamples([{
+    api.addSamples(project.id, [{
       id: form.id.trim() || autoId,
       lat, lng,
       au: Number.isNaN(au) ? null : au,
       lith: form.lith.trim(),
       notes: form.notes.trim(),
+      photo: photo || undefined,
+      date: today(),
     }]);
     onClose();
+  };
+
+  const attachPhoto = (file) => {
+    if (!file) return;
+    compressImage(file)
+      .then(setPhoto)
+      .catch(() => setError('Could not read that image.'));
   };
 
   const importFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const { samples: parsed, error: err } = parseSampleCsv(String(reader.result), samples);
+      const { samples, error: err } = parseSampleCsv(String(reader.result), project.samples, project.idPrefix);
       if (err) { setImportMsg({ error: true, text: err }); return; }
-      onAddSamples(parsed);
-      setImportMsg({ error: false, text: `Imported ${parsed.length} sample${parsed.length === 1 ? '' : 's'}.` });
+      api.addSamples(project.id, samples, file.name);
+      setImportMsg({ error: false, text: `Imported ${samples.length} sample${samples.length === 1 ? '' : 's'}.` });
     };
     reader.readAsText(file);
-  };
-
-  const exportCsv = () => {
-    const rows = [
-      'sample_id,lat,lng,au_gpt,lithology,notes',
-      ...samples.map(s => [s.id, s.lat, s.lng, s.au ?? '', s.lith || '', (s.notes || '').replace(/,/g, ';')].join(',')),
-    ].join('\n');
-    const blob = new Blob([rows], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'rock_chips.csv';
-    a.click();
-    URL.revokeObjectURL(a.href);
   };
 
   return (
@@ -118,7 +194,6 @@ function RockChipManager({ samples, onAddSamples, onClose }) {
       <div className="mx-manage-tabs">
         <button type="button" className={`mx-manage-tab ${tab === 'add' ? 'active' : ''}`} onClick={() => setTab('add')}>Add sample</button>
         <button type="button" className={`mx-manage-tab ${tab === 'import' ? 'active' : ''}`} onClick={() => setTab('import')}>Import CSV</button>
-        <button type="button" className={`mx-manage-tab ${tab === 'scheme' ? 'active' : ''}`} onClick={() => setTab('scheme')}>ID scheme</button>
       </div>
 
       {tab === 'add' && (
@@ -126,11 +201,17 @@ function RockChipManager({ samples, onAddSamples, onClose }) {
           <ManageField label="Sample ID" value={form.id} onChange={setField('id')} placeholder={`Auto: ${autoId}`} />
           <ManageField label="Lithology" value={form.lith} onChange={setField('lith')} placeholder="e.g. Quartz vein float" />
           <div className="mx-manage-row-2">
-            <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="129.7402" />
-            <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.5468" />
+            <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="146.2570" />
+            <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.0665" />
           </div>
           <ManageField label="Au (g/t) — blank if awaiting assay" value={form.au} onChange={setField('au')} placeholder="e.g. 3.2" />
           <ManageField label="Notes" value={form.notes} onChange={setField('notes')} placeholder="Surface float, quartz reef" multiline />
+          <button type="button" className="mx-photo-attach" onClick={() => photoInput.current?.click()}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- dataURL thumbnail; next/image can't optimize these */}
+            {photo ? <img src={photo} alt="Sample" className="mx-photo-thumb" /> : <span className="mx-photo-plus">+</span>}
+            <span>{photo ? 'Photo attached — tap to replace' : 'Attach photo (optional)'}</span>
+            <input ref={photoInput} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => { attachPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+          </button>
           {error && <div className="mx-import-msg mx-import-err">{error}</div>}
           <button type="button" className="mx-btn-primary mx-btn-full" onClick={addSample}>Add sample</button>
         </div>
@@ -146,192 +227,216 @@ function RockChipManager({ samples, onAddSamples, onClose }) {
           >
             <div className="mx-drop-icon">&#8593;</div>
             <div className="mx-drop-text">Drop CSV or <span className="mx-drop-browse">browse</span></div>
-            <div className="mx-drop-hint">Headers auto-mapped to fields</div>
+            <div className="mx-drop-hint">sample_id, lat, lng, au, lith, notes — IDs auto-assigned if missing</div>
             <input ref={fileInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
           {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
-          <div className="mx-column-map">
-            <div className="mx-section-label">RECOGNISED COLUMNS</div>
-            <ColumnMapRow from="sample_id / id" to="Sample ID (auto if missing)" />
-            <ColumnMapRow from="lng / easting" to="Easting" />
-            <ColumnMapRow from="lat / northing" to="Northing" />
-            <ColumnMapRow from="lith / lithology" to="Lithology" />
-            <ColumnMapRow from="au / au_gpt" to="Au (g/t)" />
-          </div>
-        </div>
-      )}
-
-      {tab === 'scheme' && (
-        <div className="mx-manage-form">
-          <ManageField label="Prefix" value="TN-RC-" readOnly />
-          <ManageField label="Padding" value="4 digits" readOnly />
-          <p className="mx-scheme-preview">Next ID: <strong>{autoId}</strong></p>
         </div>
       )}
 
       <div className="mx-manage-actions">
-        <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportCsv}>{MxIcons.download} Export CSV</button>
-        <span className="mx-manage-count">{samples.length} samples</span>
+        <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={() => downloadText('rock_chips.csv', samplesToCsv(project.samples))}>
+          {MxIcons.download} Export CSV
+        </button>
+        <span className="mx-manage-count">{project.samples.length} samples · next {autoId}</span>
       </div>
     </div>
   );
 }
 
 // ── Drill hole manager ─────────────────────────────────────────────────
-function DrillHoleManager({ node }) {
+function DrillHoleManager({ project, api, onClose }) {
   const [tab, setTab] = useState('collar');
+  const [form, setForm] = useState({ id: '', lng: '', lat: '', azimuth: '', dip: '', depth: '' });
+  const [error, setError] = useState(null);
+  const [importMsg, setImportMsg] = useState(null);
+  const collarInput = useRef(null);
+  const intervalInput = useRef(null);
+  const holePrefix = project.idPrefix.replace('-RC-', '-DD-');
+  const autoId = nextId(project.collars, holePrefix);
+
+  const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  const addCollar = () => {
+    const lat = parseFloat(form.lat);
+    const lng = parseFloat(form.lng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      setError('Easting and northing are required (decimal degrees).');
+      return;
+    }
+    const num = (v) => { const n = parseFloat(v); return Number.isNaN(n) ? null : n; };
+    api.addCollars(project.id, [{
+      id: form.id.trim() || autoId,
+      lat, lng,
+      azimuth: num(form.azimuth), dip: num(form.dip), depth: num(form.depth),
+      date: today(),
+    }]);
+    onClose();
+  };
+
+  const importCollars = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { collars, error: err } = parseCollarCsv(String(reader.result), project.collars, holePrefix);
+      if (err) { setImportMsg({ error: true, text: err }); return; }
+      api.addCollars(project.id, collars, file.name);
+      setImportMsg({ error: false, text: `Imported ${collars.length} collar${collars.length === 1 ? '' : 's'}.` });
+    };
+    reader.readAsText(file);
+  };
+
+  const importIntervals = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { intervals, error: err } = parseIntervalCsv(String(reader.result));
+      if (err) { setImportMsg({ error: true, text: err }); return; }
+      const known = new Set(project.collars.map(c => c.id));
+      const matched = intervals.filter(i => known.has(i.holeId));
+      const skipped = intervals.length - matched.length;
+      if (!matched.length) { setImportMsg({ error: true, text: 'No hole IDs in this file matched the project.' }); return; }
+      api.addIntervals(project.id, matched, file.name);
+      setImportMsg({ error: false, text: `Imported ${matched.length} interval${matched.length === 1 ? '' : 's'}.${skipped ? ` ${skipped} skipped (unknown hole ID).` : ''}` });
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <div className="mx-manage-sections">
       <div className="mx-manage-tabs">
         <button type="button" className={`mx-manage-tab ${tab === 'collar' ? 'active' : ''}`} onClick={() => setTab('collar')}>Add collar</button>
-        <button type="button" className={`mx-manage-tab ${tab === 'survey' ? 'active' : ''}`} onClick={() => setTab('survey')}>Import survey</button>
+        <button type="button" className={`mx-manage-tab ${tab === 'import' ? 'active' : ''}`} onClick={() => setTab('import')}>Import collars</button>
         <button type="button" className={`mx-manage-tab ${tab === 'intervals' ? 'active' : ''}`} onClick={() => setTab('intervals')}>Intervals</button>
       </div>
 
       {tab === 'collar' && (
         <div className="mx-manage-form">
-          <ManageField label="Hole ID" value="" placeholder="Auto: TNDD-007" />
+          <ManageField label="Hole ID" value={form.id} onChange={setField('id')} placeholder={`Auto: ${autoId}`} />
           <div className="mx-manage-row-2">
-            <ManageField label="Easting" value="" placeholder="129.7440" />
-            <ManageField label="Northing" value="" placeholder="-20.5489" />
+            <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="146.2545" />
+            <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.0648" />
           </div>
           <div className="mx-manage-row-2">
-            <ManageField label="Azimuth (°)" value="" placeholder="90" />
-            <ManageField label="Dip (°)" value="" placeholder="-60" />
+            <ManageField label="Azimuth (°)" value={form.azimuth} onChange={setField('azimuth')} placeholder="90" />
+            <ManageField label="Dip (°)" value={form.dip} onChange={setField('dip')} placeholder="-60" />
           </div>
-          <ManageField label="Planned depth (m)" value="" placeholder="300" />
-          <button type="button" className="mx-btn-primary mx-btn-full">Add collar</button>
+          <ManageField label="Planned depth (m)" value={form.depth} onChange={setField('depth')} placeholder="300" />
+          {error && <div className="mx-import-msg mx-import-err">{error}</div>}
+          <button type="button" className="mx-btn-primary mx-btn-full" onClick={addCollar}>Add collar</button>
         </div>
       )}
 
-      {tab === 'survey' && (
+      {tab === 'import' && (
         <div className="mx-manage-form">
-          <div className="mx-drop-area mx-drop-area-sm">
+          <div className="mx-drop-area mx-drop-area-sm" onClick={() => collarInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importCollars(e.dataTransfer.files?.[0]); }}>
             <div className="mx-drop-icon">&#8593;</div>
-            <div className="mx-drop-text">Drop downhole survey CSV</div>
-            <div className="mx-drop-hint">depth, azimuth, dip columns</div>
+            <div className="mx-drop-text">Drop collar CSV or <span className="mx-drop-browse">browse</span></div>
+            <div className="mx-drop-hint">hole_id, lat, lng, azimuth, dip, depth</div>
+            <input ref={collarInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importCollars(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
-          <button type="button" className="mx-btn-primary mx-btn-full">Import survey</button>
+          {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
         </div>
       )}
 
       {tab === 'intervals' && (
         <div className="mx-manage-form">
-          <div className="mx-drop-area mx-drop-area-sm">
+          <div className="mx-drop-area mx-drop-area-sm" onClick={() => intervalInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importIntervals(e.dataTransfer.files?.[0]); }}>
             <div className="mx-drop-icon">&#8593;</div>
             <div className="mx-drop-text">Drop interval-assay CSV</div>
-            <div className="mx-drop-hint">from, to, Au, Cu columns</div>
+            <div className="mx-drop-hint">hole_id, from, to, au — links to collars by ID</div>
+            <input ref={intervalInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importIntervals(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
-          <button type="button" className="mx-btn-primary mx-btn-full">Import intervals</button>
+          {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
         </div>
       )}
 
       <div className="mx-manage-actions">
-        <button type="button" className="mx-btn-secondary mx-btn-sm">{MxIcons.download} Export all</button>
-        <span className="mx-manage-count">{node.count || 0} holes</span>
+        <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={() => downloadText('drill_collars.csv', collarsToCsv(project.collars))}>
+          {MxIcons.download} Export CSV
+        </button>
+        <span className="mx-manage-count">{project.collars.length} holes · {(project.intervals || []).length} intervals</span>
       </div>
     </div>
   );
 }
 
 // ── Boundary manager ───────────────────────────────────────────────────
-function BoundaryManager({ node }) {
+function BoundaryManager({ project, api }) {
+  const [name, setName] = useState(project.boundary?.name || '');
+  const [msg, setMsg] = useState(null);
+  const fileInput = useRef(null);
+
+  const replaceKml = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { coords, error } = parseKmlBoundary(String(reader.result));
+      if (error) { setMsg({ error: true, text: error }); return; }
+      const boundaryName = name.trim() || file.name.replace(/\.kml$/i, '');
+      api.setBoundary(project.id, boundaryName, coords, file.name);
+      setName(boundaryName);
+      setMsg({ error: false, text: 'Boundary updated — zoomed to it.' });
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="mx-manage-sections">
-      <ManageField label="Boundary name" value={node.name} />
-      <ManageField label="Source" value="Uploaded KML" />
-      <ManageField label="Area" value="~2.4 km²" readOnly />
       <div className="mx-manage-form">
-        <div className="mx-drop-area mx-drop-area-sm">
+        <ManageField
+          label="Boundary name" value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => {
+            if (project.boundary && name.trim() && name !== project.boundary.name) {
+              api.setBoundary(project.id, name.trim(), project.boundary.coords);
+            }
+          }}
+          placeholder="e.g. EPM 27780"
+        />
+        <div className="mx-drop-area mx-drop-area-sm" onClick={() => fileInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); replaceKml(e.dataTransfer.files?.[0]); }}>
           <div className="mx-drop-icon">&#8593;</div>
-          <div className="mx-drop-text">Replace KML / re-upload</div>
-          <div className="mx-drop-hint">KML · KMZ · GeoJSON · Shapefile</div>
+          <div className="mx-drop-text">{project.boundary ? 'Replace KML' : 'Upload KML'} — drop or <span className="mx-drop-browse">browse</span></div>
+          <div className="mx-drop-hint">First polygon in the file becomes the boundary</div>
+          <input ref={fileInput} type="file" accept=".kml" style={{ display: 'none' }} onChange={(e) => { replaceKml(e.target.files?.[0]); e.target.value = ''; }} />
         </div>
+        {msg && <div className={`mx-import-msg ${msg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{msg.text}</div>}
       </div>
       <div className="mx-manage-actions">
-        <button type="button" className="mx-btn-secondary mx-btn-sm">Set as active area</button>
-        <button type="button" className="mx-btn-secondary mx-btn-sm">{MxIcons.download} Export KML</button>
+        <button
+          type="button" className="mx-btn-secondary mx-btn-sm"
+          disabled={!project.boundary}
+          onClick={() => {
+            const b = project.boundary;
+            if (b) {
+              const L = b.coords;
+              const lat = L.reduce((a, c) => a + c[0], 0) / L.length;
+              const lng = L.reduce((a, c) => a + c[1], 0) / L.length;
+              api.focusOn(lat, lng);
+            }
+          }}
+        >Zoom to boundary</button>
+        <button
+          type="button" className="mx-btn-secondary mx-btn-sm"
+          disabled={!project.boundary}
+          onClick={() => project.boundary && downloadText(`${project.boundary.name.replace(/\s+/g, '_')}.kml`, boundaryToKml(project.boundary.name, project.boundary.coords), 'application/vnd.google-earth.kml+xml')}
+        >{MxIcons.download} Export KML</button>
       </div>
     </div>
   );
 }
 
-// ── Basemap / public data manager ──────────────────────────────────────
-function BasemapManager({ catalog, onAddPublicLayer }) {
-  return <PublicDataManager catalog={catalog} onAddPublicLayer={onAddPublicLayer} />;
-}
-
-function PublicDataManager({ catalog, onAddPublicLayer }) {
-  const [customUrl, setCustomUrl] = useState('');
-
-  return (
-    <div className="mx-manage-sections">
-      <p className="mx-manage-hint">Toggle public reference layers. Read-only overlays with attribution.</p>
-      {catalog.map(group => (
-        <div key={group.id} className="mx-public-group">
-          <div className="mx-section-label">{group.group.toUpperCase()}</div>
-          {group.layers.map(layer => (
-            <div key={layer.id} className="mx-public-layer-row">
-              <div className="mx-public-dot" />
-              <div className="mx-public-info">
-                <div className="mx-public-name">{layer.name}</div>
-                <div className="mx-public-attr">{layer.attribution}</div>
-              </div>
-              <span className="mx-public-type">{layer.type.toUpperCase()}</span>
-              <button type="button" className="mx-btn-tiny" onClick={() => onAddPublicLayer({ id: `custom-${Date.now()}`, name: layer.name, color: '#95A5A6', attribution: layer.attribution, wmsUrl: layer.url, wmsType: layer.type })}>Add</button>
-            </div>
-          ))}
-        </div>
-      ))}
-      <div className="mx-custom-wms">
-        <div className="mx-section-label">CUSTOM WMS/WMTS</div>
-        <p className="mx-manage-hint">Paste any WMS URL to add as a layer.</p>
-        <div className="mx-custom-wms-row">
-          <input
-            type="text"
-            className="mx-input"
-            placeholder="https://example.com/wms?..."
-            value={customUrl}
-            onChange={(e) => setCustomUrl(e.target.value)}
-          />
-          <button
-            type="button"
-            className="mx-btn-primary mx-btn-sm"
-            onClick={() => {
-              if (!customUrl.trim()) return;
-              onAddPublicLayer({ id: `custom-${Date.now()}`, name: 'Custom WMS layer', color: '#7F8C8D', attribution: 'Custom', wmsUrl: customUrl, wmsType: 'wms' });
-              setCustomUrl('');
-            }}
-          >Add</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Shared form components ─────────────────────────────────────────────
-function ManageField({ label, value, onChange, placeholder, readOnly, multiline }) {
-  // Controlled when onChange is provided; static display otherwise.
+// ── Shared form field ──────────────────────────────────────────────────
+function ManageField({ label, value, onChange, onBlur, placeholder, readOnly, multiline }) {
   const valueProps = onChange ? { value, onChange } : { defaultValue: value };
   return (
     <div className="mx-field">
       <label className="mx-field-label">{label}</label>
       {multiline ? (
-        <textarea className="mx-input mx-textarea" {...valueProps} placeholder={placeholder} readOnly={readOnly} rows={3} />
+        <textarea className="mx-input mx-textarea" {...valueProps} onBlur={onBlur} placeholder={placeholder} readOnly={readOnly} rows={3} />
       ) : (
-        <input type="text" className="mx-input" {...valueProps} placeholder={placeholder} readOnly={readOnly} />
+        <input type="text" className="mx-input" {...valueProps} onBlur={onBlur} placeholder={placeholder} readOnly={readOnly} />
       )}
-    </div>
-  );
-}
-
-function ColumnMapRow({ from, to }) {
-  return (
-    <div className="mx-col-map-row">
-      <span className="mx-col-from">{from}</span>
-      <span className="mx-col-arrow">&#8594;</span>
-      <span className="mx-col-to">{to}</span>
     </div>
   );
 }
