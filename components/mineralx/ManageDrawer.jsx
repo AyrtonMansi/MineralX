@@ -4,7 +4,7 @@ import { MxIcons } from './MineralXIcons';
 import {
   nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
-  compressImage, today,
+  compressImage, today, ELEMENT_SYMBOLS, elementInfo,
 } from './project-store';
 
 const TYPE_LABELS = {
@@ -140,7 +140,8 @@ function ProjectManager({ project, api, onClose }) {
 // ── Rock chip manager ──────────────────────────────────────────────────
 function RockChipManager({ project, api, onClose }) {
   const [tab, setTab] = useState('add');
-  const [form, setForm] = useState({ id: '', lith: '', lng: '', lat: '', au: '', notes: '' });
+  const [form, setForm] = useState({ id: '', lith: '', lng: '', lat: '', notes: '' });
+  const [assayRows, setAssayRows] = useState([{ element: 'Au', value: '' }]);
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState(null);
   const [importMsg, setImportMsg] = useState(null);
@@ -157,11 +158,15 @@ function RockChipManager({ project, api, onClose }) {
       setError('Easting and northing are required (decimal degrees).');
       return;
     }
-    const au = form.au.trim() === '' ? null : parseFloat(form.au);
+    const assays = {};
+    assayRows.forEach(({ element, value }) => {
+      const v = parseFloat(value);
+      if (!Number.isNaN(v)) assays[element] = v;
+    });
     api.addSamples(project.id, [{
       id: form.id.trim() || autoId,
       lat, lng,
-      au: Number.isNaN(au) ? null : au,
+      assays,
       lith: form.lith.trim(),
       notes: form.notes.trim(),
       photo: photo || undefined,
@@ -204,7 +209,7 @@ function RockChipManager({ project, api, onClose }) {
             <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="146.2570" />
             <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.0665" />
           </div>
-          <ManageField label="Au (g/t) — blank if awaiting assay" value={form.au} onChange={setField('au')} placeholder="e.g. 3.2" />
+          <AssayInputs rows={assayRows} setRows={setAssayRows} />
           <ManageField label="Notes" value={form.notes} onChange={setField('notes')} placeholder="Surface float, quartz reef" multiline />
           <button type="button" className="mx-photo-attach" onClick={() => photoInput.current?.click()}>
             {/* eslint-disable-next-line @next/next/no-img-element -- dataURL thumbnail; next/image can't optimize these */}
@@ -227,7 +232,7 @@ function RockChipManager({ project, api, onClose }) {
           >
             <div className="mx-drop-icon">&#8593;</div>
             <div className="mx-drop-text">Drop CSV or <span className="mx-drop-browse">browse</span></div>
-            <div className="mx-drop-hint">sample_id, lat, lng, au, lith, notes — IDs auto-assigned if missing</div>
+            <div className="mx-drop-hint">sample_id, lat, lng, lith + element columns (au, ag, cu…)</div>
             <input ref={fileInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
           {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
@@ -344,7 +349,7 @@ function DrillHoleManager({ project, api, onClose }) {
           <div className="mx-drop-area mx-drop-area-sm" onClick={() => intervalInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importIntervals(e.dataTransfer.files?.[0]); }}>
             <div className="mx-drop-icon">&#8593;</div>
             <div className="mx-drop-text">Drop interval-assay CSV</div>
-            <div className="mx-drop-hint">hole_id, from, to, au — links to collars by ID</div>
+            <div className="mx-drop-hint">hole_id, from, to + element columns — links to collars by ID</div>
             <input ref={intervalInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importIntervals(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
           {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
@@ -422,6 +427,49 @@ function BoundaryManager({ project, api }) {
           onClick={() => project.boundary && downloadText(`${project.boundary.name.replace(/\s+/g, '_')}.kml`, boundaryToKml(project.boundary.name, project.boundary.coords), 'application/vnd.google-earth.kml+xml')}
         >{MxIcons.download} Export KML</button>
       </div>
+    </div>
+  );
+}
+
+// ── Assay entry: element + value rows, add/remove ──────────────────────
+function AssayInputs({ rows, setRows }) {
+  const setRow = (i, patch) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const usedElements = rows.map(r => r.element);
+  return (
+    <div className="mx-field">
+      <label className="mx-field-label">Assays — leave blank if awaiting results</label>
+      {rows.map((row, i) => (
+        <div key={i} className="mx-assay-row">
+          <select
+            className="mx-input mx-assay-el"
+            value={row.element}
+            onChange={(e) => setRow(i, { element: e.target.value })}
+          >
+            {ELEMENT_SYMBOLS.map(el => (
+              <option key={el} value={el} disabled={el !== row.element && usedElements.includes(el)}>{el}</option>
+            ))}
+          </select>
+          <input
+            type="text" inputMode="decimal"
+            className="mx-input mx-assay-val"
+            placeholder={`${elementInfo(row.element).unit || 'value'}`}
+            value={row.value}
+            onChange={(e) => setRow(i, { value: e.target.value })}
+          />
+          {rows.length > 1 && (
+            <button type="button" className="mx-assay-remove" title="Remove" onClick={() => setRows(rs => rs.filter((_, j) => j !== i))}>&times;</button>
+          )}
+        </div>
+      ))}
+      {rows.length < 6 && (
+        <button
+          type="button" className="mx-assay-add"
+          onClick={() => {
+            const next = ELEMENT_SYMBOLS.find(el => !usedElements.includes(el));
+            if (next) setRows(rs => [...rs, { element: next, value: '' }]);
+          }}
+        >+ element</button>
+      )}
     </div>
   );
 }

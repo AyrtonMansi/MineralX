@@ -1,11 +1,11 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { gradeOf, GRADE_COLORS, samplesToCsv, collarsToCsv, downloadText } from './project-store';
+import { gradeOf, GRADE_COLORS, formatAssay, samplesToCsv, collarsToCsv, downloadText } from './project-store';
 import { MxIcons } from './MineralXIcons';
 
 // The home of all project data: a clean list per dataset, not a GIS
 // attribute table. Row click → zoom to the feature and open its popup.
-export default function DataDrawer({ store, api, tab, setTab, onClose }) {
+export default function DataDrawer({ store, api, tab, setTab, activeElement, onAdd, onClose }) {
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
 
@@ -25,6 +25,14 @@ export default function DataDrawer({ store, api, tab, setTab, onClose }) {
   const exportCurrent = () => {
     if (tab === 'chips') downloadText('rock_chips.csv', samplesToCsv(allSamples));
     if (tab === 'holes') downloadText('drill_collars.csv', collarsToCsv(allCollars));
+  };
+
+  const sampleValue = (s) => {
+    const v = s.assays?.[activeElement];
+    if (v != null) return formatAssay(activeElement, v);
+    const other = Object.entries(s.assays || {});
+    if (other.length) return other.map(([el, val]) => formatAssay(el, val)).slice(0, 2).join(' · ');
+    return 'pending';
   };
 
   // Non-modal: the map stays live so row clicks can fly to features.
@@ -57,9 +65,9 @@ export default function DataDrawer({ store, api, tab, setTab, onClose }) {
         <div className="mx-manage-body">
           {tab === 'chips' && (
             <div className="mx-data-list">
-              {samples.length === 0 && <div className="mx-empty-hint">{q ? 'No samples match.' : 'No rock chips yet — add one from the dock or import a CSV.'}</div>}
+              {samples.length === 0 && <div className="mx-empty-hint">{q ? 'No samples match.' : 'No rock chips yet — add one below or import a CSV.'}</div>}
               {samples.map(s => {
-                const g = gradeOf(s.au);
+                const g = gradeOf(s, activeElement);
                 return (
                   <div key={`${s.project.id}-${s.id}`} className="mx-data-row" role="button" tabIndex={0}
                     onClick={() => { api.focusOn(s.lat, s.lng, s.id); }}
@@ -72,7 +80,7 @@ export default function DataDrawer({ store, api, tab, setTab, onClose }) {
                       </div>
                       <div className="mx-data-sub">{s.lith || '—'}{s.notes ? ` · ${s.notes}` : ''}</div>
                     </div>
-                    <span className="mx-data-value">{s.au != null ? `${s.au} g/t` : 'pending'}</span>
+                    <span className="mx-data-value">{sampleValue(s)}</span>
                     <button
                       type="button" className="mx-data-delete" title="Delete sample"
                       onClick={(e) => {
@@ -88,7 +96,7 @@ export default function DataDrawer({ store, api, tab, setTab, onClose }) {
 
           {tab === 'holes' && (
             <div className="mx-data-list">
-              {collars.length === 0 && <div className="mx-empty-hint">{q ? 'No holes match.' : 'No drill holes yet — add a collar or import a CSV.'}</div>}
+              {collars.length === 0 && <div className="mx-empty-hint">{q ? 'No holes match.' : 'No drill holes yet — add a collar below or import a CSV.'}</div>}
               {collars.map(c => (
                 <div key={`${c.project.id}-${c.id}`} className="mx-data-row" role="button" tabIndex={0}
                   onClick={() => api.focusOn(c.lat, c.lng, c.id)}
@@ -104,8 +112,11 @@ export default function DataDrawer({ store, api, tab, setTab, onClose }) {
                   </div>
                   <span className="mx-data-value">
                     {(() => {
-                      const best = c.intervals.reduce((b, i) => (i.au != null && (b == null || i.au > b) ? i.au : b), null);
-                      return best != null ? `best ${best} g/t` : '';
+                      const best = c.intervals.reduce((b, i) => {
+                        const v = i.assays?.[activeElement];
+                        return v != null && (b == null || v > b) ? v : b;
+                      }, null);
+                      return best != null ? `best ${formatAssay(activeElement, best)}` : '';
                     })()}
                   </span>
                   <button
@@ -139,6 +150,9 @@ export default function DataDrawer({ store, api, tab, setTab, onClose }) {
 
         {tab !== 'files' && (
           <div className="mx-data-footer">
+            <button type="button" className="mx-btn-primary mx-btn-sm" onClick={() => onAdd(tab)}>
+              + {tab === 'chips' ? 'Add sample' : 'Add collar'}
+            </button>
             <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportCurrent}>
               {MxIcons.download} Export CSV
             </button>

@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { PUBLIC_DATA_CATALOG } from './layer-data';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
+  elementInfo, elementsInStore, formatAssay,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
 } from './project-store';
@@ -20,14 +21,14 @@ const gradeRadius = (g) => g === 'high' ? 9 : g === 'anom' ? 7.5 : 6;
 const esc = (t) => String(t || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 
 function samplePopupHtml(s) {
-  const g = gradeOf(s.au);
-  const assay = g === 'pending'
-    ? '<span class="mx-pop-pending">awaiting assay</span>'
-    : `<strong>${s.au} g/t Au</strong>`;
+  const entries = Object.entries(s.assays || {});
+  const assayLine = entries.length
+    ? `<strong>${entries.map(([el, v]) => formatAssay(el, v)).join(' · ')}</strong>`
+    : '<span class="mx-pop-pending">awaiting assay</span>';
   return `
     <div class="mx-pop">
       <div class="mx-pop-id">${esc(s.id)}</div>
-      <div class="mx-pop-assay">${assay}</div>
+      <div class="mx-pop-assay">${assayLine}</div>
       ${s.lith ? `<div class="mx-pop-row">${esc(s.lith)}</div>` : ''}
       ${s.notes ? `<div class="mx-pop-notes">${esc(s.notes)}</div>` : ''}
       ${s.photo ? `<img class="mx-pop-photo" src="${s.photo}" alt="${esc(s.id)}" />` : ''}
@@ -35,15 +36,18 @@ function samplePopupHtml(s) {
     </div>`;
 }
 
-function collarPopupHtml(c, intervals) {
+function collarPopupHtml(c, intervals, element) {
   const holeIntervals = intervals.filter(i => i.holeId === c.id);
-  const best = holeIntervals.reduce((b, i) => (i.au != null && (b == null || i.au > b.au) ? i : b), null);
+  const best = holeIntervals.reduce((b, i) => {
+    const v = i.assays?.[element];
+    return v != null && (b == null || v > b.assays[element]) ? i : b;
+  }, null);
   return `
     <div class="mx-pop">
       <div class="mx-pop-id">${esc(c.id)}</div>
       <div class="mx-pop-assay"><strong>${c.depth != null ? `${c.depth} m` : 'Drill hole'}</strong>${c.azimuth != null ? ` · ${c.azimuth}°/${c.dip ?? '?'}°` : ''}</div>
       ${holeIntervals.length ? `<div class="mx-pop-row">${holeIntervals.length} assay interval${holeIntervals.length === 1 ? '' : 's'}</div>` : '<div class="mx-pop-notes">No downhole assays yet</div>'}
-      ${best ? `<div class="mx-pop-notes">Best: ${best.au} g/t Au · ${best.from}–${best.to} m</div>` : ''}
+      ${best ? `<div class="mx-pop-notes">Best: ${formatAssay(element, best.assays[element])} · ${best.from}–${best.to} m</div>` : ''}
       <div class="mx-pop-coords">${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}${c.date ? ` · ${c.date}` : ''}</div>
     </div>`;
 }
@@ -66,6 +70,7 @@ export default function MineralXWorkspace() {
   const [dataOpen, setDataOpen] = useState(false);
   const [dataTab, setDataTab] = useState('chips');
   const [basemap, setBasemap] = useState('satellite');
+  const [activeElement, setActiveElement] = useState('Au');
   const [mapReady, setMapReady] = useState(false);
   const [programOpen, setProgramOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -92,10 +97,12 @@ export default function MineralXWorkspace() {
     store.projects.forEach(p => {
       chips += p.samples.length;
       holes += p.collars.length;
-      pending += p.samples.filter(s => gradeOf(s.au) === 'pending').length;
+      pending += p.samples.filter(s => gradeOf(s, activeElement) === 'pending').length;
     });
     return { chips, holes, pending };
-  }, [store]);
+  }, [store, activeElement]);
+
+  const availableElements = useMemo(() => elementsInStore(store), [store]);
 
   // ── Store mutation API (passed to drawers/panels) ───────────────────
   const updateProject = useCallback((pid, fn) => {
@@ -255,7 +262,7 @@ export default function MineralXWorkspace() {
 
       const chipGroup = ensure(`${p.id}:chips`);
       p.samples.forEach(s => {
-        const g = gradeOf(s.au);
+        const g = gradeOf(s, activeElement);
         const m = L.circleMarker([s.lat, s.lng], {
           radius: gradeRadius(g),
           color: g === 'pending' ? '#8A857A' : '#FAF9F4',
@@ -275,7 +282,7 @@ export default function MineralXWorkspace() {
         const icon = L.divIcon({ className: '', iconSize: [14, 14], html: '<div style="width:12px;height:12px;background:#F3F1E9;border:2px solid #211E1A;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>' });
         const m = L.marker([c.lat, c.lng], { icon })
           .bindTooltip(c.id, { className: 'lx-tip', direction: 'top', offset: [0, -8] })
-          .bindPopup(collarPopupHtml(c, p.intervals || []), { className: 'mx-popup', closeButton: false, maxWidth: 260 })
+          .bindPopup(collarPopupHtml(c, p.intervals || [], activeElement), { className: 'mx-popup', closeButton: false, maxWidth: 260 })
           .addTo(holeGroup);
         markers.current.set(c.id, m);
       });
@@ -287,7 +294,7 @@ export default function MineralXWorkspace() {
         }).bindTooltip(p.boundary.name, { className: 'lx-tip', sticky: true }).addTo(bndGroup);
       }
     });
-  }, [store, mapReady]);
+  }, [store, mapReady, activeElement]);
 
   // ── Apply visibility toggles ────────────────────────────────────────
   useEffect(() => {
@@ -352,7 +359,8 @@ export default function MineralXWorkspace() {
     store.projects.forEach(p => {
       p.samples.forEach(s => {
         if (s.id.toLowerCase().includes(q) || (s.lith || '').toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q)) {
-          out.push({ kind: 'chip', id: s.id, lat: s.lat, lng: s.lng, label: s.id, detail: s.au != null ? `${s.au} g/t Au` : 'awaiting assay', grade: gradeOf(s.au) });
+          const v = s.assays?.[activeElement];
+          out.push({ kind: 'chip', id: s.id, lat: s.lat, lng: s.lng, label: s.id, detail: v != null ? formatAssay(activeElement, v) : Object.keys(s.assays || {}).length ? 'assayed' : 'awaiting assay', grade: gradeOf(s, activeElement) });
         }
       });
       p.collars.forEach(c => {
@@ -362,7 +370,7 @@ export default function MineralXWorkspace() {
       });
     });
     return out.slice(0, 8);
-  }, [query, store]);
+  }, [query, store, activeElement]);
 
   const isExpanded = (id, dflt) => expanded[id] ?? dflt;
 
@@ -473,6 +481,9 @@ export default function MineralXWorkspace() {
             wmsErrors={wmsErrors}
             basemap={basemap}
             setBasemap={setBasemap}
+            activeElement={activeElement}
+            setActiveElement={setActiveElement}
+            availableElements={availableElements}
             onManage={setManageTarget}
             onClose={() => setActivePanel(null)}
           />
@@ -494,16 +505,18 @@ export default function MineralXWorkspace() {
           api={api}
           tab={dataTab}
           setTab={setDataTab}
+          activeElement={activeElement}
+          onAdd={(type) => { setDataOpen(false); setManageTarget({ type, projectId: activeProject?.id }); }}
           onClose={() => setDataOpen(false)}
         />
       )}
 
-      {/* DOCK */}
+      {/* DOCK — one surface per mental model: overview, records (chips/
+          holes open the Data drawer on that tab), map layers, capture. */}
       <div className="mx-dock">
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L19 11 L11 19 L3 11 Z" /></svg>} title="Program" active={activePanel === 'home'} onClick={() => setActivePanel(activePanel === 'home' ? null : 'home')} />
-        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22"><circle cx="11" cy="11" r="5.5" fill="currentColor" /></svg>} title="Rock chips" active={manageTarget?.type === 'chips'} onClick={() => setManageTarget({ type: 'chips', projectId: activeProject?.id })} />
-        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="7.5" y="4" width="7" height="5" rx="1" /><path d="M11 9 L11 19" /></svg>} title="Drill holes" active={manageTarget?.type === 'holes'} onClick={() => setManageTarget({ type: 'holes', projectId: activeProject?.id })} />
-        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 17 L6 12" /><path d="M11 17 L11 6" /><path d="M16 17 L16 13" /></svg>} title="Data" active={dataOpen} onClick={() => { setManageTarget(null); setDataOpen(o => !o); }} />
+        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22"><circle cx="11" cy="11" r="5.5" fill="currentColor" /></svg>} title="Rock chips" active={dataOpen && dataTab === 'chips'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'chips') { setDataOpen(false); } else { setDataTab('chips'); setDataOpen(true); } }} />
+        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="7.5" y="4" width="7" height="5" rx="1" /><path d="M11 9 L11 19" /></svg>} title="Drill holes" active={dataOpen && dataTab === 'holes'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'holes') { setDataOpen(false); } else { setDataTab('holes'); setDataOpen(true); } }} />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L19 7.5 L11 12 L3 7.5 Z" /><path d="M3 12 L11 16.5 L19 12" /></svg>} title="Layers" active={activePanel === 'layers'} onClick={() => setActivePanel(activePanel === 'layers' ? null : 'layers')} />
         <div className="mx-dock-sep" />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4 L11 13" /><path d="M7 8 L11 4 L15 8" /><path d="M5 17 H17" /></svg>} title="Add data" active={activePanel === 'upload'} onClick={() => setActivePanel(activePanel === 'upload' ? null : 'upload')} />
@@ -557,9 +570,9 @@ function HomePanel({ stats, projectName, onUpload, onLayers, onData, onClose }) 
 // ── Upload panel ───────────────────────────────────────────────────────
 const UPLOAD_CATS = ['Rock chips', 'Drill collars', 'Assays', 'KML', 'Photos'];
 const UPLOAD_HINTS = {
-  'Rock chips': 'CSV: sample_id, lat, lng, au, lith, notes',
+  'Rock chips': 'CSV: sample_id, lat, lng, lith + element columns (au, ag, cu…)',
   'Drill collars': 'CSV: hole_id, lat, lng, azimuth, dip, depth',
-  Assays: 'Lab CSV: sample_id, au — links to pending chips',
+  Assays: 'Lab CSV: sample_id + element columns — links to chips by ID',
   KML: 'Boundary polygon for the active project',
   Photos: 'JPG named after the sample, e.g. CT-RC-0448.jpg',
 };
@@ -668,7 +681,7 @@ function UploadPanel({ onClose, project, api }) {
 }
 
 // ── Layers panel ───────────────────────────────────────────────────────
-function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, onManage, onClose }) {
+function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, onManage, onClose }) {
   const toggleHidden = (id) => setHidden(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleExpanded = (id, dflt) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? dflt) }));
 
@@ -738,17 +751,34 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
         </button>
       </div>
       <div className="mx-basemap-section">
-        <div className="mx-section-label">BASEMAP</div>
+        <div className="mx-section-label">COLOUR BY</div>
+        <div className="mx-element-row">
+          {availableElements.map(el => (
+            <button
+              key={el}
+              type="button"
+              className={`mx-cat-chip mx-element-chip ${activeElement === el ? 'active' : ''}`}
+              onClick={() => setActiveElement(el)}
+            >{el}</button>
+          ))}
+        </div>
+        {(() => {
+          const t = elementInfo(activeElement);
+          const unit = t.unit ? ` ${t.unit}` : '';
+          return (
+            <div className="mx-legend">
+              <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.high }} /><span>&gt;{t.high}</span></div>
+              <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.anom }} /><span>{t.anom}–{t.high}</span></div>
+              <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.bg }} /><span>&lt;{t.anom} {activeElement}{unit}</span></div>
+              <div className="mx-legend-item"><div className="mx-legend-dot mx-legend-pending" /><span>Pending</span></div>
+              <div className="mx-legend-item"><div className="mx-legend-collar" /><span>Collar</span></div>
+            </div>
+          );
+        })()}
+        <div className="mx-section-label" style={{ paddingLeft: 0, paddingTop: 14 }}>BASEMAP</div>
         <div className="mx-basemap-toggle">
           <button type="button" className={`mx-basemap-btn ${basemap === 'satellite' ? 'active' : ''}`} onClick={() => setBasemap('satellite')}>Satellite</button>
           <button type="button" className={`mx-basemap-btn ${basemap === 'topo' ? 'active' : ''}`} onClick={() => setBasemap('topo')}>Topographic</button>
-        </div>
-        <div className="mx-legend">
-          <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.high }} /><span>&gt;3.0</span></div>
-          <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.anom }} /><span>0.5–3.0</span></div>
-          <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.bg }} /><span>&lt;0.5 Au g/t</span></div>
-          <div className="mx-legend-item"><div className="mx-legend-dot mx-legend-pending" /><span>Pending</span></div>
-          <div className="mx-legend-item"><div className="mx-legend-collar" /><span>Collar</span></div>
         </div>
       </div>
     </div>

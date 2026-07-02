@@ -19,6 +19,7 @@
   position: relative;
   width: 100%;
   height: 100vh;
+  height: 100dvh; /* mobile: exclude browser chrome so the dock stays visible */
   overflow: hidden;
   background: #CFCABC;
   color: #211E1A;
@@ -627,6 +628,32 @@
 .mx-photo-thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 6px; }
 .mx-pop-photo { width: 100%; border-radius: 8px; margin-top: 7px; display: block; }
 
+/* ── Assay entry rows (element + value) ───────────────────────── */
+.mx-assay-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+.mx-assay-el { width: 76px; flex-shrink: 0; padding: 8px 6px; }
+.mx-assay-val { flex: 1; }
+.mx-assay-remove {
+  width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
+  background: none; border: none; cursor: pointer;
+  color: #B7B1A3; font-size: 15px;
+  font-family: 'Instrument Sans', sans-serif;
+}
+.mx-assay-remove:hover { color: #8B3A3A; }
+.mx-assay-add {
+  align-self: flex-start;
+  background: none; border: none; cursor: pointer; padding: 2px 0;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 11.5px; font-weight: 500; color: #C15F3C;
+}
+.mx-assay-add:hover { text-decoration: underline; }
+
+/* Element selector chips */
+.mx-element-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.mx-element-chip { font-family: 'IBM Plex Mono', monospace; min-width: 40px; }
+
+/* Data drawer footer holds two buttons */
+.mx-data-footer { display: flex; gap: 8px; }
+
 /* Stat items are clickable (open Data drawer) */
 .mx-stat-item { background: none; border: none; text-align: left; cursor: pointer; padding: 0; font-family: 'Instrument Sans', sans-serif; border-radius: 8px; }
 .mx-stat-item:hover .mx-stat-label { color: #C15F3C; }
@@ -642,8 +669,21 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 768px) {
   .mx-topbar-search { display: none; }
   .mx-topbar { left: 8px; right: 8px; top: 8px; height: 48px; border-radius: 12px; }
-  .mx-panel { left: 8px; right: 8px; top: 72px; bottom: 80px; width: auto; }
-  .mx-dock { bottom: 12px; }
-  .mx-dock-btn { width: 40px; height: 40px; border-radius: 11px; }
-  .mx-manage-drawer { width: calc(100vw - 16px); margin: 72px 8px 80px; }
+  .mx-topbar-user { display: none; }
+  .mx-panel { left: 8px; right: 8px; top: 64px; bottom: 76px; width: auto; }
+  .mx-dock { bottom: max(10px, env(safe-area-inset-bottom)); }
+  .mx-dock-btn { width: 44px; height: 44px; border-radius: 11px; }
+  .mx-manage-drawer { width: calc(100vw - 16px); margin: 64px 8px 76px; max-height: none; }
+  .mx-data-drawer-wrap { left: 0; }
+
+  /* Touch: hover states don't exist — keep row actions visible,
+     and give small toggles a finger-sized hit area. */
+  .mx-data-delete { opacity: 1; }
+  .mx-tree-eye { width: 18px; height: 18px; }
+  .mx-tree-manage { width: 30px; height: 30px; }
+  .mx-tree-row { padding-top: 8px; padding-bottom: 8px; }
+  .mx-tree-caret { width: 22px; height: 22px; }
+  .mx-program-menu { position: fixed; left: 8px; right: 8px; top: 62px; min-width: 0; }
+  .mx-close-btn { width: 32px; height: 32px; }
+  .mx-basemap-section { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }

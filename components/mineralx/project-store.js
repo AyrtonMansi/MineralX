@@ -3,25 +3,74 @@
 // now; the API surface (load/save/mutators below) is the seam where a
 // real backend slots in later without touching any component.
 
-export const STORE_KEY = 'mx-store-v2';
+export const STORE_KEY = 'mx-store-v3';
+const LEGACY_KEY = 'mx-store-v2';
 
 export const PROJECT_COLORS = ['#C15F3C', '#6E7A5E', '#5E6E7A', '#B08A3E', '#8A5E7A'];
 
-// Grade classification: single source of truth for legend, markers, stats.
-export function gradeOf(au) {
-  if (au == null || Number.isNaN(au)) return 'pending';
-  if (au >= 3.0) return 'high';
-  if (au >= 0.5) return 'anom';
+// ── Elements ───────────────────────────────────────────────────────────
+// Samples carry an `assays` map, e.g. { Au: 4.2, Ag: 12 }. Thresholds
+// drive marker colouring per element (anomalous / high). Elements not
+// listed here still work — they get the generic fallback thresholds.
+export const ELEMENTS = {
+  Au: { unit: 'g/t', anom: 0.5, high: 3 },
+  Ag: { unit: 'g/t', anom: 10, high: 50 },
+  Cu: { unit: '%', anom: 0.1, high: 1 },
+  Pb: { unit: '%', anom: 0.5, high: 2 },
+  Zn: { unit: '%', anom: 0.5, high: 2 },
+  Ni: { unit: '%', anom: 0.2, high: 1 },
+  Co: { unit: '%', anom: 0.05, high: 0.2 },
+  Li: { unit: '%', anom: 0.3, high: 1 },
+  Sn: { unit: '%', anom: 0.1, high: 0.5 },
+  W: { unit: '%', anom: 0.1, high: 0.5 },
+  Mo: { unit: 'ppm', anom: 100, high: 500 },
+  U: { unit: 'ppm', anom: 100, high: 500 },
+  As: { unit: 'ppm', anom: 100, high: 1000 },
+  Sb: { unit: 'ppm', anom: 50, high: 500 },
+};
+
+export const ELEMENT_SYMBOLS = Object.keys(ELEMENTS);
+const GENERIC_THRESHOLDS = { unit: '', anom: 0.5, high: 3 };
+
+export function elementInfo(el) {
+  return ELEMENTS[el] || GENERIC_THRESHOLDS;
+}
+
+// Grade of a sample for one element. 'pending' = no assays at all.
+export function gradeOf(sample, element) {
+  const assays = sample?.assays;
+  if (!assays || Object.keys(assays).length === 0) return 'pending';
+  const v = assays[element];
+  if (v == null || Number.isNaN(v)) return 'none'; // assayed, but not for this element
+  const t = elementInfo(element);
+  if (v >= t.high) return 'high';
+  if (v >= t.anom) return 'anom';
   return 'bg';
 }
 
-export const GRADE_COLORS = { high: '#C15F3C', anom: '#B08A3E', bg: '#A39C8C', pending: '#F3F1E9' };
+export const GRADE_COLORS = { high: '#C15F3C', anom: '#B08A3E', bg: '#A39C8C', none: '#8A857A', pending: '#F3F1E9' };
+
+// Union of elements present in the data (always includes Au so the
+// selector never renders empty).
+export function elementsInStore(store) {
+  const set = new Set(['Au']);
+  store.projects.forEach(p => {
+    p.samples.forEach(s => Object.keys(s.assays || {}).forEach(e => set.add(e)));
+    (p.intervals || []).forEach(i => Object.keys(i.assays || {}).forEach(e => set.add(e)));
+  });
+  return [...set];
+}
+
+export function formatAssay(el, value) {
+  const t = elementInfo(el);
+  return `${value} ${t.unit ? `${t.unit} ` : ''}${el}`.trim();
+}
 
 // ── Demo project: Charters Towers, North Queensland ────────────────────
 // Sited in QLD so the GeoResGlobe public layers have data underneath.
 export function createDemoStore() {
   return {
-    version: 2,
+    version: 3,
     activeProjectId: 'proj-demo',
     projects: [{
       id: 'proj-demo',
@@ -36,12 +85,12 @@ export function createDemoStore() {
         ],
       },
       samples: [
-        { id: 'CT-RC-0428', lat: -20.0665, lng: 146.2570, au: 4.2, lith: 'Quartz vein float', notes: 'Coarse visible sulphides', date: '2026-06-12' },
-        { id: 'CT-RC-0431', lat: -20.0762, lng: 146.2521, au: 1.1, lith: 'Sheared granodiorite', notes: '', date: '2026-06-12' },
-        { id: 'CT-RC-0433', lat: -20.0708, lng: 146.2691, au: 0.2, lith: 'Silicified siltstone', notes: 'Background', date: '2026-06-13' },
-        { id: 'CT-RC-0440', lat: -20.0611, lng: 146.2478, au: 3.6, lith: 'Quartz reef', notes: 'Sampled at reef contact', date: '2026-06-14' },
-        { id: 'CT-RC-0442', lat: -20.0842, lng: 146.2648, au: 0.8, lith: 'Ferruginous quartz', notes: '', date: '2026-06-14' },
-        { id: 'CT-RC-0447', lat: -20.0741, lng: 146.2442, au: null, lith: 'Quartz-sericite schist', notes: 'Dispatched to ALS 28 Jun', date: '2026-06-28' },
+        { id: 'CT-RC-0428', lat: -20.0665, lng: 146.2570, assays: { Au: 4.2, Ag: 18 }, lith: 'Quartz vein float', notes: 'Coarse visible sulphides', date: '2026-06-12' },
+        { id: 'CT-RC-0431', lat: -20.0762, lng: 146.2521, assays: { Au: 1.1, Cu: 0.4 }, lith: 'Sheared granodiorite', notes: '', date: '2026-06-12' },
+        { id: 'CT-RC-0433', lat: -20.0708, lng: 146.2691, assays: { Au: 0.2 }, lith: 'Silicified siltstone', notes: 'Background', date: '2026-06-13' },
+        { id: 'CT-RC-0440', lat: -20.0611, lng: 146.2478, assays: { Au: 3.6, Ag: 41 }, lith: 'Quartz reef', notes: 'Sampled at reef contact', date: '2026-06-14' },
+        { id: 'CT-RC-0442', lat: -20.0842, lng: 146.2648, assays: { Au: 0.8, Cu: 0.15 }, lith: 'Ferruginous quartz', notes: '', date: '2026-06-14' },
+        { id: 'CT-RC-0447', lat: -20.0741, lng: 146.2442, assays: {}, lith: 'Quartz-sericite schist', notes: 'Dispatched to ALS 28 Jun', date: '2026-06-28' },
       ],
       collars: [
         { id: 'CT-DD-001', lat: -20.0648, lng: 146.2545, azimuth: 90, dip: -60, depth: 250, date: '2026-05-02' },
@@ -49,9 +98,9 @@ export function createDemoStore() {
         { id: 'CT-DD-003', lat: -20.0752, lng: 146.2610, azimuth: 270, dip: -60, depth: 220, date: '2026-06-03' },
       ],
       intervals: [
-        { holeId: 'CT-DD-001', from: 112, to: 118, au: 2.4 },
-        { holeId: 'CT-DD-001', from: 118, to: 121, au: 5.1 },
-        { holeId: 'CT-DD-002', from: 96, to: 102, au: 1.2 },
+        { holeId: 'CT-DD-001', from: 112, to: 118, assays: { Au: 2.4, Ag: 9 } },
+        { holeId: 'CT-DD-001', from: 118, to: 121, assays: { Au: 5.1, Ag: 22 } },
+        { holeId: 'CT-DD-002', from: 96, to: 102, assays: { Au: 1.2 } },
       ],
       files: [
         { name: 'ct_chips_jun.csv', category: 'Rock chips', meta: '6 samples', date: '2026-06-14' },
@@ -61,13 +110,36 @@ export function createDemoStore() {
   };
 }
 
+// v2 stored a single `au` number; v3 stores an `assays` map.
+function migrateV2(v2) {
+  return {
+    ...v2,
+    version: 3,
+    projects: v2.projects.map(p => ({
+      ...p,
+      samples: (p.samples || []).map(({ au, ...s }) => ({ ...s, assays: au != null ? { Au: au } : {} })),
+      intervals: (p.intervals || []).map(({ au, ...i }) => ({ ...i, assays: au != null ? { Au: au } : {} })),
+    })),
+  };
+}
+
 export function loadStore() {
   if (typeof window === 'undefined') return createDemoStore();
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.version === 2 && Array.isArray(parsed.projects)) return parsed;
+      if (parsed?.version === 3 && Array.isArray(parsed.projects)) return parsed;
+    }
+    const legacy = window.localStorage.getItem(LEGACY_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      if (parsed?.version === 2 && Array.isArray(parsed.projects)) {
+        const migrated = migrateV2(parsed);
+        window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
+        window.localStorage.removeItem(LEGACY_KEY);
+        return migrated;
+      }
     }
   } catch { /* corrupted storage — fall back to demo */ }
   return createDemoStore();
@@ -103,8 +175,30 @@ function headerIndex(headers) {
   return (...names) => h.findIndex(x => names.includes(x));
 }
 
+// Detect element columns in a header row: "au", "au_gpt", "ag_ppm",
+// "cu_pct", "Zn %" etc. Returns [{ index, element }].
+export function detectElementColumns(headers) {
+  const out = [];
+  headers.forEach((raw, index) => {
+    const base = raw.toLowerCase().trim().split(/[_\s(]/)[0];
+    const symbol = ELEMENT_SYMBOLS.find(e => e.toLowerCase() === base);
+    if (symbol) out.push({ index, element: symbol });
+  });
+  return out;
+}
+
+function readAssays(cells, elementCols) {
+  const assays = {};
+  elementCols.forEach(({ index, element }) => {
+    const v = parseFloat(cells[index]);
+    if (!Number.isNaN(v)) assays[element] = v;
+  });
+  return assays;
+}
+
 // Rock chip CSV → samples. Recognised headers (case-insensitive):
-// sample_id/id, lat/northing, lng/lon/easting, au/au_ppm/au_gpt, lith/lithology, notes.
+// sample_id/id, lat/northing, lng/lon/easting, lith/lithology, notes,
+// plus any element columns (au, ag, cu_pct, zn_ppm, …).
 export function parseSampleCsv(text, existing, prefix) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { samples: [], error: 'CSV needs a header row and at least one data row.' };
@@ -112,9 +206,9 @@ export function parseSampleCsv(text, existing, prefix) {
   const iId = col('sample_id', 'id');
   const iLat = col('lat', 'latitude', 'northing');
   const iLng = col('lng', 'lon', 'longitude', 'easting');
-  const iAu = col('au', 'au_ppm', 'au_gpt', 'au_g_t');
   const iLith = col('lith', 'lithology');
   const iNotes = col('notes', 'comment', 'comments');
+  const elementCols = detectElementColumns(rows[0]);
   if (iLat < 0 || iLng < 0) return { samples: [], error: 'CSV needs lat/northing and lng/easting columns.' };
 
   const out = [];
@@ -124,11 +218,10 @@ export function parseSampleCsv(text, existing, prefix) {
     const lat = parseFloat(cells[iLat]);
     const lng = parseFloat(cells[iLng]);
     if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
-    const auRaw = iAu >= 0 ? parseFloat(cells[iAu]) : NaN;
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
     const sample = {
       id, lat, lng,
-      au: Number.isNaN(auRaw) ? null : auRaw,
+      assays: readAssays(cells, elementCols),
       lith: iLith >= 0 ? cells[iLith] || '' : '',
       notes: iNotes >= 0 ? cells[iNotes] || '' : '',
       date: today(),
@@ -171,31 +264,38 @@ export function parseCollarCsv(text, existing, prefix) {
   return { collars: out, error: null };
 }
 
-// Assay CSV → links results to existing samples by ID.
-// sample_id/id + au/au_ppm/au_gpt.
+// Assay CSV → links lab results to existing samples by ID. Any element
+// columns are read (au, ag, cu_pct, …) and merged into the sample.
 export function parseAssayCsv(text, samples) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { updated: null, matched: 0, unmatched: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
   const iId = col('sample_id', 'id');
-  const iAu = col('au', 'au_ppm', 'au_gpt', 'au_g_t', 'result');
-  if (iId < 0 || iAu < 0) return { updated: null, matched: 0, unmatched: [], error: 'Assay CSV needs sample_id and au columns.' };
+  const elementCols = detectElementColumns(rows[0]);
+  if (iId < 0) return { updated: null, matched: 0, unmatched: [], error: 'Assay CSV needs a sample_id column.' };
+  if (!elementCols.length) return { updated: null, matched: 0, unmatched: [], error: 'No element columns found (e.g. au, ag, cu, zn…).' };
 
   const results = new Map();
   for (let r = 1; r < rows.length; r++) {
     const id = rows[r][iId];
-    const au = parseFloat(rows[r][iAu]);
-    if (id && !Number.isNaN(au)) results.set(id, au);
+    if (!id) continue;
+    const assays = readAssays(rows[r], elementCols);
+    if (Object.keys(assays).length) results.set(id, assays);
   }
   let matched = 0;
   const updated = samples.map(s => {
-    if (results.has(s.id)) { matched++; const au = results.get(s.id); results.delete(s.id); return { ...s, au }; }
+    if (results.has(s.id)) {
+      matched++;
+      const assays = { ...(s.assays || {}), ...results.get(s.id) };
+      results.delete(s.id);
+      return { ...s, assays };
+    }
     return s;
   });
   return { updated, matched, unmatched: [...results.keys()], error: matched ? null : 'No sample IDs in this file matched the project.' };
 }
 
-// Interval CSV: hole_id, from, to, au.
+// Interval CSV: hole_id, from, to + element columns.
 export function parseIntervalCsv(text) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { intervals: [], error: 'CSV needs a header row and at least one data row.' };
@@ -203,7 +303,7 @@ export function parseIntervalCsv(text) {
   const iHole = col('hole_id', 'id', 'hole');
   const iFrom = col('from', 'from_m');
   const iTo = col('to', 'to_m');
-  const iAu = col('au', 'au_ppm', 'au_gpt');
+  const elementCols = detectElementColumns(rows[0]);
   if (iHole < 0 || iFrom < 0 || iTo < 0) return { intervals: [], error: 'Interval CSV needs hole_id, from and to columns.' };
   const out = [];
   for (let r = 1; r < rows.length; r++) {
@@ -211,17 +311,22 @@ export function parseIntervalCsv(text) {
     const from = parseFloat(cells[iFrom]);
     const to = parseFloat(cells[iTo]);
     if (!cells[iHole] || Number.isNaN(from) || Number.isNaN(to)) continue;
-    const au = iAu >= 0 ? parseFloat(cells[iAu]) : NaN;
-    out.push({ holeId: cells[iHole], from, to, au: Number.isNaN(au) ? null : au });
+    out.push({ holeId: cells[iHole], from, to, assays: readAssays(cells, elementCols) });
   }
   if (!out.length) return { intervals: [], error: 'No valid interval rows found.' };
   return { intervals: out, error: null };
 }
 
 export function samplesToCsv(samples) {
+  const elements = [...new Set(samples.flatMap(s => Object.keys(s.assays || {})))];
+  const header = ['sample_id', 'lat', 'lng', ...elements.map(e => e.toLowerCase()), 'lithology', 'notes', 'date'];
   return [
-    'sample_id,lat,lng,au_gpt,lithology,notes,date',
-    ...samples.map(s => [s.id, s.lat, s.lng, s.au ?? '', s.lith || '', (s.notes || '').replace(/,/g, ';'), s.date || ''].join(',')),
+    header.join(','),
+    ...samples.map(s => [
+      s.id, s.lat, s.lng,
+      ...elements.map(e => s.assays?.[e] ?? ''),
+      s.lith || '', (s.notes || '').replace(/,/g, ';'), s.date || '',
+    ].join(',')),
   ].join('\n');
 }
 
