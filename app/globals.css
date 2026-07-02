@@ -101,4 +101,53 @@ body {
   .hairline {
     @apply border-t border-line;
   }
+
+  /* Markdown article body (Updates pages). */
+  .article-body {
+    @apply text-[15px] leading-relaxed text-white/80 md:text-base;
+  }
+  .article-body p {
+    @apply mt-5;
+  }
+  .article-body h2 {
+    @apply mt-10 text-xl font-semibold text-white md:text-2xl;
+  }
+  .article-body h3 {
+    @apply mt-8 text-lg font-semibold text-white;
+  }
+  .article-body ul,
+  .article-body ol {
+    @apply mt-5 space-y-2 pl-5;
+  }
+  .article-body ul {
+    @apply list-disc;
+  }
+  .article-body ol {
+    @apply list-decimal;
+  }
+  .article-body a {
+    @apply text-white underline decoration-white/30 underline-offset-4 transition-colors hover:decoration-white;
+  }
+  .article-body strong {
+    @apply font-semibold text-white;
+  }
+  .article-body blockquote {
+    @apply mt-6 border-l-2 border-line-strong pl-5 text-muted;
+  }
+  .article-body hr {
+    @apply mt-10 border-line;
+  }
+  .article-body img {
+    @apply mt-8 w-full;
+  }
+  .article-body table {
+    @apply mt-6 w-full border-collapse text-sm;
+  }
+  .article-body th,
+  .article-body td {
+    @apply border border-line px-3 py-2 text-left;
+  }
+  .article-body th {
+    @apply text-white;
+  }
 }

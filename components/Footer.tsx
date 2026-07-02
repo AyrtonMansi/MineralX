@@ -3,6 +3,8 @@ import { InstagramIcon, LinkedInIcon } from "./icons";
 
 export function Footer() {
   const year = new Date().getFullYear();
+  // Placeholder ("#") social links are hidden until real URLs are configured.
+  const socials = company.social.filter((s) => s.href && s.href !== "#");
 
   return (
     <footer className="border-t border-line bg-black">
@@ -16,7 +18,7 @@ export function Footer() {
               {footer.blurb}
             </p>
             <div className="mt-6 flex items-center gap-3">
-              {company.social.map((s) => (
+              {socials.map((s) => (
                 <a
                   key={s.label}
                   href={s.href}

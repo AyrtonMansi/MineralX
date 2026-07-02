@@ -42,7 +42,7 @@ export function Navbar() {
       >
         <nav className="container-site flex h-16 items-center justify-between md:h-20">
           <a
-            href="#top"
+            href="/"
             className="text-base font-semibold uppercase tracking-brand text-white transition-opacity hover:opacity-80"
             aria-label={`${company.name} home`}
           >
@@ -62,7 +62,7 @@ export function Navbar() {
             ))}
             <span className="h-4 w-px bg-line-strong" aria-hidden="true" />
             <a
-              href="#contact"
+              href="/#contact"
               className="text-[12px] font-medium uppercase tracking-wide text-white transition-opacity hover:opacity-70"
             >
               Enquire

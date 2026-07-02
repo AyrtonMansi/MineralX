@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import { company } from "@/lib/content";
 import { StructuredData } from "@/components/StructuredData";
 import "./globals.css";
@@ -69,6 +70,7 @@ export default function RootLayout({
       <body className="bg-black font-sans text-white antialiased">
         <StructuredData />
         {children}
+        <Analytics />
       </body>
     </html>
   );

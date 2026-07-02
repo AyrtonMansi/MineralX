@@ -33,18 +33,18 @@ export const company = {
 };
 
 export const nav = [
-  { label: "Overview", href: "#overview" },
-  { label: "What We Do", href: "#focus" },
-  { label: "Approach", href: "#approach" },
-  { label: "Investors", href: "#investors" },
-  { label: "Contact", href: "#contact" },
+  { label: "Overview", href: "/#overview" },
+  { label: "What We Do", href: "/#focus" },
+  { label: "Investors", href: "/#investors" },
+  { label: "Updates", href: "/updates" },
+  { label: "Contact", href: "/#contact" },
 ];
 
 export const hero = {
   // Hero copy + CTA preserved to match the original site's hero exactly.
   supporting:
     "MineralX Resources is an Australian mining, exploration and R&D company which holds a strategic portfolio of mineral assets in North Queensland's minerals province.",
-  cta: { label: "Latest Exploration Update", href: "#overview" },
+  cta: { label: "Latest Exploration Update", href: "/updates" },
   /**
    * Optional path to the original hero background image (place in /public).
    * When null, a faithful generated aerial-terrain backdrop is used instead.
@@ -191,6 +191,12 @@ export const contact = {
   heading: "Get in touch.",
   intro:
     "For investor, partnership and corporate enquiries, contact the MineralX team.",
+  /**
+   * Form delivery endpoint (e.g. Formspree: "https://formspree.io/f/xxxxxxx").
+   * When set, the form submits directly and shows an on-page confirmation.
+   * When null, the form falls back to opening the visitor's email client.
+   */
+  formEndpoint: null as string | null,
 };
 
 export const footer = {
@@ -200,17 +206,17 @@ export const footer = {
     {
       title: "Company",
       links: [
-        { label: "Overview", href: "#overview" },
-        { label: "What We Do", href: "#focus" },
-        { label: "Approach", href: "#approach" },
+        { label: "Overview", href: "/#overview" },
+        { label: "What We Do", href: "/#focus" },
+        { label: "Approach", href: "/#approach" },
       ],
     },
     {
       title: "Engage",
       links: [
-        { label: "Commodities", href: "#commodities" },
-        { label: "Investors", href: "#investors" },
-        { label: "Contact", href: "#contact" },
+        { label: "Updates", href: "/updates" },
+        { label: "Investors", href: "/#investors" },
+        { label: "Contact", href: "/#contact" },
       ],
     },
   ],

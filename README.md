@@ -66,6 +66,29 @@ to update copy without touching component code.
 
 To change the **section order**, edit the JSX in [`app/page.tsx`](app/page.tsx).
 
+## Publishing Updates (Articles)
+
+Articles are plain markdown files in [`content/articles/`](content/articles/)
+— no CMS.
+
+1. Duplicate [`content/articles/_template.md`](content/articles/_template.md).
+2. Rename it to the URL slug you want (e.g. `dr-joint-venture.md` publishes
+   at `/updates/dr-joint-venture`).
+3. Fill in the frontmatter (`title`, `date`, `category`, `excerpt`) and write
+   the body in markdown.
+4. Commit and push to `main` — Vercel publishes it automatically.
+
+Files starting with `_` are never published. Articles are listed at
+`/updates`, newest first, and included in the sitemap.
+
+## Contact Form Delivery
+
+Set `contact.formEndpoint` in [`lib/content.ts`](lib/content.ts) to a form
+endpoint (e.g. a [Formspree](https://formspree.io) form URL like
+`https://formspree.io/f/xxxxxxx`) and the form submits directly with an
+on-page confirmation. While it is `null`, the form falls back to opening the
+visitor's email client addressed to `info@mineral-x.com.au`.
+
 ## Design Notes
 
 - **Palette:** black / charcoal / white, thin hairline borders. No metallic gold.
