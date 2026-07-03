@@ -17,7 +17,14 @@ export function generateMetadata({ params }: Props): Metadata {
   return {
     title: article.title,
     description: article.excerpt,
-    openGraph: { title: article.title, description: article.excerpt },
+    alternates: { canonical: `/updates/${article.slug}` },
+    openGraph: {
+      title: article.title,
+      description: article.excerpt,
+      url: `/updates/${article.slug}`,
+      type: "article",
+      publishedTime: article.date,
+    },
   };
 }
 

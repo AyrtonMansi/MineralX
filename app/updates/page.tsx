@@ -6,8 +6,13 @@ import { getArticles, formatDate } from "@/lib/articles";
 
 export const metadata: Metadata = {
   title: "Updates",
-  description:
-    "Company updates and announcements from MineralX Resources.",
+  description: "Company updates and announcements from MineralX Resources.",
+  alternates: { canonical: "/updates" },
+  openGraph: {
+    title: "Updates — MineralX Resources",
+    description: "Company updates and announcements from MineralX Resources.",
+    url: "/updates",
+  },
 };
 
 export default function UpdatesPage() {
