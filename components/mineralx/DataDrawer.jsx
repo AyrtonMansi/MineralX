@@ -5,9 +5,16 @@ import { MxIcons } from './MineralXIcons';
 
 // The home of all project data: a clean list per dataset, not a GIS
 // attribute table. Row click → zoom to the feature and open its popup.
-export default function DataDrawer({ store, api, tab, setTab, activeElement, onAdd, onClose }) {
-  const [filter, setFilter] = useState('');
+export default function DataDrawer({ store, api, tab, setTab, activeElement, initialFilter, onAdd, onClose }) {
+  const [filter, setFilter] = useState(initialFilter || '');
   const q = filter.trim().toLowerCase();
+
+  // On phones the drawer is full-width: close it after flying to a
+  // feature so the user can actually see what they tapped.
+  const focusFeature = (lat, lng, id) => {
+    api.focusOn(lat, lng, id);
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) onClose();
+  };
 
   const allSamples = useMemo(() =>
     store.projects.flatMap(p => p.samples.map(s => ({ ...s, project: p }))), [store]);
@@ -16,8 +23,11 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, onA
   const allFiles = useMemo(() =>
     store.projects.flatMap(p => p.files.map(f => ({ ...f, project: p }))), [store]);
 
+  // 'pending' is a status filter, not just text: matches unassayed chips.
   const samples = q
-    ? allSamples.filter(s => s.id.toLowerCase().includes(q) || (s.lith || '').toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q))
+    ? allSamples.filter(s =>
+        (q === 'pending' && Object.keys(s.assays || {}).length === 0) ||
+        s.id.toLowerCase().includes(q) || (s.lith || '').toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q))
     : allSamples;
   const collars = q ? allCollars.filter(c => c.id.toLowerCase().includes(q)) : allCollars;
   const files = q ? allFiles.filter(f => f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)) : allFiles;
@@ -70,8 +80,8 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, onA
                 const g = gradeOf(s, activeElement);
                 return (
                   <div key={`${s.project.id}-${s.id}`} className="mx-data-row" role="button" tabIndex={0}
-                    onClick={() => { api.focusOn(s.lat, s.lng, s.id); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') api.focusOn(s.lat, s.lng, s.id); }}>
+                    onClick={() => focusFeature(s.lat, s.lng, s.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') focusFeature(s.lat, s.lng, s.id); }}>
                     <span className={`mx-data-dot ${g === 'pending' ? 'mx-data-dot-pending' : ''}`} style={g !== 'pending' ? { background: GRADE_COLORS[g] } : undefined} />
                     <div className="mx-data-main">
                       <div className="mx-data-id">
@@ -99,8 +109,8 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, onA
               {collars.length === 0 && <div className="mx-empty-hint">{q ? 'No holes match.' : 'No drill holes yet — add a collar below or import a CSV.'}</div>}
               {collars.map(c => (
                 <div key={`${c.project.id}-${c.id}`} className="mx-data-row" role="button" tabIndex={0}
-                  onClick={() => api.focusOn(c.lat, c.lng, c.id)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') api.focusOn(c.lat, c.lng, c.id); }}>
+                  onClick={() => focusFeature(c.lat, c.lng, c.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') focusFeature(c.lat, c.lng, c.id); }}>
                   <span className="mx-data-collar" />
                   <div className="mx-data-main">
                     <div className="mx-data-id">{c.id}</div>

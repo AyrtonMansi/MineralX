@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { PUBLIC_DATA_CATALOG } from './layer-data';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
-  elementInfo, elementsInStore, formatAssay,
+  elementInfo, elementsInStore, formatAssay, detectCsvKind,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
 } from './project-store';
@@ -69,8 +69,10 @@ export default function MineralXWorkspace() {
   const [manageTarget, setManageTarget] = useState(null); // {type, projectId}
   const [dataOpen, setDataOpen] = useState(false);
   const [dataTab, setDataTab] = useState('chips');
+  const [dataPreset, setDataPreset] = useState('');
   const [basemap, setBasemap] = useState('satellite');
   const [activeElement, setActiveElement] = useState('Au');
+  const [flowState, setFlowState] = useState({ status: 'idle', targets: 0 }); // terrain analysis
   const [mapReady, setMapReady] = useState(false);
   const [programOpen, setProgramOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -82,6 +84,7 @@ export default function MineralXWorkspace() {
   const groups = useRef(new Map());   // `${pid}:chips|holes|bnd` -> layerGroup
   const markers = useRef(new Map());  // featureId -> marker
   const wmsLayers = useRef(new Map()); // public layerId -> tileLayer.wms
+  const flowLayers = useRef(null); // { overlay, targets } for terrain analysis
 
   const activeProject = store.projects.find(p => p.id === store.activeProjectId) || store.projects[0];
 
@@ -345,6 +348,59 @@ export default function MineralXWorkspace() {
     }));
   }, [publicOn, publicOpacity, mapReady]);
 
+  // ── Terrain flow analysis (drainage + alluvial trap targets) ────────
+  const clearFlowLayers = useCallback(() => {
+    const map = mapInstance.current;
+    if (flowLayers.current && map) {
+      map.removeLayer(flowLayers.current.overlay);
+      map.removeLayer(flowLayers.current.targets);
+    }
+    flowLayers.current = null;
+  }, []);
+
+  const runFlowAnalysis = useCallback(async () => {
+    const map = mapInstance.current;
+    const L = leaflet.current;
+    if (!map || !L) return;
+    clearFlowLayers();
+    setFlowState({ status: 'running', targets: 0 });
+    try {
+      const { analyzeViewport } = await import('./terrain-flow');
+      // Seed with the user's anomalous+ samples so downstream traps rank higher
+      const hotSamples = store.projects.flatMap(p =>
+        p.samples.filter(s => ['high', 'anom'].includes(gradeOf(s, activeElement)))
+      );
+      const result = await analyzeViewport(map, hotSamples);
+      const overlay = L.imageOverlay(result.url, result.bounds, { opacity: 0.65 }).addTo(map);
+      const targets = L.layerGroup().addTo(map);
+      result.targets.forEach(t => {
+        L.circleMarker([t.lat, t.lng], {
+          radius: t.gold ? 8 : 6.5,
+          color: '#FAF9F4',
+          weight: 2,
+          fillColor: t.gold ? '#C15F3C' : '#8A6A3E',
+          fillOpacity: 0.9,
+        }).bindTooltip(
+          t.gold ? 'Trap target · downstream of your anomalous samples' : 'Alluvial trap target',
+          { className: 'lx-tip', direction: 'top', offset: [0, -6] }
+        ).addTo(targets);
+      });
+      flowLayers.current = { overlay, targets };
+      setFlowState({ status: 'ready', targets: result.targets.length });
+    } catch {
+      setFlowState({ status: 'error', targets: 0 });
+    }
+  }, [store, activeElement, clearFlowLayers]);
+
+  const toggleFlow = useCallback(() => {
+    if (flowState.status === 'idle' || flowState.status === 'error') {
+      runFlowAnalysis();
+    } else {
+      clearFlowLayers();
+      setFlowState({ status: 'idle', targets: 0 });
+    }
+  }, [flowState.status, runFlowAnalysis, clearFlowLayers]);
+
   // ── Basemap ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady || !baseLayer.current) return;
@@ -410,6 +466,7 @@ export default function MineralXWorkspace() {
                 >
                   <span className="mx-program-swatch" style={{ background: p.color }} />
                   {p.name}
+                  {p.demo && <span className="mx-demo-tag">demo</span>}
                 </button>
               ))}
               <button type="button" className="mx-program-item mx-program-new" onClick={() => { setProgramOpen(false); setManageTarget({ type: 'newProject' }); }}>
@@ -457,10 +514,10 @@ export default function MineralXWorkspace() {
         {activePanel === 'home' && (
           <HomePanel
             stats={stats}
-            projectName={activeProject?.name}
+            project={activeProject}
             onUpload={() => setActivePanel('upload')}
             onLayers={() => setActivePanel('layers')}
-            onData={() => setDataOpen(true)}
+            onData={(tab, preset) => { setManageTarget(null); setDataTab(tab); setDataPreset(preset || ''); setDataOpen(true); }}
             onClose={() => setActivePanel(null)}
           />
         )}
@@ -484,6 +541,9 @@ export default function MineralXWorkspace() {
             activeElement={activeElement}
             setActiveElement={setActiveElement}
             availableElements={availableElements}
+            flowState={flowState}
+            onToggleFlow={toggleFlow}
+            onRerunFlow={runFlowAnalysis}
             onManage={setManageTarget}
             onClose={() => setActivePanel(null)}
           />
@@ -506,8 +566,9 @@ export default function MineralXWorkspace() {
           tab={dataTab}
           setTab={setDataTab}
           activeElement={activeElement}
+          initialFilter={dataPreset}
           onAdd={(type) => { setDataOpen(false); setManageTarget({ type, projectId: activeProject?.id }); }}
-          onClose={() => setDataOpen(false)}
+          onClose={() => { setDataOpen(false); setDataPreset(''); }}
         />
       )}
 
@@ -535,30 +596,38 @@ function DockBtn({ icon, title, active, onClick }) {
 }
 
 // ── Home panel ─────────────────────────────────────────────────────────
-function HomePanel({ stats, projectName, onUpload, onLayers, onData, onClose }) {
+function HomePanel({ stats, project, onUpload, onLayers, onData, onClose }) {
+  const projectEmpty = project && !project.samples.length && !project.collars.length && !project.boundary;
   return (
     <div className="mx-glass-panel mx-anim-rise">
       <div className="mx-panel-header">
         <div>
-          <div className="mx-eyebrow">NORTH QLD · GDA2020 Z55</div>
-          <h1 className="mx-panel-title">{projectName || 'Program map'}</h1>
+          <div className="mx-eyebrow">NORTH QLD · GDA2020 Z55{project?.demo ? ' · DEMO DATA' : ''}</div>
+          <h1 className="mx-panel-title">{project?.name || 'Program map'}</h1>
         </div>
         <button type="button" className="mx-close-btn" onClick={onClose}>&times;</button>
       </div>
-      <div className="mx-stats-row">
-        <button type="button" className="mx-stat-item" onClick={onData}>
-          <div className="mx-stat-num">{stats.chips}</div>
-          <div className="mx-stat-label">rock chips</div>
-        </button>
-        <button type="button" className="mx-stat-item" onClick={onData}>
-          <div className="mx-stat-num">{stats.holes}</div>
-          <div className="mx-stat-label">drill holes</div>
-        </button>
-        <button type="button" className="mx-stat-item" onClick={onData}>
-          <div className="mx-stat-num mx-stat-pending">{stats.pending}</div>
-          <div className="mx-stat-label">awaiting assay</div>
-        </button>
-      </div>
+      {projectEmpty ? (
+        <div className="mx-home-empty">
+          Nothing here yet. Start with your tenement KML or a rock-chip
+          CSV — drop either into <strong>Add data</strong> and it lands on the map.
+        </div>
+      ) : (
+        <div className="mx-stats-row">
+          <button type="button" className="mx-stat-item" onClick={() => onData('chips')}>
+            <div className="mx-stat-num">{stats.chips}</div>
+            <div className="mx-stat-label">rock chips</div>
+          </button>
+          <button type="button" className="mx-stat-item" onClick={() => onData('holes')}>
+            <div className="mx-stat-num">{stats.holes}</div>
+            <div className="mx-stat-label">drill holes</div>
+          </button>
+          <button type="button" className="mx-stat-item" onClick={() => onData('chips', 'pending')}>
+            <div className="mx-stat-num mx-stat-pending">{stats.pending}</div>
+            <div className="mx-stat-label">awaiting assay</div>
+          </button>
+        </div>
+      )}
       <div className="mx-panel-actions">
         <button type="button" className="mx-btn-primary" onClick={onUpload}>Add data</button>
         <button type="button" className="mx-btn-secondary" onClick={onLayers}>Layers</button>
@@ -568,8 +637,11 @@ function HomePanel({ stats, projectName, onUpload, onLayers, onData, onClose }) 
 }
 
 // ── Upload panel ───────────────────────────────────────────────────────
-const UPLOAD_CATS = ['Rock chips', 'Drill collars', 'Assays', 'KML', 'Photos'];
+// Drop anything: the file's own content decides what it is. Category
+// chips are an override for ambiguous files, not a prerequisite.
+const UPLOAD_CATS = ['Auto', 'Rock chips', 'Drill collars', 'Assays', 'KML', 'Photos'];
 const UPLOAD_HINTS = {
+  Auto: 'Drop any CSV, KML or photo — the type is read from the file',
   'Rock chips': 'CSV: sample_id, lat, lng, lith + element columns (au, ag, cu…)',
   'Drill collars': 'CSV: hole_id, lat, lng, azimuth, dip, depth',
   Assays: 'Lab CSV: sample_id + element columns — links to chips by ID',
@@ -577,18 +649,20 @@ const UPLOAD_HINTS = {
   Photos: 'JPG named after the sample, e.g. CT-RC-0448.jpg',
 };
 
+const KIND_LABELS = { chips: 'rock chips', collars: 'drill collars', assays: 'lab assays', intervals: 'drill intervals', kml: 'a boundary KML', photo: 'a sample photo' };
+
 function UploadPanel({ onClose, project, api }) {
-  const [cat, setCat] = useState('Rock chips');
+  const [cat, setCat] = useState('Auto');
   const [msg, setMsg] = useState(null);
   const fileInput = useRef(null);
 
-  const accept = cat === 'KML' ? '.kml' : cat === 'Photos' ? 'image/*' : '.csv,text/csv';
+  const accept = cat === 'KML' ? '.kml' : cat === 'Photos' ? 'image/*' : cat === 'Auto' ? '.csv,text/csv,.kml,image/*' : '.csv,text/csv';
 
   const handleFile = useCallback((file) => {
     if (!file || !project) return;
     setMsg(null);
 
-    if (cat === 'Photos') {
+    const importPhoto = () => {
       const sampleId = file.name.replace(/\.[^.]+$/, '');
       const sample = project.samples.find(s => s.id.toLowerCase() === sampleId.toLowerCase());
       if (!sample) {
@@ -601,33 +675,64 @@ function UploadPanel({ onClose, project, api }) {
           setMsg({ error: false, text: `Photo attached to ${sample.id}.` });
         }).catch(() => setMsg({ error: true, text: 'Could not read that image.' }))
       );
-      return;
-    }
+    };
+
+    const isImage = file.type.startsWith('image/');
+    const isKml = /\.kml$/i.test(file.name);
+    if (cat === 'Photos' || (cat === 'Auto' && isImage)) { importPhoto(); return; }
 
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result);
-      if (cat === 'Rock chips') {
-        const { samples, error } = parseSampleCsv(text, project.samples, project.idPrefix);
-        if (error) return setMsg({ error: true, text: error });
-        api.addSamples(project.id, samples, file.name);
-        setMsg({ error: false, text: `Imported ${samples.length} sample${samples.length === 1 ? '' : 's'}.` });
-      } else if (cat === 'Drill collars') {
-        const { collars, error } = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'));
-        if (error) return setMsg({ error: true, text: error });
-        api.addCollars(project.id, collars, file.name);
-        setMsg({ error: false, text: `Imported ${collars.length} collar${collars.length === 1 ? '' : 's'}.` });
-      } else if (cat === 'Assays') {
-        const r = api.applyAssays(project.id, text, file.name);
-        if (r.error) return setMsg({ error: true, text: r.error });
-        const extra = r.unmatched.length ? ` ${r.unmatched.length} ID${r.unmatched.length === 1 ? '' : 's'} not found: ${r.unmatched.slice(0, 3).join(', ')}${r.unmatched.length > 3 ? '…' : ''}.` : '';
-        setMsg({ error: false, text: `Linked ${r.matched} assay result${r.matched === 1 ? '' : 's'}.${extra}` });
-      } else if (cat === 'KML') {
-        const { coords, error } = parseKmlBoundary(text);
-        if (error) return setMsg({ error: true, text: error });
-        api.setBoundary(project.id, file.name.replace(/\.kml$/i, ''), coords, file.name);
-        setMsg({ error: false, text: 'Boundary updated — zoomed to it.' });
+      const detected = (kind) => (cat === 'Auto' ? `Detected ${KIND_LABELS[kind]} — ` : '');
+
+      const importKind = {
+        kml: () => {
+          const { coords, error } = parseKmlBoundary(text);
+          if (error) return setMsg({ error: true, text: error });
+          api.setBoundary(project.id, file.name.replace(/\.kml$/i, ''), coords, file.name);
+          setMsg({ error: false, text: `${detected('kml')}boundary updated, zoomed to it.` });
+        },
+        chips: () => {
+          const { samples, error } = parseSampleCsv(text, project.samples, project.idPrefix);
+          if (error) return setMsg({ error: true, text: error });
+          api.addSamples(project.id, samples, file.name);
+          setMsg({ error: false, text: `${detected('chips')}imported ${samples.length} sample${samples.length === 1 ? '' : 's'}.` });
+        },
+        collars: () => {
+          const { collars, error } = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'));
+          if (error) return setMsg({ error: true, text: error });
+          api.addCollars(project.id, collars, file.name);
+          setMsg({ error: false, text: `${detected('collars')}imported ${collars.length} collar${collars.length === 1 ? '' : 's'}.` });
+        },
+        assays: () => {
+          const r = api.applyAssays(project.id, text, file.name);
+          if (r.error) return setMsg({ error: true, text: r.error });
+          const extra = r.unmatched.length ? ` ${r.unmatched.length} ID${r.unmatched.length === 1 ? '' : 's'} not found: ${r.unmatched.slice(0, 3).join(', ')}${r.unmatched.length > 3 ? '…' : ''}.` : '';
+          setMsg({ error: false, text: `${detected('assays')}linked ${r.matched} result${r.matched === 1 ? '' : 's'}.${extra}` });
+        },
+        intervals: () => {
+          const { intervals, error } = parseIntervalCsv(text);
+          if (error) return setMsg({ error: true, text: error });
+          const known = new Set(project.collars.map(c => c.id));
+          const matched = intervals.filter(i => known.has(i.holeId));
+          if (!matched.length) return setMsg({ error: true, text: 'No hole IDs in this file matched the project.' });
+          api.addIntervals(project.id, matched, file.name);
+          setMsg({ error: false, text: `${detected('intervals')}imported ${matched.length} interval${matched.length === 1 ? '' : 's'}.` });
+        },
+      };
+
+      if (cat === 'Auto') {
+        if (isKml || text.trimStart().startsWith('<?xml') || text.includes('<kml')) return importKind.kml();
+        const headers = text.split(/\r?\n/)[0]?.split(',').map(h => h.trim()) || [];
+        const kind = detectCsvKind(headers);
+        if (!kind) return setMsg({ error: true, text: 'Couldn’t tell what this file is — pick a category and drop it again.' });
+        return importKind[kind]();
       }
+      if (cat === 'KML') return importKind.kml();
+      if (cat === 'Rock chips') return importKind.chips();
+      if (cat === 'Drill collars') return importKind.collars();
+      if (cat === 'Assays') return importKind.assays();
     };
     reader.readAsText(file);
   }, [cat, project, api]);
@@ -681,7 +786,7 @@ function UploadPanel({ onClose, project, api }) {
 }
 
 // ── Layers panel ───────────────────────────────────────────────────────
-function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, onManage, onClose }) {
+function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, onToggleFlow, onRerunFlow, onManage, onClose }) {
   const toggleHidden = (id) => setHidden(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleExpanded = (id, dflt) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? dflt) }));
 
@@ -745,6 +850,31 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
           </div>
         )))}
 
+        {/* Terrain analysis */}
+        <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
+          <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+          <div className="mx-tree-swatch" style={{ background: '#3E6C8C', transform: 'rotate(45deg)', width: 11, height: 11 }} />
+          <span className="mx-tree-name mx-tree-name-bold">Water flow &amp; traps</span>
+          {flowState.status === 'running' && <span className="mx-tree-attribution">computing…</span>}
+          {flowState.status === 'ready' && <span className="mx-tree-count">{flowState.targets} targets</span>}
+          {flowState.status === 'error' && <span className="mx-tree-error" title="Elevation tiles unreachable — try again">failed</span>}
+          <button
+            type="button"
+            className={`mx-tree-eye ${flowState.status === 'ready' || flowState.status === 'running' ? 'on' : ''}`}
+            onClick={onToggleFlow}
+            title={flowState.status === 'ready' ? 'Hide' : 'Analyse this view'}
+          >
+            <div className="mx-eye-dot" />
+          </button>
+        </div>
+        {flowState.status === 'ready' && (
+          <div className="mx-flow-note">
+            Drainage and trap targets for the current view — pan, then
+            <button type="button" className="mx-flow-rerun" onClick={onRerunFlow}>re-run</button>.
+            Heuristic terrain model: field-check targets.
+          </div>
+        )}
+
         <button type="button" className="mx-add-project-row" onClick={() => onManage({ type: 'newProject' })}>
           <span className="mx-add-icon">+</span>
           <span className="mx-add-label">Add project · import KML</span>
@@ -800,6 +930,7 @@ function ProjectTree({ project, hidden, toggleHidden, expanded, toggleExpanded, 
         </button>
         <div className="mx-tree-swatch" style={{ background: p.color, transform: 'rotate(45deg)', width: 11, height: 11 }} />
         <span className={`mx-tree-name mx-tree-name-bold ${hidden[`proj:${p.id}`] ? 'mx-tree-name-off' : ''}`}>{p.name}</span>
+        {p.demo && <span className="mx-demo-tag">demo</span>}
         <button type="button" className={`mx-tree-eye ${hidden[`proj:${p.id}`] ? '' : 'on'}`} onClick={() => toggleHidden(`proj:${p.id}`)} title={hidden[`proj:${p.id}`] ? 'Show' : 'Hide'}>
           <div className="mx-eye-dot" />
         </button>

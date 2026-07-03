@@ -75,6 +75,7 @@ export function createDemoStore() {
     projects: [{
       id: 'proj-demo',
       name: 'Charters Towers Au',
+      demo: true,
       color: PROJECT_COLORS[0],
       idPrefix: 'CT-RC-',
       createdAt: '2026-06-01',
@@ -185,6 +186,25 @@ export function detectElementColumns(headers) {
     if (symbol) out.push({ index, element: symbol });
   });
   return out;
+}
+
+// What kind of CSV is this? Detection from the header row, so users can
+// drop any file without pre-categorising it. Order matters: intervals
+// (hole_id + from/to) before collars (hole_id + coords) before chips
+// (coords) before assays (sample_id + elements, no coords).
+export function detectCsvKind(headers) {
+  const col = headerIndex(headers);
+  const hasLat = col('lat', 'latitude', 'northing') >= 0;
+  const hasLng = col('lng', 'lon', 'longitude', 'easting') >= 0;
+  const hasHole = col('hole_id', 'hole') >= 0;
+  const hasFromTo = col('from', 'from_m') >= 0 && col('to', 'to_m') >= 0;
+  const hasSampleId = col('sample_id', 'id') >= 0;
+  const hasElements = detectElementColumns(headers).length > 0;
+  if (hasHole && hasFromTo) return 'intervals';
+  if (hasHole && hasLat && hasLng) return 'collars';
+  if (hasLat && hasLng) return 'chips';
+  if (hasSampleId && hasElements) return 'assays';
+  return null;
 }
 
 function readAssays(cells, elementCols) {

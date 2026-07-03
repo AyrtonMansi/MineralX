@@ -654,6 +654,41 @@
 /* Data drawer footer holds two buttons */
 .mx-data-footer { display: flex; gap: 8px; }
 
+/* Terrain analysis note */
+.mx-flow-note {
+  margin: 2px 8px 8px 30px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: rgba(62,108,140,0.08);
+  border: 1px solid rgba(62,108,140,0.18);
+  font-size: 10.5px; line-height: 1.5; color: #4A6378;
+}
+.mx-flow-rerun {
+  background: none; border: none; cursor: pointer; padding: 0 3px;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 10.5px; font-weight: 600; color: #C15F3C;
+}
+.mx-flow-rerun:hover { text-decoration: underline; }
+
+/* Demo project tag */
+.mx-demo-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px; letter-spacing: 0.6px;
+  color: #8A6A3E; background: rgba(176,138,62,0.14);
+  border: 1px solid rgba(176,138,62,0.3);
+  padding: 1px 6px; border-radius: 8px;
+  flex-shrink: 0;
+}
+
+/* Empty-project guidance on home panel */
+.mx-home-empty {
+  margin: 14px 18px 4px;
+  padding: 13px 15px;
+  border: 1.5px dashed #C4BDAB; border-radius: 12px;
+  font-size: 12.5px; line-height: 1.55; color: #5F5A50;
+}
+.mx-home-empty strong { color: #211E1A; }
+
 /* Stat items are clickable (open Data drawer) */
 .mx-stat-item { background: none; border: none; text-align: left; cursor: pointer; padding: 0; font-family: 'Instrument Sans', sans-serif; border-radius: 8px; }
 .mx-stat-item:hover .mx-stat-label { color: #C15F3C; }
