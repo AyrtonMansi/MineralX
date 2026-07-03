@@ -1,12 +1,13 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { gradeOf, GRADE_COLORS, formatAssay, samplesToCsv, collarsToCsv, downloadText } from './project-store';
+import { gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText } from './project-store';
 import { MxIcons } from './MineralXIcons';
 
 // The home of all project data: a clean list per dataset, not a GIS
 // attribute table. Row click → zoom to the feature and open its popup.
 export default function DataDrawer({ store, api, tab, setTab, activeElement, initialFilter, onAdd, onClose }) {
   const [filter, setFilter] = useState(initialFilter || '');
+  const [expanded, setExpanded] = useState(null); // hole id whose assay table is open
   const q = filter.trim().toLowerCase();
 
   // On phones the drawer is full-width: close it after flying to a
@@ -107,37 +108,40 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
           {tab === 'holes' && (
             <div className="mx-data-list">
               {collars.length === 0 && <div className="mx-empty-hint">{q ? 'No holes match.' : 'No drill holes yet — add a collar below or import a CSV.'}</div>}
-              {collars.map(c => (
-                <div key={`${c.project.id}-${c.id}`} className="mx-data-row" role="button" tabIndex={0}
-                  onClick={() => focusFeature(c.lat, c.lng, c.id)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') focusFeature(c.lat, c.lng, c.id); }}>
-                  <span className="mx-data-collar" />
-                  <div className="mx-data-main">
-                    <div className="mx-data-id">{c.id}</div>
-                    <div className="mx-data-sub">
-                      {c.depth != null ? `${c.depth} m` : 'depth n/a'}
-                      {c.azimuth != null ? ` · ${c.azimuth}°/${c.dip ?? '?'}°` : ''}
-                      {c.intervals.length ? ` · ${c.intervals.length} intervals` : ''}
+              {collars.map(c => {
+                const open = expanded === c.id;
+                const best = c.intervals.reduce((b, i) => {
+                  const v = i.assays?.[activeElement];
+                  return v != null && (b == null || v > b) ? v : b;
+                }, null);
+                return (
+                  <div key={`${c.project.id}-${c.id}`}>
+                    <div className="mx-data-row" role="button" tabIndex={0}
+                      onClick={() => { setExpanded(open ? null : c.id); focusFeature(c.lat, c.lng, c.id); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { setExpanded(open ? null : c.id); focusFeature(c.lat, c.lng, c.id); } }}>
+                      <span className="mx-data-caret">{open ? MxIcons.chevronDown : MxIcons.chevronRight}</span>
+                      <span className="mx-data-collar" />
+                      <div className="mx-data-main">
+                        <div className="mx-data-id">{c.id}</div>
+                        <div className="mx-data-sub">
+                          {c.depth != null ? `${c.depth} m` : 'depth n/a'}
+                          {c.azimuth != null ? ` · ${c.azimuth}°/${c.dip ?? '?'}°` : ''}
+                          {c.intervals.length ? ` · ${c.intervals.length} assay${c.intervals.length === 1 ? '' : 's'}` : ' · no assays'}
+                        </div>
+                      </div>
+                      <span className="mx-data-value">{best != null ? `best ${formatAssay(activeElement, best)}` : ''}</span>
+                      <button
+                        type="button" className="mx-data-delete" title="Delete hole"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Delete ${c.id} and its intervals? This cannot be undone.`)) api.deleteCollar(c.project.id, c.id);
+                        }}
+                      >{MxIcons.trash}</button>
                     </div>
+                    {open && <IntervalTable collar={c} activeElement={activeElement} onAddIntervals={() => onAdd('holes')} />}
                   </div>
-                  <span className="mx-data-value">
-                    {(() => {
-                      const best = c.intervals.reduce((b, i) => {
-                        const v = i.assays?.[activeElement];
-                        return v != null && (b == null || v > b) ? v : b;
-                      }, null);
-                      return best != null ? `best ${formatAssay(activeElement, best)}` : '';
-                    })()}
-                  </span>
-                  <button
-                    type="button" className="mx-data-delete" title="Delete hole"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm(`Delete ${c.id} and its intervals? This cannot be undone.`)) api.deleteCollar(c.project.id, c.id);
-                    }}
-                  >{MxIcons.trash}</button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -169,6 +173,46 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Downhole assay intercepts for one hole — the drill-assay table.
+function IntervalTable({ collar, activeElement, onAddIntervals }) {
+  const rows = [...collar.intervals].sort((a, b) => a.from - b.from);
+  // Elements assayed anywhere in this hole, active element first.
+  const elements = [...new Set(rows.flatMap(r => Object.keys(r.assays || {})))]
+    .sort((a, b) => (a === activeElement ? -1 : b === activeElement ? 1 : 0));
+
+  if (!rows.length) {
+    return (
+      <div className="mx-interval-empty">
+        No downhole assays for {collar.id} yet.
+        <button type="button" className="mx-interval-add" onClick={onAddIntervals}>Import intervals</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-interval-table">
+      <div className="mx-interval-head">
+        <span className="mx-iv-depth">From–To (m)</span>
+        <span className="mx-iv-width">Width</span>
+        {elements.map(el => <span key={el} className="mx-iv-el">{el}</span>)}
+      </div>
+      {rows.map((r, i) => {
+        const v = r.assays?.[activeElement];
+        const high = v != null && v >= elementInfo(activeElement).high;
+        return (
+          <div key={i} className={`mx-interval-row ${high ? 'mx-interval-hot' : ''}`}>
+            <span className="mx-iv-depth">{r.from}–{r.to}</span>
+            <span className="mx-iv-width">{(r.to - r.from).toFixed(1)} m</span>
+            {elements.map(el => (
+              <span key={el} className="mx-iv-el">{r.assays?.[el] != null ? formatAssay(el, r.assays[el]) : '—'}</span>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

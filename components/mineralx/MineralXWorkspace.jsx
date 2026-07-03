@@ -75,6 +75,7 @@ export default function MineralXWorkspace() {
   const [flowState, setFlowState] = useState({ status: 'idle', targets: 0 }); // terrain analysis
   const [mapReady, setMapReady] = useState(false);
   const [programOpen, setProgramOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
 
   const mapRef = useRef(null);
@@ -436,10 +437,25 @@ export default function MineralXWorkspace() {
 
       {/* TOP BAR */}
       <div className="mx-topbar">
-        <div className="mx-topbar-brand">
+        <button
+          type="button"
+          className="mx-topbar-brand"
+          title="Zoom to active project"
+          onClick={() => {
+            const map = mapInstance.current;
+            const L = leaflet.current;
+            if (!map || !L || !activeProject) return;
+            if (activeProject.boundary) {
+              map.fitBounds(L.latLngBounds(activeProject.boundary.coords).pad(0.25));
+            } else {
+              const pts = [...activeProject.samples, ...activeProject.collars].map(f => [f.lat, f.lng]);
+              if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.35));
+            }
+          }}
+        >
           <div className="mx-diamond" />
           <span className="mx-brand-text">MineralX</span>
-        </div>
+        </button>
         <div className="mx-topbar-sep" />
         <div className="mx-topbar-program-wrap">
           <button type="button" className="mx-topbar-program" onClick={() => setProgramOpen(o => !o)}>
@@ -504,8 +520,32 @@ export default function MineralXWorkspace() {
             </div>
           )}
         </div>
-        <div className="mx-topbar-user">
-          <div className="mx-avatar">AM</div>
+        <div className="mx-topbar-user mx-topbar-user-wrap">
+          <button type="button" className="mx-avatar" title="Account" onClick={() => setUserMenuOpen(o => !o)}>AM</button>
+          {userMenuOpen && (
+            <div className="mx-user-menu mx-anim-rise">
+              <div className="mx-user-head">
+                <div className="mx-user-name">Field account</div>
+                <div className="mx-user-sub">Local device · {store.projects.length} project{store.projects.length === 1 ? '' : 's'}</div>
+              </div>
+              <button type="button" className="mx-user-item" onClick={() => { setUserMenuOpen(false); store.projects.forEach(p => api.exportProject(p)); }}>
+                {MxIcons.download} Export all program data
+              </button>
+              <button
+                type="button" className="mx-user-item mx-user-danger"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  if (window.confirm('Reset to demo data? This clears all projects on this device.')) {
+                    const fresh = createDemoStore();
+                    setStore(fresh);
+                    saveStore(fresh);
+                  }
+                }}
+              >
+                {MxIcons.trash} Reset to demo data
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

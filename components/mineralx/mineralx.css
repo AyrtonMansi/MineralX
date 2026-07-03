@@ -670,6 +670,76 @@
 }
 .mx-flow-rerun:hover { text-decoration: underline; }
 
+/* ── Drill assay interval table ───────────────────────────────── */
+.mx-data-caret {
+  width: 14px; height: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #8A857A;
+}
+.mx-interval-table {
+  margin: 2px 8px 10px 40px;
+  border: 1px solid rgba(221,214,199,0.8);
+  border-radius: 9px; overflow: hidden;
+  background: rgba(255,255,255,0.4);
+}
+.mx-interval-head, .mx-interval-row {
+  display: flex; align-items: center;
+  padding: 6px 11px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+}
+.mx-interval-head {
+  color: #8A857A; letter-spacing: 0.4px;
+  background: rgba(180,173,155,0.14);
+  border-bottom: 1px solid rgba(221,214,199,0.7);
+}
+.mx-interval-row { color: #211E1A; border-top: 1px solid rgba(221,214,199,0.45); }
+.mx-interval-row:first-of-type { border-top: none; }
+.mx-interval-hot { background: rgba(193,95,60,0.08); }
+.mx-interval-hot .mx-iv-el:first-of-type { color: #C15F3C; font-weight: 500; }
+.mx-iv-depth { width: 88px; flex-shrink: 0; }
+.mx-iv-width { width: 52px; flex-shrink: 0; color: #9A9488; }
+.mx-iv-el { flex: 1; text-align: right; }
+.mx-interval-empty {
+  margin: 2px 8px 10px 40px;
+  padding: 10px 12px; border-radius: 9px;
+  background: rgba(180,173,155,0.1);
+  font-size: 11.5px; color: #8A857A;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.mx-interval-add {
+  background: none; border: none; cursor: pointer; padding: 0;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 11.5px; font-weight: 600; color: #C15F3C;
+}
+.mx-interval-add:hover { text-decoration: underline; }
+
+/* ── User/account menu ────────────────────────────────────────── */
+.mx-topbar-user-wrap { position: relative; }
+.mx-avatar { border: none; cursor: pointer; font-family: 'Instrument Sans', sans-serif; }
+.mx-user-menu {
+  position: absolute; top: calc(100% + 12px); right: 0;
+  min-width: 230px; z-index: 700;
+  border-radius: 12px; padding: 6px;
+  background: rgba(247,245,238,0.97);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: 0 16px 40px rgba(33,30,26,0.3);
+}
+.mx-user-head { padding: 8px 11px 10px; border-bottom: 1px solid rgba(221,214,199,0.7); margin-bottom: 5px; }
+.mx-user-name { font-size: 12.5px; font-weight: 600; color: #211E1A; }
+.mx-user-sub { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #8A857A; margin-top: 2px; }
+.mx-user-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; text-align: left;
+  padding: 9px 11px; border-radius: 8px;
+  font-family: 'Instrument Sans', sans-serif; font-size: 12px; font-weight: 500;
+  color: #211E1A; background: none; border: none; cursor: pointer;
+}
+.mx-user-item:hover { background: rgba(180,173,155,0.18); }
+.mx-user-item svg { width: 15px; height: 15px; color: #8A857A; flex-shrink: 0; }
+.mx-user-danger { color: #8B3A3A; }
+.mx-user-danger svg { color: #8B3A3A; }
+
 /* Demo project tag */
 .mx-demo-tag {
   font-family: 'IBM Plex Mono', monospace;
