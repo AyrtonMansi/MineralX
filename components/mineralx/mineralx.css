@@ -654,6 +654,13 @@
 /* Data drawer footer holds two buttons */
 .mx-data-footer { display: flex; gap: 8px; }
 
+/* Terrain sub-layer group subheading (non-interactive) */
+.mx-tree-subheading {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px; letter-spacing: 0.5px;
+  color: #8A857A; flex: 1;
+}
+
 /* Terrain analysis note */
 .mx-flow-note {
   margin: 2px 8px 8px 30px;

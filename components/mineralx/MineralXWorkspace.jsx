@@ -11,6 +11,10 @@ import {
 import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
 import DataDrawer from './DataDrawer';
+import {
+  fetchElevationGrid, runAnalysis, fetchMineralOccurrences,
+  renderDrainageOverlay, renderConcentrationHeatmap,
+} from './terrain-flow';
 
 const BASEMAP_TILES = {
   satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -19,6 +23,23 @@ const BASEMAP_TILES = {
 
 const gradeRadius = (g) => g === 'high' ? 9 : g === 'anom' ? 7.5 : 6;
 const esc = (t) => String(t || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
+// Terrain trap-target styling by provenance (pure — no component state).
+const COMMODITY_COLORS = { Gold: '#B08A3E' };
+const commodityColor = (name, idx) => COMMODITY_COLORS[name] || PROJECT_COLORS[(idx + 1) % PROJECT_COLORS.length];
+
+const targetStyle = (t) => {
+  if (t.sample && t.occurrence) return { radius: 10, weight: 3, color: PROJECT_COLORS[4], fillColor: '#C15F3C' };
+  if (t.occurrence) return { radius: 7.5, weight: 2, color: '#FAF9F4', fillColor: PROJECT_COLORS[4] };
+  if (t.sample) return { radius: 8, weight: 2, color: '#FAF9F4', fillColor: '#C15F3C' };
+  return { radius: 6.5, weight: 2, color: '#FAF9F4', fillColor: '#8A6A3E' };
+};
+const targetLabel = (t) => {
+  if (t.sample && t.occurrence) return 'Correlated target · downstream of a known Gold occurrence and your sample';
+  if (t.occurrence) return 'Trap target · downstream of a known Gold occurrence';
+  if (t.sample) return 'Trap target · downstream of your anomalous samples';
+  return 'Alluvial trap target';
+};
 
 function samplePopupHtml(s) {
   const entries = Object.entries(s.assays || {});
@@ -72,7 +93,14 @@ export default function MineralXWorkspace() {
   const [dataPreset, setDataPreset] = useState('');
   const [basemap, setBasemap] = useState('satellite');
   const [activeElement, setActiveElement] = useState('Au');
-  const [flowState, setFlowState] = useState({ status: 'idle', targets: 0 }); // terrain analysis
+  // Terrain analysis: one cached run per viewport, five toggleable
+  // sub-layers (+ one dynamic row per occurrence commodity) render from
+  // it without ever re-fetching or recomputing on their own.
+  const [flowState, setFlowState] = useState({ status: 'idle', targets: 0, commodities: [], occurrencesError: false });
+  // All sub-layers start off — the first eye-toggle click is what
+  // triggers the (only) fetch+compute for the current viewport.
+  const [flowSubOn, setFlowSubOn] = useState({ drainage: false, targets: false, heatmap: false, correlated: false });
+  const [flowOpacity, setFlowOpacity] = useState({ drainage: 0.65, heatmap: 0.5 });
   const [mapReady, setMapReady] = useState(false);
   const [programOpen, setProgramOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -85,7 +113,8 @@ export default function MineralXWorkspace() {
   const groups = useRef(new Map());   // `${pid}:chips|holes|bnd` -> layerGroup
   const markers = useRef(new Map());  // featureId -> marker
   const wmsLayers = useRef(new Map()); // public layerId -> tileLayer.wms
-  const flowLayers = useRef(null); // { overlay, targets } for terrain analysis
+  const flowCache = useRef(null); // { grid, flow, targets, occurrencesByCommodity } for the last analysed viewport
+  const flowLayerRefs = useRef({}); // sub-layer key -> Leaflet layer/layerGroup currently on the map
 
   const activeProject = store.projects.find(p => p.id === store.activeProjectId) || store.projects[0];
 
@@ -349,58 +378,133 @@ export default function MineralXWorkspace() {
     }));
   }, [publicOn, publicOpacity, mapReady]);
 
-  // ── Terrain flow analysis (drainage + alluvial trap targets) ────────
-  const clearFlowLayers = useCallback(() => {
+  // ── Terrain flow analysis: drainage, heatmap, targets, known gold ────
+  // occurrences (GEORES), and their correlation — five+ sub-layers all
+  // rendered from a single cached analysis of the current viewport.
+
+  // Adds/removes each sub-layer's Leaflet layer from cached results —
+  // never fetches or recomputes. Called on every toggle/opacity change.
+  const syncFlowLayers = useCallback(() => {
     const map = mapInstance.current;
-    if (flowLayers.current && map) {
-      map.removeLayer(flowLayers.current.overlay);
-      map.removeLayer(flowLayers.current.targets);
+    const L = leaflet.current;
+    const refs = flowLayerRefs.current;
+    const cache = flowCache.current;
+
+    const setLayer = (key, wantOn, factory) => {
+      const existing = refs[key];
+      if (wantOn && !existing) {
+        const layer = factory();
+        if (layer) { layer.addTo(map); refs[key] = layer; }
+      } else if (!wantOn && existing) {
+        map.removeLayer(existing);
+        delete refs[key];
+      }
+    };
+
+    if (!map || !L) return;
+    if (!cache) {
+      Object.keys(refs).forEach(k => { map.removeLayer(refs[k]); delete refs[k]; });
+      return;
     }
-    flowLayers.current = null;
-  }, []);
+    const { grid, flow, targets, occurrencesByCommodity } = cache;
+
+    setLayer('drainage', !!flowSubOn.drainage, () => {
+      const canvas = renderDrainageOverlay(flow, grid.w, grid.h);
+      return L.imageOverlay(canvas.toDataURL('image/png'), grid.bounds, { opacity: flowOpacity.drainage ?? 0.65 });
+    });
+    refs.drainage?.setOpacity(flowOpacity.drainage ?? 0.65);
+
+    setLayer('heatmap', !!flowSubOn.heatmap, () => {
+      const canvas = renderConcentrationHeatmap(flow, grid.w, grid.h);
+      return L.imageOverlay(canvas.toDataURL('image/png'), grid.bounds, { opacity: flowOpacity.heatmap ?? 0.5 });
+    });
+    refs.heatmap?.setOpacity(flowOpacity.heatmap ?? 0.5);
+
+    setLayer('targets', !!flowSubOn.targets, () => {
+      const group = L.layerGroup();
+      targets.forEach(t => {
+        L.circleMarker([t.lat, t.lng], { ...targetStyle(t), fillOpacity: 0.9 })
+          .bindTooltip(targetLabel(t), { className: 'lx-tip', direction: 'top', offset: [0, -6] })
+          .addTo(group);
+      });
+      return group;
+    });
+
+    setLayer('correlated', !!flowSubOn.correlated, () => {
+      const group = L.layerGroup();
+      targets.filter(t => t.sample && t.occurrence).forEach(t => {
+        L.circleMarker([t.lat, t.lng], { radius: 13, weight: 2, color: '#FAF9F4', fillColor: 'none', fill: false, dashArray: '3 3' })
+          .bindTooltip('Highest confidence: known Gold occurrence + your own sample both drain here', { className: 'lx-tip', direction: 'top', offset: [0, -10] })
+          .addTo(group);
+      });
+      return group;
+    });
+
+    Object.entries(occurrencesByCommodity || {}).forEach(([commodity, points], idx) => {
+      const key = `occ:${commodity}`;
+      setLayer(key, !!flowSubOn[key], () => {
+        const group = L.layerGroup();
+        points.forEach(o => {
+          L.circleMarker([o.lat, o.lng], {
+            radius: 6, weight: 2, color: '#FAF9F4', fillColor: commodityColor(commodity, idx), fillOpacity: 0.95,
+          }).bindTooltip(`${o.name} · ${commodity}`, { className: 'lx-tip', direction: 'top', offset: [0, -6] }).addTo(group);
+        });
+        return group;
+      });
+    });
+  }, [flowSubOn, flowOpacity]);
+
+  useEffect(() => { syncFlowLayers(); }, [syncFlowLayers]);
 
   const runFlowAnalysis = useCallback(async () => {
     const map = mapInstance.current;
     const L = leaflet.current;
     if (!map || !L) return;
-    clearFlowLayers();
-    setFlowState({ status: 'running', targets: 0 });
+    setFlowState(s => ({ ...s, status: 'running' }));
     try {
-      const { analyzeViewport } = await import('./terrain-flow');
-      // Seed with the user's anomalous+ samples so downstream traps rank higher
+      const bounds = map.getBounds();
       const hotSamples = store.projects.flatMap(p =>
         p.samples.filter(s => ['high', 'anom'].includes(gradeOf(s, activeElement)))
       );
-      const result = await analyzeViewport(map, hotSamples);
-      const overlay = L.imageOverlay(result.url, result.bounds, { opacity: 0.65 }).addTo(map);
-      const targets = L.layerGroup().addTo(map);
-      result.targets.forEach(t => {
-        L.circleMarker([t.lat, t.lng], {
-          radius: t.gold ? 8 : 6.5,
-          color: '#FAF9F4',
-          weight: 2,
-          fillColor: t.gold ? '#C15F3C' : '#8A6A3E',
-          fillOpacity: 0.9,
-        }).bindTooltip(
-          t.gold ? 'Trap target · downstream of your anomalous samples' : 'Alluvial trap target',
-          { className: 'lx-tip', direction: 'top', offset: [0, -6] }
-        ).addTo(targets);
-      });
-      flowLayers.current = { overlay, targets };
-      setFlowState({ status: 'ready', targets: result.targets.length });
-    } catch {
-      setFlowState({ status: 'error', targets: 0 });
-    }
-  }, [store, activeElement, clearFlowLayers]);
 
-  const toggleFlow = useCallback(() => {
-    if (flowState.status === 'idle' || flowState.status === 'error') {
-      runFlowAnalysis();
-    } else {
-      clearFlowLayers();
-      setFlowState({ status: 'idle', targets: 0 });
+      const [grid, occurrenceResult] = await Promise.all([
+        fetchElevationGrid(map),
+        fetchMineralOccurrences(bounds).then(features => ({ features, error: false })).catch(() => ({ features: [], error: true })),
+      ]);
+
+      const goldOccurrences = occurrenceResult.features.filter(o => o.commodity === 'Gold');
+      const { flow, targets } = runAnalysis(grid, hotSamples, goldOccurrences);
+
+      const occurrencesByCommodity = {};
+      occurrenceResult.features.forEach(o => {
+        (occurrencesByCommodity[o.commodity] ||= []).push(o);
+      });
+
+      flowCache.current = { grid, flow, targets, occurrencesByCommodity };
+      setFlowState({
+        status: 'ready',
+        targets: targets.length,
+        commodities: Object.keys(occurrencesByCommodity).sort((a, b) => (a === 'Gold' ? -1 : b === 'Gold' ? 1 : a.localeCompare(b))),
+        occurrencesError: occurrenceResult.error,
+      });
+      syncFlowLayers();
+    } catch {
+      flowCache.current = null;
+      setFlowState({ status: 'error', targets: 0, commodities: [], occurrencesError: false });
+      syncFlowLayers();
     }
-  }, [flowState.status, runFlowAnalysis, clearFlowLayers]);
+  }, [store, activeElement, syncFlowLayers]);
+
+  const toggleFlowSub = useCallback((key) => {
+    setFlowSubOn(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  // First time any sub-layer is switched on with nothing cached yet,
+  // trigger the (only) fetch+compute. Later toggles just re-render.
+  useEffect(() => {
+    const anyOn = Object.values(flowSubOn).some(Boolean);
+    if (anyOn && !flowCache.current && flowState.status !== 'running') runFlowAnalysis();
+  }, [flowSubOn, flowState.status, runFlowAnalysis]);
 
   // ── Basemap ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -582,7 +686,10 @@ export default function MineralXWorkspace() {
             setActiveElement={setActiveElement}
             availableElements={availableElements}
             flowState={flowState}
-            onToggleFlow={toggleFlow}
+            flowSubOn={flowSubOn}
+            flowOpacity={flowOpacity}
+            setFlowOpacity={setFlowOpacity}
+            onToggleFlowSub={toggleFlowSub}
             onRerunFlow={runFlowAnalysis}
             onManage={setManageTarget}
             onClose={() => setActivePanel(null)}
@@ -826,7 +933,7 @@ function UploadPanel({ onClose, project, api }) {
 }
 
 // ── Layers panel ───────────────────────────────────────────────────────
-function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, onToggleFlow, onRerunFlow, onManage, onClose }) {
+function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, flowSubOn, flowOpacity, setFlowOpacity, onToggleFlowSub, onRerunFlow, onManage, onClose }) {
   const toggleHidden = (id) => setHidden(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleExpanded = (id, dflt) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? dflt) }));
 
@@ -890,29 +997,69 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
           </div>
         )))}
 
-        {/* Terrain analysis */}
+        {/* Terrain analysis: expandable group of independent sub-layers */}
         <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
-          <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+          <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('flow', true)}>
+            {isExpanded('flow', true) ? MxIcons.chevronDown : MxIcons.chevronRight}
+          </button>
           <div className="mx-tree-swatch" style={{ background: '#3E6C8C', transform: 'rotate(45deg)', width: 11, height: 11 }} />
           <span className="mx-tree-name mx-tree-name-bold">Water flow &amp; traps</span>
           {flowState.status === 'running' && <span className="mx-tree-attribution">computing…</span>}
           {flowState.status === 'ready' && <span className="mx-tree-count">{flowState.targets} targets</span>}
           {flowState.status === 'error' && <span className="mx-tree-error" title="Elevation tiles unreachable — try again">failed</span>}
-          <button
-            type="button"
-            className={`mx-tree-eye ${flowState.status === 'ready' || flowState.status === 'running' ? 'on' : ''}`}
-            onClick={onToggleFlow}
-            title={flowState.status === 'ready' ? 'Hide' : 'Analyse this view'}
-          >
-            <div className="mx-eye-dot" />
-          </button>
         </div>
-        {flowState.status === 'ready' && (
-          <div className="mx-flow-note">
-            Drainage and trap targets for the current view — pan, then
-            <button type="button" className="mx-flow-rerun" onClick={onRerunFlow}>re-run</button>.
-            Heuristic terrain model: field-check targets.
-          </div>
+        {isExpanded('flow', true) && (
+          <>
+            <FlowSubRow
+              label="Drainage channels" swatch={{ background: '#3E6C8C', borderRadius: '50%', width: 8, height: 8 }}
+              on={flowSubOn.drainage} onToggle={() => onToggleFlowSub('drainage')}
+              opacity={flowOpacity.drainage} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, drainage: v }))}
+            />
+            <FlowSubRow
+              label="Trap targets" swatch={{ background: '#8A6A3E', borderRadius: '50%', width: 8, height: 8 }}
+              on={flowSubOn.targets} onToggle={() => onToggleFlowSub('targets')}
+            />
+            <FlowSubRow
+              label="Water concentration heatmap" swatch={{ background: 'linear-gradient(90deg,#F3F1E9,#B08A3E,#C15F3C)', borderRadius: '50%', width: 8, height: 8 }}
+              on={flowSubOn.heatmap} onToggle={() => onToggleFlowSub('heatmap')}
+              opacity={flowOpacity.heatmap} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, heatmap: v }))}
+            />
+            <FlowSubRow
+              label="Correlated gold potential" swatch={{ background: '#C15F3C', border: `2px solid ${PROJECT_COLORS[4]}`, width: 9, height: 9, borderRadius: '50%' }}
+              on={flowSubOn.correlated} onToggle={() => onToggleFlowSub('correlated')}
+            />
+
+            {/* Known mineral occurrences: one toggleable row per commodity, */}
+            {/* populated from whatever the current view actually returns. */}
+            {flowState.status !== 'idle' && (
+              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+                <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+                <span className="mx-tree-subheading">Known mineral occurrences (GEORES)</span>
+                {flowState.occurrencesError && <span className="mx-tree-error" title="Occurrence service unavailable for this view">unavailable</span>}
+                {!flowState.occurrencesError && flowState.commodities.length === 0 && flowState.status === 'ready' && (
+                  <span className="mx-tree-attribution">none in view</span>
+                )}
+              </div>
+            )}
+            {flowState.commodities.map((commodity, idx) => (
+              <FlowSubRow
+                key={commodity}
+                depth={1}
+                label={commodity}
+                swatch={{ background: commodity === 'Gold' ? '#B08A3E' : PROJECT_COLORS[(idx + 1) % PROJECT_COLORS.length], borderRadius: '50%', width: 7, height: 7 }}
+                on={flowSubOn[`occ:${commodity}`]} onToggle={() => onToggleFlowSub(`occ:${commodity}`)}
+              />
+            ))}
+
+            {flowState.status === 'ready' && (
+              <div className="mx-flow-note">
+                Analysed for the current view — pan, then
+                <button type="button" className="mx-flow-rerun" onClick={onRerunFlow}>re-run</button>.
+                Heuristic terrain model: field-check targets.
+              </div>
+            )}
+          </>
         )}
 
         <button type="button" className="mx-add-project-row" onClick={() => onManage({ type: 'newProject' })}>
@@ -952,6 +1099,34 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
         </div>
       </div>
     </div>
+  );
+}
+
+// One toggleable terrain sub-layer row: eye + optional opacity slider,
+// same visual language as the WMS public-layer rows above.
+function FlowSubRow({ label, swatch, on, onToggle, opacity, onOpacity, depth = 0 }) {
+  return (
+    <>
+      <div className="mx-tree-row" style={{ paddingLeft: `${30 + depth * 20}px` }}>
+        <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+        <div className="mx-tree-swatch" style={swatch} />
+        <span className={`mx-tree-name ${on ? '' : 'mx-tree-name-off'}`}>{label}</span>
+        <button type="button" className={`mx-tree-eye ${on ? 'on' : ''}`} onClick={onToggle} title={on ? 'Hide' : 'Show'}>
+          <div className="mx-eye-dot" />
+        </button>
+      </div>
+      {on && onOpacity && (
+        <div className="mx-opacity-row">
+          <input
+            type="range" min="10" max="100"
+            value={Math.round((opacity ?? 0.5) * 100)}
+            onChange={(e) => onOpacity(Number(e.target.value) / 100)}
+            className="mx-opacity-slider"
+            title="Opacity"
+          />
+        </div>
+      )}
+    </>
   );
 }
 
