@@ -11,8 +11,9 @@ import {
 import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
 import DataDrawer from './DataDrawer';
+import ZonePicker from './ZonePicker';
 import {
-  fetchElevationGrid, runAnalysis, fetchMineralOccurrences,
+  fetchElevationGrid, runAnalysis, fetchMineralOccurrences, fetchHistoricMines,
   renderDrainageOverlay, renderConcentrationHeatmap,
 } from './terrain-flow';
 
@@ -96,7 +97,10 @@ export default function MineralXWorkspace() {
   // Terrain analysis: one cached run per viewport, five toggleable
   // sub-layers (+ one dynamic row per occurrence commodity) render from
   // it without ever re-fetching or recomputing on their own.
-  const [flowState, setFlowState] = useState({ status: 'idle', targets: 0, commodities: [], occurrencesError: false });
+  const [flowState, setFlowState] = useState({
+    status: 'idle', targets: 0, commodities: [], occurrencesError: false,
+    historicMinesCount: 0, historicMinesError: false,
+  });
   // All sub-layers start off — the first eye-toggle click is what
   // triggers the (only) fetch+compute for the current viewport.
   const [flowSubOn, setFlowSubOn] = useState({ drainage: false, targets: false, heatmap: false, correlated: false });
@@ -105,6 +109,9 @@ export default function MineralXWorkspace() {
   const [programOpen, setProgramOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [lastChangeAt, setLastChangeAt] = useState(0);
+  const [lastExportAt, setLastExportAt] = useState(0);
 
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -121,9 +128,19 @@ export default function MineralXWorkspace() {
   useEffect(() => {
     setStore(loadStore());
     setHydrated(true);
+    setLastExportAt(Date.now()); // staleness clock starts from app open, not epoch 0
   }, []);
 
-  useEffect(() => { if (hydrated) saveStore(store); }, [store, hydrated]);
+  useEffect(() => {
+    if (!hydrated) return;
+    const ok = saveStore(store);
+    setSaveFailed(!ok);
+    if (ok) setLastChangeAt(Date.now());
+  }, [store, hydrated]);
+
+  const STALE_EXPORT_MS = 30 * 60_000;
+  const exportStale = lastChangeAt > lastExportAt && Date.now() - lastExportAt > STALE_EXPORT_MS;
+  const [staleDismissed, setStaleDismissed] = useState(false);
 
   const stats = useMemo(() => {
     let chips = 0, holes = 0, pending = 0;
@@ -245,6 +262,8 @@ export default function MineralXWorkspace() {
       if (project.boundary) {
         downloadText(`${project.name.replace(/\s+/g, '_')}_boundary.kml`, boundaryToKml(project.boundary.name, project.boundary.coords), 'application/vnd.google-earth.kml+xml');
       }
+      setLastExportAt(Date.now());
+      setStaleDismissed(false);
     },
   }), [store.projects, updateProject, addFile, focusOn]);
 
@@ -406,7 +425,7 @@ export default function MineralXWorkspace() {
       Object.keys(refs).forEach(k => { map.removeLayer(refs[k]); delete refs[k]; });
       return;
     }
-    const { grid, flow, targets, occurrencesByCommodity } = cache;
+    const { grid, flow, targets, occurrencesByCommodity, historicMines } = cache;
 
     setLayer('drainage', !!flowSubOn.drainage, () => {
       const canvas = renderDrainageOverlay(flow, grid.w, grid.h);
@@ -452,6 +471,16 @@ export default function MineralXWorkspace() {
         return group;
       });
     });
+
+    setLayer('historicMines', !!flowSubOn.historicMines, () => {
+      const group = L.layerGroup();
+      (historicMines || []).forEach(m => {
+        L.circleMarker([m.lat, m.lng], {
+          radius: 6, weight: 2, color: '#FAF9F4', fillColor: '#5E6E7A', fillOpacity: 0.95,
+        }).bindTooltip(`${m.name} · ${m.mineType}`, { className: 'lx-tip', direction: 'top', offset: [0, -6] }).addTo(group);
+      });
+      return group;
+    });
   }, [flowSubOn, flowOpacity]);
 
   useEffect(() => { syncFlowLayers(); }, [syncFlowLayers]);
@@ -467,9 +496,10 @@ export default function MineralXWorkspace() {
         p.samples.filter(s => ['high', 'anom'].includes(gradeOf(s, activeElement)))
       );
 
-      const [grid, occurrenceResult] = await Promise.all([
+      const [grid, occurrenceResult, mineResult] = await Promise.all([
         fetchElevationGrid(map),
         fetchMineralOccurrences(bounds).then(features => ({ features, error: false })).catch(() => ({ features: [], error: true })),
+        fetchHistoricMines(bounds).then(features => ({ features, error: false })).catch(() => ({ features: [], error: true })),
       ]);
 
       const goldOccurrences = occurrenceResult.features.filter(o => o.commodity === 'Gold');
@@ -480,17 +510,19 @@ export default function MineralXWorkspace() {
         (occurrencesByCommodity[o.commodity] ||= []).push(o);
       });
 
-      flowCache.current = { grid, flow, targets, occurrencesByCommodity };
+      flowCache.current = { grid, flow, targets, occurrencesByCommodity, historicMines: mineResult.features };
       setFlowState({
         status: 'ready',
         targets: targets.length,
         commodities: Object.keys(occurrencesByCommodity).sort((a, b) => (a === 'Gold' ? -1 : b === 'Gold' ? 1 : a.localeCompare(b))),
         occurrencesError: occurrenceResult.error,
+        historicMinesCount: mineResult.features.length,
+        historicMinesError: mineResult.error,
       });
       syncFlowLayers();
     } catch {
       flowCache.current = null;
-      setFlowState({ status: 'error', targets: 0, commodities: [], occurrencesError: false });
+      setFlowState({ status: 'error', targets: 0, commodities: [], occurrencesError: false, historicMinesCount: 0, historicMinesError: false });
       syncFlowLayers();
     }
   }, [store, activeElement, syncFlowLayers]);
@@ -653,6 +685,27 @@ export default function MineralXWorkspace() {
         </div>
       </div>
 
+      {/* STORAGE BANNERS */}
+      {saveFailed && (
+        <div className="mx-storage-banner mx-import-err">
+          Your last change didn&apos;t save — storage is full.
+          <button
+            type="button" className="mx-storage-banner-btn"
+            onClick={() => { store.projects.forEach(p => api.exportProject(p)); }}
+          >Export now</button>
+        </div>
+      )}
+      {!saveFailed && exportStale && !staleDismissed && (
+        <div className="mx-storage-banner mx-import-ok">
+          It&apos;s been a while since your last export — worth backing up your work.
+          <button
+            type="button" className="mx-storage-banner-btn"
+            onClick={() => { store.projects.forEach(p => api.exportProject(p)); }}
+          >Export all</button>
+          <button type="button" className="mx-storage-banner-dismiss" onClick={() => setStaleDismissed(true)}>&times;</button>
+        </div>
+      )}
+
       {/* LEFT PANEL */}
       <div className="mx-panel">
         {activePanel === 'home' && (
@@ -801,6 +854,7 @@ const KIND_LABELS = { chips: 'rock chips', collars: 'drill collars', assays: 'la
 function UploadPanel({ onClose, project, api }) {
   const [cat, setCat] = useState('Auto');
   const [msg, setMsg] = useState(null);
+  const [pendingProjection, setPendingProjection] = useState(null); // {text, kind, fileName, easting, northing}
   const fileInput = useRef(null);
 
   const accept = cat === 'KML' ? '.kml' : cat === 'Photos' ? 'image/*' : cat === 'Auto' ? '.csv,text/csv,.kml,image/*' : '.csv,text/csv';
@@ -841,16 +895,18 @@ function UploadPanel({ onClose, project, api }) {
           setMsg({ error: false, text: `${detected('kml')}boundary updated, zoomed to it.` });
         },
         chips: () => {
-          const { samples, error } = parseSampleCsv(text, project.samples, project.idPrefix);
-          if (error) return setMsg({ error: true, text: error });
-          api.addSamples(project.id, samples, file.name);
-          setMsg({ error: false, text: `${detected('chips')}imported ${samples.length} sample${samples.length === 1 ? '' : 's'}.` });
+          const r = parseSampleCsv(text, project.samples, project.idPrefix);
+          if (r.needsProjection) return setPendingProjection({ text, kind: 'chips', fileName: file.name, easting: r.easting, northing: r.northing });
+          if (r.error) return setMsg({ error: true, text: r.error });
+          api.addSamples(project.id, r.samples, file.name);
+          setMsg({ error: false, text: `${detected('chips')}imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
         },
         collars: () => {
-          const { collars, error } = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'));
-          if (error) return setMsg({ error: true, text: error });
-          api.addCollars(project.id, collars, file.name);
-          setMsg({ error: false, text: `${detected('collars')}imported ${collars.length} collar${collars.length === 1 ? '' : 's'}.` });
+          const r = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'));
+          if (r.needsProjection) return setPendingProjection({ text, kind: 'collars', fileName: file.name, easting: r.easting, northing: r.northing });
+          if (r.error) return setMsg({ error: true, text: r.error });
+          api.addCollars(project.id, r.collars, file.name);
+          setMsg({ error: false, text: `${detected('collars')}imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
         },
         assays: () => {
           const r = api.applyAssays(project.id, text, file.name);
@@ -884,32 +940,53 @@ function UploadPanel({ onClose, project, api }) {
     reader.readAsText(file);
   }, [cat, project, api]);
 
+  const confirmProjection = useCallback((zone) => {
+    if (!pendingProjection || !project) return;
+    const { text, kind, fileName } = pendingProjection;
+    if (kind === 'chips') {
+      const r = parseSampleCsv(text, project.samples, project.idPrefix, zone);
+      if (r.error) { setMsg({ error: true, text: r.error }); setPendingProjection(null); return; }
+      api.addSamples(project.id, r.samples, fileName);
+      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
+    } else {
+      const r = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'), zone);
+      if (r.error) { setMsg({ error: true, text: r.error }); setPendingProjection(null); return; }
+      api.addCollars(project.id, r.collars, fileName);
+      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
+    }
+    setPendingProjection(null);
+  }, [pendingProjection, project, api]);
+
   return (
     <div className="mx-glass-panel mx-anim-rise">
       <div className="mx-panel-header mx-panel-header-compact">
         <span className="mx-panel-title-sm">Add data{project ? ` · ${project.name}` : ''}</span>
         <button type="button" className="mx-close-btn" onClick={onClose}>&times;</button>
       </div>
-      <div className="mx-upload-zone">
-        <div
-          className="mx-drop-area"
-          onClick={() => fileInput.current?.click()}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-        >
-          <div className="mx-drop-icon">&#8593;</div>
-          <div className="mx-drop-text">Drop a file or <span className="mx-drop-browse">browse</span></div>
-          <div className="mx-drop-hint">{UPLOAD_HINTS[cat]}</div>
-          <input ref={fileInput} type="file" accept={accept} style={{ display: 'none' }} onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
+      {pendingProjection ? (
+        <ZonePicker easting={pendingProjection.easting} northing={pendingProjection.northing} onConfirm={confirmProjection} onCancel={() => setPendingProjection(null)} />
+      ) : (
+        <div className="mx-upload-zone">
+          <div
+            className="mx-drop-area"
+            onClick={() => fileInput.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
+          >
+            <div className="mx-drop-icon">&#8593;</div>
+            <div className="mx-drop-text">Drop a file or <span className="mx-drop-browse">browse</span></div>
+            <div className="mx-drop-hint">{UPLOAD_HINTS[cat]}</div>
+            <input ref={fileInput} type="file" accept={accept} style={{ display: 'none' }} onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
+          </div>
+          {msg && <div className={`mx-import-msg ${msg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{msg.text}</div>}
+          <div className="mx-upload-cat-label">Categorise as</div>
+          <div className="mx-upload-cats">
+            {UPLOAD_CATS.map(c => (
+              <button key={c} type="button" className={`mx-cat-chip ${cat === c ? 'active' : ''}`} onClick={() => { setCat(c); setMsg(null); }}>{c}</button>
+            ))}
+          </div>
         </div>
-        {msg && <div className={`mx-import-msg ${msg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{msg.text}</div>}
-        <div className="mx-upload-cat-label">Categorise as</div>
-        <div className="mx-upload-cats">
-          {UPLOAD_CATS.map(c => (
-            <button key={c} type="button" className={`mx-cat-chip ${cat === c ? 'active' : ''}`} onClick={() => { setCat(c); setMsg(null); }}>{c}</button>
-          ))}
-        </div>
-      </div>
+      )}
       <div className="mx-recent-section">
         <div className="mx-section-label">RECENT UPLOADS</div>
         <div className="mx-recent-list">
@@ -997,45 +1074,61 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
           </div>
         )))}
 
-        {/* Terrain analysis: expandable group of independent sub-layers */}
+        {/* Occurrences: expandable group of independent sub-layers, */}
+        {/* itself containing two further nested sub-groups. */}
         <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
           <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('flow', true)}>
             {isExpanded('flow', true) ? MxIcons.chevronDown : MxIcons.chevronRight}
           </button>
           <div className="mx-tree-swatch" style={{ background: '#3E6C8C', transform: 'rotate(45deg)', width: 11, height: 11 }} />
-          <span className="mx-tree-name mx-tree-name-bold">Water flow &amp; traps</span>
+          <span className="mx-tree-name mx-tree-name-bold">Occurrences</span>
           {flowState.status === 'running' && <span className="mx-tree-attribution">computing…</span>}
           {flowState.status === 'ready' && <span className="mx-tree-count">{flowState.targets} targets</span>}
           {flowState.status === 'error' && <span className="mx-tree-error" title="Elevation tiles unreachable — try again">failed</span>}
         </div>
         {isExpanded('flow', true) && (
           <>
+            {/* Hydraulics / Metal Concentration: the water-physics layers */}
+            <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+              <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('flow:hydraulics', true)}>
+                {isExpanded('flow:hydraulics', true) ? MxIcons.chevronDown : MxIcons.chevronRight}
+              </button>
+              <div className="mx-tree-swatch" style={{ background: '#3E6C8C', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+              <span className="mx-tree-subheading">Hydraulics / Metal Concentration</span>
+            </div>
+            {isExpanded('flow:hydraulics', true) && (
+              <>
+                <FlowSubRow
+                  depth={1}
+                  label="Drainage channels" swatch={{ background: '#3E6C8C', borderRadius: '50%', width: 8, height: 8 }}
+                  on={flowSubOn.drainage} onToggle={() => onToggleFlowSub('drainage')}
+                  opacity={flowOpacity.drainage} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, drainage: v }))}
+                />
+                <FlowSubRow
+                  depth={1}
+                  label="Water concentration heatmap" swatch={{ background: 'linear-gradient(90deg,#F3F1E9,#B08A3E,#C15F3C)', borderRadius: '50%', width: 8, height: 8 }}
+                  on={flowSubOn.heatmap} onToggle={() => onToggleFlowSub('heatmap')}
+                  opacity={flowOpacity.heatmap} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, heatmap: v }))}
+                />
+              </>
+            )}
+
             <FlowSubRow
-              label="Drainage channels" swatch={{ background: '#3E6C8C', borderRadius: '50%', width: 8, height: 8 }}
-              on={flowSubOn.drainage} onToggle={() => onToggleFlowSub('drainage')}
-              opacity={flowOpacity.drainage} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, drainage: v }))}
-            />
-            <FlowSubRow
-              label="Trap targets" swatch={{ background: '#8A6A3E', borderRadius: '50%', width: 8, height: 8 }}
+              label="Metal Concentration Zones" swatch={{ background: '#8A6A3E', borderRadius: '50%', width: 8, height: 8 }}
               on={flowSubOn.targets} onToggle={() => onToggleFlowSub('targets')}
             />
             <FlowSubRow
-              label="Water concentration heatmap" swatch={{ background: 'linear-gradient(90deg,#F3F1E9,#B08A3E,#C15F3C)', borderRadius: '50%', width: 8, height: 8 }}
-              on={flowSubOn.heatmap} onToggle={() => onToggleFlowSub('heatmap')}
-              opacity={flowOpacity.heatmap} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, heatmap: v }))}
-            />
-            <FlowSubRow
-              label="Correlated gold potential" swatch={{ background: '#C15F3C', border: `2px solid ${PROJECT_COLORS[4]}`, width: 9, height: 9, borderRadius: '50%' }}
+              label="Correlated Targets" swatch={{ background: '#C15F3C', border: `2px solid ${PROJECT_COLORS[4]}`, width: 9, height: 9, borderRadius: '50%' }}
               on={flowSubOn.correlated} onToggle={() => onToggleFlowSub('correlated')}
             />
 
-            {/* Known mineral occurrences: one toggleable row per commodity, */}
+            {/* Mineral Occurrences: one toggleable row per commodity, */}
             {/* populated from whatever the current view actually returns. */}
             {flowState.status !== 'idle' && (
               <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
                 <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
                 <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                <span className="mx-tree-subheading">Known mineral occurrences (GEORES)</span>
+                <span className="mx-tree-subheading">Mineral Occurrences</span>
                 {flowState.occurrencesError && <span className="mx-tree-error" title="Occurrence service unavailable for this view">unavailable</span>}
                 {!flowState.occurrencesError && flowState.commodities.length === 0 && flowState.status === 'ready' && (
                   <span className="mx-tree-attribution">none in view</span>
@@ -1051,6 +1144,28 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
                 on={flowSubOn[`occ:${commodity}`]} onToggle={() => onToggleFlowSub(`occ:${commodity}`)}
               />
             ))}
+
+            {/* Historic Mines: same live-fetch pattern as Mineral Occurrences, */}
+            {/* separate GEORES service and its own error/empty states. */}
+            {flowState.status !== 'idle' && (
+              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+                <div className="mx-tree-swatch" style={{ background: '#5E6E7A', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+                <span className="mx-tree-subheading">Historic Mines</span>
+                {flowState.historicMinesError && <span className="mx-tree-error" title="Historic mines service unavailable for this view">unavailable</span>}
+                {!flowState.historicMinesError && flowState.historicMinesCount === 0 && flowState.status === 'ready' && (
+                  <span className="mx-tree-attribution">none in view</span>
+                )}
+              </div>
+            )}
+            {flowState.status === 'ready' && !flowState.historicMinesError && flowState.historicMinesCount > 0 && (
+              <FlowSubRow
+                depth={1}
+                label={`Historic mine sites`}
+                swatch={{ background: '#5E6E7A', borderRadius: '50%', width: 7, height: 7 }}
+                on={flowSubOn.historicMines} onToggle={() => onToggleFlowSub('historicMines')}
+              />
+            )}
 
             {flowState.status === 'ready' && (
               <div className="mx-flow-note">

@@ -4,8 +4,9 @@ import { MxIcons } from './MineralXIcons';
 import {
   nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
-  compressImage, today, ELEMENT_SYMBOLS, elementInfo,
+  compressImage, today, ELEMENT_SYMBOLS, elementInfo, isProjectedCoord,
 } from './project-store';
+import ZonePicker from './ZonePicker';
 
 const TYPE_LABELS = {
   project: 'PROJECT SETTINGS',
@@ -145,6 +146,7 @@ function RockChipManager({ project, api, onClose }) {
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState(null);
   const [importMsg, setImportMsg] = useState(null);
+  const [pendingProjection, setPendingProjection] = useState(null);
   const fileInput = useRef(null);
   const photoInput = useRef(null);
   const autoId = nextId(project.samples, project.idPrefix);
@@ -156,6 +158,10 @@ function RockChipManager({ project, api, onClose }) {
     const lng = parseFloat(form.lng);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       setError('Easting and northing are required (decimal degrees).');
+      return;
+    }
+    if (isProjectedCoord(lat, lng)) {
+      setError('These look like projected metres (MGA easting/northing), not decimal degrees — use CSV import to confirm a zone and reproject.');
       return;
     }
     const assays = {};
@@ -186,12 +192,24 @@ function RockChipManager({ project, api, onClose }) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const { samples, error: err } = parseSampleCsv(String(reader.result), project.samples, project.idPrefix);
-      if (err) { setImportMsg({ error: true, text: err }); return; }
-      api.addSamples(project.id, samples, file.name);
-      setImportMsg({ error: false, text: `Imported ${samples.length} sample${samples.length === 1 ? '' : 's'}.` });
+      const text = String(reader.result);
+      const r = parseSampleCsv(text, project.samples, project.idPrefix);
+      if (r.needsProjection) { setPendingProjection({ text, easting: r.easting, northing: r.northing, fileName: file.name }); return; }
+      if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
+      api.addSamples(project.id, r.samples, file.name);
+      setImportMsg({ error: false, text: `Imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
     };
     reader.readAsText(file);
+  };
+
+  const confirmProjection = (zone) => {
+    if (!pendingProjection) return;
+    const { text, fileName } = pendingProjection;
+    const r = parseSampleCsv(text, project.samples, project.idPrefix, zone);
+    setPendingProjection(null);
+    if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
+    api.addSamples(project.id, r.samples, fileName);
+    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
   };
 
   return (
@@ -224,18 +242,27 @@ function RockChipManager({ project, api, onClose }) {
 
       {tab === 'import' && (
         <div className="mx-manage-form">
-          <div
-            className="mx-drop-area mx-drop-area-sm"
-            onClick={() => fileInput.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files?.[0]); }}
-          >
-            <div className="mx-drop-icon">&#8593;</div>
-            <div className="mx-drop-text">Drop CSV or <span className="mx-drop-browse">browse</span></div>
-            <div className="mx-drop-hint">sample_id, lat, lng, lith + element columns (au, ag, cu…)</div>
-            <input ref={fileInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
-          </div>
-          {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
+          {pendingProjection ? (
+            <ZonePicker
+              easting={pendingProjection.easting} northing={pendingProjection.northing}
+              onConfirm={confirmProjection} onCancel={() => setPendingProjection(null)}
+            />
+          ) : (
+            <>
+              <div
+                className="mx-drop-area mx-drop-area-sm"
+                onClick={() => fileInput.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); importFile(e.dataTransfer.files?.[0]); }}
+              >
+                <div className="mx-drop-icon">&#8593;</div>
+                <div className="mx-drop-text">Drop CSV or <span className="mx-drop-browse">browse</span></div>
+                <div className="mx-drop-hint">sample_id, lat, lng, lith + element columns (au, ag, cu…)</div>
+                <input ref={fileInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
+              </div>
+              {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
+            </>
+          )}
         </div>
       )}
 
@@ -255,6 +282,7 @@ function DrillHoleManager({ project, api, onClose }) {
   const [form, setForm] = useState({ id: '', lng: '', lat: '', azimuth: '', dip: '', depth: '' });
   const [error, setError] = useState(null);
   const [importMsg, setImportMsg] = useState(null);
+  const [pendingProjection, setPendingProjection] = useState(null);
   const collarInput = useRef(null);
   const intervalInput = useRef(null);
   const holePrefix = project.idPrefix.replace('-RC-', '-DD-');
@@ -267,6 +295,10 @@ function DrillHoleManager({ project, api, onClose }) {
     const lng = parseFloat(form.lng);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       setError('Easting and northing are required (decimal degrees).');
+      return;
+    }
+    if (isProjectedCoord(lat, lng)) {
+      setError('These look like projected metres (MGA easting/northing), not decimal degrees — use CSV import to confirm a zone and reproject.');
       return;
     }
     const num = (v) => { const n = parseFloat(v); return Number.isNaN(n) ? null : n; };
@@ -283,12 +315,24 @@ function DrillHoleManager({ project, api, onClose }) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const { collars, error: err } = parseCollarCsv(String(reader.result), project.collars, holePrefix);
-      if (err) { setImportMsg({ error: true, text: err }); return; }
-      api.addCollars(project.id, collars, file.name);
-      setImportMsg({ error: false, text: `Imported ${collars.length} collar${collars.length === 1 ? '' : 's'}.` });
+      const text = String(reader.result);
+      const r = parseCollarCsv(text, project.collars, holePrefix);
+      if (r.needsProjection) { setPendingProjection({ text, easting: r.easting, northing: r.northing, fileName: file.name }); return; }
+      if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
+      api.addCollars(project.id, r.collars, file.name);
+      setImportMsg({ error: false, text: `Imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
     };
     reader.readAsText(file);
+  };
+
+  const confirmProjection = (zone) => {
+    if (!pendingProjection) return;
+    const { text, fileName } = pendingProjection;
+    const r = parseCollarCsv(text, project.collars, holePrefix, zone);
+    setPendingProjection(null);
+    if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
+    api.addCollars(project.id, r.collars, fileName);
+    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
   };
 
   const importIntervals = (file) => {
@@ -334,13 +378,22 @@ function DrillHoleManager({ project, api, onClose }) {
 
       {tab === 'import' && (
         <div className="mx-manage-form">
-          <div className="mx-drop-area mx-drop-area-sm" onClick={() => collarInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importCollars(e.dataTransfer.files?.[0]); }}>
-            <div className="mx-drop-icon">&#8593;</div>
-            <div className="mx-drop-text">Drop collar CSV or <span className="mx-drop-browse">browse</span></div>
-            <div className="mx-drop-hint">hole_id, lat, lng, azimuth, dip, depth</div>
-            <input ref={collarInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importCollars(e.target.files?.[0]); e.target.value = ''; }} />
-          </div>
-          {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
+          {pendingProjection ? (
+            <ZonePicker
+              easting={pendingProjection.easting} northing={pendingProjection.northing}
+              onConfirm={confirmProjection} onCancel={() => setPendingProjection(null)}
+            />
+          ) : (
+            <>
+              <div className="mx-drop-area mx-drop-area-sm" onClick={() => collarInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importCollars(e.dataTransfer.files?.[0]); }}>
+                <div className="mx-drop-icon">&#8593;</div>
+                <div className="mx-drop-text">Drop collar CSV or <span className="mx-drop-browse">browse</span></div>
+                <div className="mx-drop-hint">hole_id, lat, lng, azimuth, dip, depth</div>
+                <input ref={collarInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importCollars(e.target.files?.[0]); e.target.value = ''; }} />
+              </div>
+              {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
+            </>
+          )}
         </div>
       )}
 

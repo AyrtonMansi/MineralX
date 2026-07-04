@@ -3,6 +3,33 @@
 // now; the API surface (load/save/mutators below) is the seam where a
 // real backend slots in later without touching any component.
 
+import proj4 from 'proj4';
+
+// GDA2020 MGA zones covering Queensland (54/55/56). Definitions per the
+// standard EPSG registry; used only after a human confirms the zone —
+// see isProjectedCoord()/reprojectEastingNorthing() below.
+proj4.defs('EPSG:28354', '+proj=utm +zone=54 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+proj4.defs('EPSG:28355', '+proj=utm +zone=55 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+proj4.defs('EPSG:28356', '+proj=utm +zone=56 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+const MGA_ZONE_EPSG = { 54: 'EPSG:28354', 55: 'EPSG:28355', 56: 'EPSG:28356' };
+
+// A decimal-degree lat is always -90..90, lng -180..180 — an MGA/UTM
+// easting (~100,000-900,000) or northing (~1,000,000-10,000,000) is off
+// by orders of magnitude, so this cheap magnitude check reliably catches
+// projected coordinates without guessing from column names.
+export function isProjectedCoord(lat, lng) {
+  return Math.abs(lat) > 90 || Math.abs(lng) > 180;
+}
+
+// Converts a GDA2020 MGA easting/northing to WGS84 lon/lat. Only ever
+// called after a human has confirmed the zone — never guessed silently.
+export function reprojectEastingNorthing(easting, northing, zone) {
+  const epsg = MGA_ZONE_EPSG[zone];
+  if (!epsg) throw new Error(`Unsupported MGA zone: ${zone}`);
+  const [lng, lat] = proj4(epsg, 'WGS84', [easting, northing]);
+  return { lat, lng };
+}
+
 export const STORE_KEY = 'mx-store-v3';
 const LEGACY_KEY = 'mx-store-v2';
 
@@ -146,8 +173,16 @@ export function loadStore() {
   return createDemoStore();
 }
 
+// Returns true on success, false on failure (quota exceeded, storage
+// disabled, etc.) so the caller can warn the user their change didn't
+// persist — silently swallowing this would risk losing field data.
 export function saveStore(store) {
-  try { window.localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { /* quota */ }
+  try {
+    window.localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function today() {
@@ -219,7 +254,14 @@ function readAssays(cells, elementCols) {
 // Rock chip CSV → samples. Recognised headers (case-insensitive):
 // sample_id/id, lat/northing, lng/lon/easting, lith/lithology, notes,
 // plus any element columns (au, ag, cu_pct, zn_ppm, …).
-export function parseSampleCsv(text, existing, prefix) {
+//
+// If the lat/lng-named columns actually hold projected MGA easting/
+// northing (common for real field data), this refuses to silently
+// mis-place them: without a confirmed `zone`, it stops at the first
+// such row and returns `needsProjection: true` for the caller to show
+// a zone-picker; with `zone` set (only after the user has confirmed
+// it), it reprojects every row to WGS84 before building samples.
+export function parseSampleCsv(text, existing, prefix, zone) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { samples: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
@@ -235,9 +277,17 @@ export function parseSampleCsv(text, existing, prefix) {
   let pool = existing;
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
-    const lat = parseFloat(cells[iLat]);
-    const lng = parseFloat(cells[iLng]);
-    if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+    const rawLat = parseFloat(cells[iLat]);
+    const rawLng = parseFloat(cells[iLng]);
+    if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) continue;
+
+    let lat = rawLat, lng = rawLng;
+    if (zone) {
+      ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, zone));
+    } else if (isProjectedCoord(rawLat, rawLng)) {
+      return { samples: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
+    }
+
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
     const sample = {
       id, lat, lng,
@@ -254,8 +304,10 @@ export function parseSampleCsv(text, existing, prefix) {
 }
 
 // Drill collar CSV → collars. hole_id/id, lat/northing, lng/easting,
-// azimuth/azi, dip, depth/eoh.
-export function parseCollarCsv(text, existing, prefix) {
+// azimuth/azi, dip, depth/eoh. Same projected-coordinate handling as
+// parseSampleCsv (see its comment): refuses to silently mis-place MGA
+// easting/northing without a confirmed `zone`.
+export function parseCollarCsv(text, existing, prefix, zone) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { collars: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
@@ -271,9 +323,17 @@ export function parseCollarCsv(text, existing, prefix) {
   let pool = existing;
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
-    const lat = parseFloat(cells[iLat]);
-    const lng = parseFloat(cells[iLng]);
-    if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+    const rawLat = parseFloat(cells[iLat]);
+    const rawLng = parseFloat(cells[iLng]);
+    if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) continue;
+
+    let lat = rawLat, lng = rawLng;
+    if (zone) {
+      ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, zone));
+    } else if (isProjectedCoord(rawLat, rawLng)) {
+      return { collars: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
+    }
+
     const num = (i) => { const v = i >= 0 ? parseFloat(cells[i]) : NaN; return Number.isNaN(v) ? null : v; };
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
     const collar = { id, lat, lng, azimuth: num(iAzi), dip: num(iDip), depth: num(iDepth), date: today() };

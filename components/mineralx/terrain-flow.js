@@ -266,6 +266,16 @@ export async function fetchMineralOccurrences(bounds) {
   return data.features; // [{id, lat, lng, name, commodity}]
 }
 
+// Same as fetchMineralOccurrences but for historic mine sites (own API
+// route, own upstream candidates — see app/api/historic-mines/route.js).
+export async function fetchHistoricMines(bounds) {
+  const w = bounds.getWest(), s = bounds.getSouth(), e = bounds.getEast(), n = bounds.getNorth();
+  const res = await fetch(`/api/historic-mines?w=${w}&s=${s}&e=${e}&n=${n}`);
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'historic mines fetch failed');
+  return data.features; // [{id, lat, lng, name, mineType}]
+}
+
 // ── Phase 2: run the hydrology + targeting against a grid + seed data ──
 export function runAnalysis(grid, samples, occurrences) {
   const sampleIdx = (samples || []).map(s => grid.latLngToIndex(s.lat, s.lng)).filter(i => i >= 0);
