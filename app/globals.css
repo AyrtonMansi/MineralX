@@ -150,4 +150,23 @@ body {
   .article-body th {
     @apply text-white;
   }
+
+  /* Underline-style text input used in the contact form. */
+  .field-input {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 10px 0;
+    color: #fff;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.3s ease;
+  }
+  .field-input::placeholder {
+    color: #5f5f66;
+  }
+  .field-input:focus {
+    border-color: rgba(255, 255, 255, 0.6);
+  }
 }

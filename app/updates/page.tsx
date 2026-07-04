@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { Eyebrow } from "@/components/Eyebrow";
 import { getArticles, formatDate } from "@/lib/articles";
 
 export const metadata: Metadata = {
@@ -24,10 +25,7 @@ export default function UpdatesPage() {
       <main className="bg-black">
         <section className="border-b border-line pb-16 pt-36 md:pb-20 md:pt-44">
           <div className="container-site">
-            <p className="eyebrow flex items-center gap-3">
-              <span className="h-px w-8 bg-white/25" aria-hidden="true" />
-              MineralX Resources
-            </p>
+            <Eyebrow>MineralX Resources</Eyebrow>
             <h1 className="display mt-5 text-4xl sm:text-5xl lg:text-6xl">
               Updates
             </h1>

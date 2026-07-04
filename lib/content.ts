@@ -7,6 +7,18 @@
  * No invented resources, reserves, ounces, grades, partners or staff.
  */
 
+/**
+ * Shared shape for sections rendered via <SectionHeading> (eyebrow + heading
+ * + intro). Annotating each section with this — plus its own item shape —
+ * means a typo'd or renamed field (e.g. `body` -> `text`) is caught at
+ * compile time instead of silently breaking a component at render time.
+ */
+export type SectionCopy = {
+  eyebrow: string;
+  heading: string;
+  intro: string;
+};
+
 export const company = {
   name: "MineralX Resources",
   shortName: "MineralX",
@@ -30,6 +42,9 @@ export const company = {
     { label: "LinkedIn", href: "#", icon: "linkedin" as const },
     { label: "Instagram", href: "#", icon: "instagram" as const },
   ],
+  /** Legal disclaimer shown in the Investors section and the footer. */
+  disclaimer:
+    "This website is for general information only and does not constitute an offer of securities or investment advice.",
 };
 
 export const nav = [
@@ -73,7 +88,9 @@ export const overview = {
   ],
 };
 
-export const operatingFocus = {
+export const operatingFocus: SectionCopy & {
+  cards: Array<{ index: string; title: string; body: string }>;
+} = {
   eyebrow: "What We Do",
   heading: "From discovery to production.",
   intro:
@@ -97,7 +114,9 @@ export const operatingFocus = {
   ],
 };
 
-export const commodities = {
+export const commodities: SectionCopy & {
+  items: Array<{ symbol: string; title: string; body: string }>;
+} = {
   eyebrow: "Commodity Focus",
   heading: "Metals the world depends on.",
   intro:
@@ -132,7 +151,9 @@ export const sectionBreak = {
   statement: "Building enduring value from real assets, responsibly.",
 };
 
-export const approach = {
+export const approach: SectionCopy & {
+  items: Array<{ title: string; body: string }>;
+} = {
   eyebrow: "Our Approach",
   heading: "How we build value.",
   intro: "A disciplined, value-led approach applied across everything we do.",
@@ -182,8 +203,6 @@ export const investors = {
       body: "Operators with processing capacity and recovery expertise.",
     },
   ],
-  disclaimer:
-    "This website is for general information only and does not constitute an offer of securities or investment advice.",
 };
 
 export const contact = {

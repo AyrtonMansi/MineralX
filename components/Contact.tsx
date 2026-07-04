@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { company, contact } from "@/lib/content";
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 import { ArrowRight } from "./icons";
 
 type Status = "idle" | "sending" | "sent" | "error";
@@ -52,10 +53,7 @@ export function Contact() {
       <div className="container-site grid gap-14 lg:grid-cols-12">
         <div className="lg:col-span-4">
           <Reveal>
-            <p className="eyebrow flex items-center gap-3">
-              <span className="h-px w-8 bg-white/25" aria-hidden="true" />
-              {contact.eyebrow}
-            </p>
+            <Eyebrow>{contact.eyebrow}</Eyebrow>
             <h2 className="display mt-5 text-3xl sm:text-4xl lg:text-[3.25rem]">
               {contact.heading}
             </h2>
@@ -95,7 +93,7 @@ export function Contact() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Full name"
-                        className="input"
+                        className="field-input"
                       />
                     </Field>
                     <Field label="Email" required>
@@ -105,7 +103,7 @@ export function Contact() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="name@company.com"
-                        className="input"
+                        className="field-input"
                       />
                     </Field>
                   </div>
@@ -118,7 +116,7 @@ export function Contact() {
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         placeholder="How can we help?"
-                        className="input resize-none"
+                        className="field-input resize-none"
                       />
                     </Field>
                   </div>
@@ -151,22 +149,6 @@ export function Contact() {
           </Reveal>
         </div>
       </div>
-
-      <style>{`
-        .input {
-          width: 100%;
-          background: transparent;
-          border: 0;
-          border-bottom: 1px solid rgba(255,255,255,0.14);
-          padding: 10px 0;
-          color: #fff;
-          font-size: 15px;
-          outline: none;
-          transition: border-color .3s ease;
-        }
-        .input::placeholder { color: #5f5f66; }
-        .input:focus { border-color: rgba(255,255,255,0.6); }
-      `}</style>
     </section>
   );
 }

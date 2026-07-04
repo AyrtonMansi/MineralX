@@ -1,4 +1,4 @@
-import { company, footer, investors } from "@/lib/content";
+import { company, footer } from "@/lib/content";
 import { InstagramIcon, LinkedInIcon } from "./icons";
 
 export function Footer() {
@@ -72,7 +72,7 @@ export function Footer() {
         </div>
 
         <p className="mt-14 max-w-3xl text-[11px] leading-relaxed text-muted-dim">
-          {investors.disclaimer}
+          {company.disclaimer}
         </p>
       </div>
 

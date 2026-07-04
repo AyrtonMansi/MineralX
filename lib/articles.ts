@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { cache } from "react";
 import matter from "gray-matter";
 import { marked } from "marked";
 
@@ -32,7 +33,12 @@ export type ArticleMeta = {
 
 export type Article = ArticleMeta & { html: string };
 
-export function getArticles(): ArticleMeta[] {
+/**
+ * Wrapped in React's cache() so repeated calls within the same render pass
+ * (index page, generateStaticParams, generateMetadata, and the page itself
+ * each call these) hit the filesystem once instead of once per call site.
+ */
+export const getArticles = cache((): ArticleMeta[] => {
   if (!fs.existsSync(ARTICLES_DIR)) return [];
   return fs
     .readdirSync(ARTICLES_DIR)
@@ -49,9 +55,9 @@ export function getArticles(): ArticleMeta[] {
       };
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-}
+});
 
-export function getArticle(slug: string): Article | null {
+export const getArticle = cache((slug: string): Article | null => {
   const file = path.join(ARTICLES_DIR, `${slug}.md`);
   if (!fs.existsSync(file) || path.basename(file).startsWith("_")) return null;
   const { data, content } = matter(fs.readFileSync(file, "utf8"));
@@ -63,7 +69,7 @@ export function getArticle(slug: string): Article | null {
     excerpt: String(data.excerpt ?? ""),
     html: marked.parse(content, { async: false }) as string,
   };
-}
+});
 
 export function formatDate(iso: string): string {
   if (!iso) return "";

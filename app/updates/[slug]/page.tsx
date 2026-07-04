@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { Eyebrow } from "@/components/Eyebrow";
 import { getArticle, getArticles, formatDate } from "@/lib/articles";
 
 type Props = { params: { slug: string } };
@@ -39,8 +40,7 @@ export default function ArticlePage({ params }: Props) {
         <article className="pb-20 pt-36 md:pb-28 md:pt-44">
           <div className="container-site">
             <div className="mx-auto max-w-3xl">
-              <p className="eyebrow flex items-center gap-3">
-                <span className="h-px w-8 bg-white/25" aria-hidden="true" />
+              <Eyebrow>
                 {article.category}
                 {article.date && (
                   <>
@@ -48,7 +48,7 @@ export default function ArticlePage({ params }: Props) {
                     {formatDate(article.date)}
                   </>
                 )}
-              </p>
+              </Eyebrow>
               <h1 className="mt-6 text-3xl font-bold leading-[1.1] tracking-[-0.01em] text-white sm:text-4xl lg:text-5xl">
                 {article.title}
               </h1>

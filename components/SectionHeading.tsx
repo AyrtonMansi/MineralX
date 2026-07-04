@@ -1,4 +1,5 @@
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 
 type Props = {
   eyebrow: string;
@@ -23,10 +24,7 @@ export function SectionHeading({
         isCenter ? "items-center text-center" : "items-start"
       } ${className}`}
     >
-      <p className="eyebrow flex items-center gap-3">
-        <span className="h-px w-8 bg-white/25" aria-hidden="true" />
-        {eyebrow}
-      </p>
+      <Eyebrow>{eyebrow}</Eyebrow>
       <h2
         className={`display mt-5 text-3xl sm:text-4xl lg:text-[3.25rem] ${
           isCenter ? "max-w-3xl" : "max-w-2xl"

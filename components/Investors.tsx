@@ -1,5 +1,6 @@
-import { investors } from "@/lib/content";
+import { company, investors } from "@/lib/content";
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 
 export function Investors() {
   return (
@@ -11,10 +12,7 @@ export function Investors() {
         <div className="grid gap-12 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <Reveal>
-              <p className="eyebrow flex items-center gap-3">
-                <span className="h-px w-8 bg-white/25" aria-hidden="true" />
-                {investors.eyebrow}
-              </p>
+              <Eyebrow>{investors.eyebrow}</Eyebrow>
               <h2 className="display mt-5 text-3xl sm:text-4xl lg:text-[3.25rem]">
                 {investors.heading}
               </h2>
@@ -57,7 +55,7 @@ export function Investors() {
 
         <Reveal delay={0.1}>
           <p className="mt-12 max-w-3xl border-l-2 border-line-strong pl-5 text-xs leading-relaxed text-muted-dim">
-            {investors.disclaimer}
+            {company.disclaimer}
           </p>
         </Reveal>
       </div>

@@ -1,5 +1,6 @@
 import { overview } from "@/lib/content";
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 
 export function Overview() {
   return (
@@ -9,10 +10,7 @@ export function Overview() {
     >
       <div className="container-site">
         <Reveal>
-          <p className="eyebrow flex items-center gap-3">
-            <span className="h-px w-8 bg-white/25" aria-hidden="true" />
-            {overview.eyebrow}
-          </p>
+          <Eyebrow>{overview.eyebrow}</Eyebrow>
           <p className="mt-6 max-w-3xl text-lg font-medium leading-relaxed text-white md:text-2xl md:leading-[1.4]">
             {overview.mission}
           </p>
