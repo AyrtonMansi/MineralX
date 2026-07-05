@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
-import { PUBLIC_DATA_CATALOG, BASEMAP_TILES } from './layer-data';
+import { PUBLIC_DATA_CATALOG, BASEMAP_TILES, THEME_LABELS, THEME_ORDER } from './layer-data';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
@@ -1062,55 +1062,120 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
           />
         ))}
 
-        {/* Public data */}
+        {/* GeoResGlobe: raw QLD open-data catalog, organized by GeoResGlobe's */}
+        {/* own official themes — everything here is published data, not */}
+        {/* computed by this app (see Target Analysis below for that). */}
         <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
           <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('pub', false)}>
             {isExpanded('pub', false) ? MxIcons.chevronDown : MxIcons.chevronRight}
           </button>
           <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 11, height: 11 }} />
-          <span className="mx-tree-name mx-tree-name-bold">GeoResGlobe · QLD</span>
+          <span className="mx-tree-name mx-tree-name-bold">GeoResGlobe</span>
         </div>
-        {isExpanded('pub', false) && PUBLIC_DATA_CATALOG.map(group => group.layers.map(layer => (
-          <div key={layer.id}>
-            <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-              <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-              <div className="mx-tree-swatch" style={{ background: '#95A5A6', borderRadius: '50%', width: 8, height: 8 }} />
-              <span className={`mx-tree-name ${publicOn[layer.id] ? '' : 'mx-tree-name-off'}`} title={layer.attribution}>{layer.name}</span>
-              {wmsErrors[layer.id] && publicOn[layer.id] && (
-                <span className="mx-tree-error" title="Service not responding — check the layer or your connection">unavailable</span>
-              )}
-              <button
-                type="button"
-                className={`mx-tree-eye ${publicOn[layer.id] ? 'on' : ''}`}
-                onClick={() => setPublicOn(prev => ({ ...prev, [layer.id]: !prev[layer.id] }))}
-                title={publicOn[layer.id] ? 'Hide' : 'Show'}
-              >
-                <div className="mx-eye-dot" />
-              </button>
-            </div>
-            {publicOn[layer.id] && (
-              <div className="mx-opacity-row">
-                <input
-                  type="range"
-                  min="10" max="100"
-                  value={Math.round((publicOpacity[layer.id] ?? 0.7) * 100)}
-                  onChange={(e) => setPublicOpacity(prev => ({ ...prev, [layer.id]: Number(e.target.value) / 100 }))}
-                  className="mx-opacity-slider"
-                  title="Opacity"
-                />
+        {isExpanded('pub', false) && (
+          <>
+            {THEME_ORDER.map(theme => {
+              const layers = PUBLIC_DATA_CATALOG.flatMap(g => g.layers).filter(l => l.theme === theme);
+              if (!layers.length) return null;
+              return (
+                <div key={theme}>
+                  <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+                    <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+                    <div className="mx-tree-swatch" style={{ background: '#95A5A6', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+                    <span className="mx-tree-subheading">{THEME_LABELS[theme]}</span>
+                  </div>
+                  {layers.map(layer => (
+                    <div key={layer.id}>
+                      <FlowSubRow
+                        depth={1}
+                        label={layer.name}
+                        swatch={{ background: '#95A5A6', borderRadius: '50%', width: 7, height: 7 }}
+                        on={publicOn[layer.id]}
+                        onToggle={() => setPublicOn(prev => ({ ...prev, [layer.id]: !prev[layer.id] }))}
+                        opacity={publicOn[layer.id] ? (publicOpacity[layer.id] ?? 0.7) : undefined}
+                        onOpacity={(v) => setPublicOpacity(prev => ({ ...prev, [layer.id]: v }))}
+                        error={wmsErrors[layer.id] && publicOn[layer.id]}
+                        title={layer.attribution}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+
+            {/* Mineral Occurrences: raw GEORES vector data, one toggleable */}
+            {/* row per commodity, populated from whatever the current view */}
+            {/* actually returns. Fetched by Target Analysis below (shared */}
+            {/* cache) — this is only where the toggle lives. */}
+            {flowState.status !== 'idle' && (
+              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+                <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+                <span className="mx-tree-subheading">Mineral Occurrences</span>
+                {flowState.occurrencesError && <span className="mx-tree-error" title="Occurrence service unavailable for this view">unavailable</span>}
+                {!flowState.occurrencesError && flowState.commodities.length === 0 && flowState.status === 'ready' && (
+                  <span className="mx-tree-attribution">none in view</span>
+                )}
               </div>
             )}
-          </div>
-        )))}
+            {flowState.commodities.map((commodity, idx) => (
+              <FlowSubRow
+                key={commodity}
+                depth={1}
+                label={commodity}
+                swatch={{ background: commodity === 'Gold' ? '#B08A3E' : PROJECT_COLORS[(idx + 1) % PROJECT_COLORS.length], borderRadius: '50%', width: 7, height: 7 }}
+                on={flowSubOn[`occ:${commodity}`]} onToggle={() => onToggleFlowSub(`occ:${commodity}`)}
+              />
+            ))}
+            {flowState.status === 'idle' && (
+              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+                <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+                <span className="mx-tree-subheading">Mineral Occurrences</span>
+                <span className="mx-tree-attribution">turn on Target Analysis to load</span>
+              </div>
+            )}
 
-        {/* Occurrences: expandable group of independent sub-layers, */}
-        {/* itself containing two further nested sub-groups. */}
+            {/* Historic Mines: same live-fetch pattern as Mineral Occurrences, */}
+            {/* separate GEORES service and its own error/empty states. */}
+            {flowState.status !== 'idle' && (
+              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+                <div className="mx-tree-swatch" style={{ background: '#5E6E7A', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+                <span className="mx-tree-subheading">Historic Mines</span>
+                {flowState.historicMinesError && <span className="mx-tree-error" title="Historic mines service unavailable for this view">unavailable</span>}
+                {!flowState.historicMinesError && flowState.historicMinesCount === 0 && flowState.status === 'ready' && (
+                  <span className="mx-tree-attribution">none in view</span>
+                )}
+              </div>
+            )}
+            {flowState.status === 'ready' && !flowState.historicMinesError && flowState.historicMinesCount > 0 && (
+              <FlowSubRow
+                depth={1}
+                label={`Historic mine sites`}
+                swatch={{ background: '#5E6E7A', borderRadius: '50%', width: 7, height: 7 }}
+                on={flowSubOn.historicMines} onToggle={() => onToggleFlowSub('historicMines')}
+              />
+            )}
+            {flowState.status === 'idle' && (
+              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+                <div className="mx-tree-swatch" style={{ background: '#5E6E7A', transform: 'rotate(45deg)', width: 8, height: 8 }} />
+                <span className="mx-tree-subheading">Historic Mines</span>
+                <span className="mx-tree-attribution">turn on Target Analysis to load</span>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Target Analysis: this app's own computed hydrology/correlation */}
+        {/* engine — seeded by (not itself) the GeoResGlobe data above. */}
         <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
           <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('flow', true)}>
             {isExpanded('flow', true) ? MxIcons.chevronDown : MxIcons.chevronRight}
           </button>
           <div className="mx-tree-swatch" style={{ background: '#3E6C8C', transform: 'rotate(45deg)', width: 11, height: 11 }} />
-          <span className="mx-tree-name mx-tree-name-bold">Occurrences</span>
+          <span className="mx-tree-name mx-tree-name-bold">Target Analysis</span>
           {flowState.status === 'running' && <span className="mx-tree-attribution">computing…</span>}
           {flowState.status === 'ready' && <span className="mx-tree-count">{flowState.targets} targets</span>}
           {flowState.status === 'error' && <span className="mx-tree-error" title="Elevation tiles unreachable — try again">failed</span>}
@@ -1151,50 +1216,9 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
               on={flowSubOn.correlated} onToggle={() => onToggleFlowSub('correlated')}
             />
 
-            {/* Mineral Occurrences: one toggleable row per commodity, */}
-            {/* populated from whatever the current view actually returns. */}
-            {flowState.status !== 'idle' && (
-              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-                <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                <span className="mx-tree-subheading">Mineral Occurrences</span>
-                {flowState.occurrencesError && <span className="mx-tree-error" title="Occurrence service unavailable for this view">unavailable</span>}
-                {!flowState.occurrencesError && flowState.commodities.length === 0 && flowState.status === 'ready' && (
-                  <span className="mx-tree-attribution">none in view</span>
-                )}
-              </div>
-            )}
-            {flowState.commodities.map((commodity, idx) => (
-              <FlowSubRow
-                key={commodity}
-                depth={1}
-                label={commodity}
-                swatch={{ background: commodity === 'Gold' ? '#B08A3E' : PROJECT_COLORS[(idx + 1) % PROJECT_COLORS.length], borderRadius: '50%', width: 7, height: 7 }}
-                on={flowSubOn[`occ:${commodity}`]} onToggle={() => onToggleFlowSub(`occ:${commodity}`)}
-              />
-            ))}
-
-            {/* Historic Mines: same live-fetch pattern as Mineral Occurrences, */}
-            {/* separate GEORES service and its own error/empty states. */}
-            {flowState.status !== 'idle' && (
-              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-                <div className="mx-tree-swatch" style={{ background: '#5E6E7A', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                <span className="mx-tree-subheading">Historic Mines</span>
-                {flowState.historicMinesError && <span className="mx-tree-error" title="Historic mines service unavailable for this view">unavailable</span>}
-                {!flowState.historicMinesError && flowState.historicMinesCount === 0 && flowState.status === 'ready' && (
-                  <span className="mx-tree-attribution">none in view</span>
-                )}
-              </div>
-            )}
-            {flowState.status === 'ready' && !flowState.historicMinesError && flowState.historicMinesCount > 0 && (
-              <FlowSubRow
-                depth={1}
-                label={`Historic mine sites`}
-                swatch={{ background: '#5E6E7A', borderRadius: '50%', width: 7, height: 7 }}
-                on={flowSubOn.historicMines} onToggle={() => onToggleFlowSub('historicMines')}
-              />
-            )}
+            <div className="mx-flow-note">
+              Uses Mineral Occurrences &amp; Historic Mines from GeoResGlobe above as seed data.
+            </div>
 
             {flowState.status === 'ready' && (
               <div className="mx-flow-note">
@@ -1249,13 +1273,14 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
 
 // One toggleable terrain sub-layer row: eye + optional opacity slider,
 // same visual language as the WMS public-layer rows above.
-function FlowSubRow({ label, swatch, on, onToggle, opacity, onOpacity, depth = 0 }) {
+function FlowSubRow({ label, swatch, on, onToggle, opacity, onOpacity, depth = 0, error, title }) {
   return (
     <>
       <div className="mx-tree-row" style={{ paddingLeft: `${30 + depth * 20}px` }}>
         <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
         <div className="mx-tree-swatch" style={swatch} />
-        <span className={`mx-tree-name ${on ? '' : 'mx-tree-name-off'}`}>{label}</span>
+        <span className={`mx-tree-name ${on ? '' : 'mx-tree-name-off'}`} title={title}>{label}</span>
+        {error && <span className="mx-tree-error" title="Service not responding — check the layer or your connection">unavailable</span>}
         <button type="button" className={`mx-tree-eye ${on ? 'on' : ''}`} onClick={onToggle} title={on ? 'Hide' : 'Show'}>
           <div className="mx-eye-dot" />
         </button>
