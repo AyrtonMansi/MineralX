@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
-import { PUBLIC_DATA_CATALOG } from './layer-data';
+import { PUBLIC_DATA_CATALOG, BASEMAP_TILES } from './layer-data';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
@@ -12,15 +12,11 @@ import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
 import DataDrawer from './DataDrawer';
 import ZonePicker from './ZonePicker';
+import GlobeView from './GlobeView';
 import {
   fetchElevationGrid, runAnalysis, fetchMineralOccurrences, fetchHistoricMines,
   renderDrainageOverlay, renderConcentrationHeatmap,
 } from './terrain-flow';
-
-const BASEMAP_TILES = {
-  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-};
 
 const gradeRadius = (g) => g === 'high' ? 9 : g === 'anom' ? 7.5 : 6;
 const esc = (t) => String(t || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
@@ -93,6 +89,7 @@ export default function MineralXWorkspace() {
   const [dataTab, setDataTab] = useState('chips');
   const [dataPreset, setDataPreset] = useState('');
   const [basemap, setBasemap] = useState('satellite');
+  const [mapMode, setMapMode] = useState('flat'); // 'flat' | 'globe' — globe is an isolated landing view, not the working map
   const [activeElement, setActiveElement] = useState('Au');
   // Terrain analysis: one cached run per viewport, five toggleable
   // sub-layers (+ one dynamic row per occurrence commodity) render from
@@ -124,6 +121,25 @@ export default function MineralXWorkspace() {
   const flowLayerRefs = useRef({}); // sub-layer key -> Leaflet layer/layerGroup currently on the map
 
   const activeProject = store.projects.find(p => p.id === store.activeProjectId) || store.projects[0];
+
+  // Landing centroid for the globe view: the active project's boundary
+  // (if drawn) or its samples/collars, else a wide North QLD default —
+  // this app's own regional focus, not an arbitrary 0,0.
+  const globeCenter = useMemo(() => {
+    const coords = activeProject?.boundary?.coords;
+    if (coords?.length) {
+      const lat = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+      const lng = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+      return { lat, lng };
+    }
+    const pts = [...(activeProject?.samples || []), ...(activeProject?.collars || [])];
+    if (pts.length) {
+      const lat = pts.reduce((s, p) => s + p.lat, 0) / pts.length;
+      const lng = pts.reduce((s, p) => s + p.lng, 0) / pts.length;
+      return { lat, lng };
+    }
+    return { lat: -20.075, lng: 146.26 };
+  }, [activeProject]);
 
   useEffect(() => {
     setStore(loadStore());
@@ -571,6 +587,16 @@ export default function MineralXWorkspace() {
     <div className="mx-workspace">
       <div ref={mapRef} className="mx-map" />
 
+      {mapMode === 'globe' && (
+        <GlobeView
+          center={globeCenter}
+          boundary={activeProject?.boundary}
+          onEnterWorkspace={() => setMapMode('flat')}
+        />
+      )}
+
+      {mapMode === 'flat' && (
+      <>
       {/* TOP BAR */}
       <div className="mx-topbar">
         <button
@@ -735,6 +761,7 @@ export default function MineralXWorkspace() {
             wmsErrors={wmsErrors}
             basemap={basemap}
             setBasemap={setBasemap}
+            onOpenGlobe={() => setMapMode('globe')}
             activeElement={activeElement}
             setActiveElement={setActiveElement}
             availableElements={availableElements}
@@ -782,6 +809,8 @@ export default function MineralXWorkspace() {
         <div className="mx-dock-sep" />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4 L11 13" /><path d="M7 8 L11 4 L15 8" /><path d="M5 17 H17" /></svg>} title="Add data" active={activePanel === 'upload'} onClick={() => setActivePanel(activePanel === 'upload' ? null : 'upload')} />
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -1010,7 +1039,7 @@ function UploadPanel({ onClose, project, api }) {
 }
 
 // ── Layers panel ───────────────────────────────────────────────────────
-function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, flowSubOn, flowOpacity, setFlowOpacity, onToggleFlowSub, onRerunFlow, onManage, onClose }) {
+function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, onOpenGlobe, activeElement, setActiveElement, availableElements, flowState, flowSubOn, flowOpacity, setFlowOpacity, onToggleFlowSub, onRerunFlow, onManage, onClose }) {
   const toggleHidden = (id) => setHidden(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleExpanded = (id, dflt) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? dflt) }));
 
@@ -1212,6 +1241,7 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
           <button type="button" className={`mx-basemap-btn ${basemap === 'satellite' ? 'active' : ''}`} onClick={() => setBasemap('satellite')}>Satellite</button>
           <button type="button" className={`mx-basemap-btn ${basemap === 'topo' ? 'active' : ''}`} onClick={() => setBasemap('topo')}>Topographic</button>
         </div>
+        <button type="button" className="mx-globe-open-btn" onClick={onOpenGlobe}>View as globe</button>
       </div>
     </div>
   );

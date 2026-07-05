@@ -5,6 +5,11 @@
 
 const QLD_WMS = 'https://gisservices.information.qld.gov.au/arcgis/services';
 
+export const BASEMAP_TILES = {
+  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+};
+
 export const PUBLIC_DATA_CATALOG = [
   {
     id: 'pub-geores',
