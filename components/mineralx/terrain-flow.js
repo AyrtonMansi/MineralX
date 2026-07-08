@@ -149,7 +149,7 @@ export function renderDrainageOverlay(flow, w, h) {
 // Water concentration heatmap: full-intensity gradient through the app's
 // own theme colors (pending cream → anom tan → high terracotta), so it
 // reads as part of the same visual system as chip/assay grading. Opacity
-// is applied by the caller (Leaflet imageOverlay), not baked in here.
+// is applied by the caller (a MapLibre raster image-source layer), not baked in here.
 const HEAT_STOPS = [
   { t: 0.0, hex: GRADE_COLORS.pending },
   { t: 0.55, hex: GRADE_COLORS.anom },

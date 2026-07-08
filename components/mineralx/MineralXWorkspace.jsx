@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import 'leaflet/dist/leaflet.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { PUBLIC_DATA_CATALOG, BASEMAP_TILES, THEME_LABELS, THEME_ORDER } from './layer-data';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
@@ -12,11 +12,51 @@ import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
 import DataDrawer from './DataDrawer';
 import ZonePicker from './ZonePicker';
-import GlobeView from './GlobeView';
 import {
   fetchElevationGrid, runAnalysis, fetchMineralOccurrences, fetchHistoricMines,
   renderDrainageOverlay, renderConcentrationHeatmap,
 } from './terrain-flow';
+
+// WMS GetMap request built by hand for a MapLibre raster source — there's
+// no L.tileLayer.wms equivalent; {bbox-epsg-3857} is a MapLibre-native
+// tile-URL token it substitutes per-tile.
+const wmsTileUrl = (layer) =>
+  `${layer.url}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${layer.wmsLayers}&STYLES=&FORMAT=image/png&TRANSPARENT=true&SRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`;
+
+// A small DOM marker used for every point feature (samples, collars,
+// trap targets, occurrences, historic mines) — one consistent shape
+// across the app, each with its own hover label (reusing .lx-tip) and
+// an optional click-popup, matching Leaflet's per-marker bindTooltip/
+// bindPopup pattern this app used before the MapLibre migration.
+function buildMarkerEl(swatchStyle, tipText) {
+  const el = document.createElement('div');
+  el.className = 'mx-mgl-marker';
+  const dot = document.createElement('div');
+  dot.className = 'mx-mgl-dot';
+  Object.assign(dot.style, swatchStyle);
+  el.appendChild(dot);
+  if (tipText) {
+    const tip = document.createElement('div');
+    tip.className = 'lx-tip';
+    tip.textContent = tipText;
+    el.appendChild(tip);
+  }
+  return el;
+}
+
+function boundsOfCoords(maplibregl, coords) {
+  const bounds = new maplibregl.LngLatBounds([coords[0][1], coords[0][0]], [coords[0][1], coords[0][0]]);
+  coords.forEach(([lat, lng]) => bounds.extend([lng, lat]));
+  return bounds;
+}
+
+// Convert `grid.bounds`'s 2-corner Leaflet-style shape ([[south,west],
+// [north,east]]) into MapLibre image-source's required 4-corner order:
+// top-left, top-right, bottom-right, bottom-left.
+function imageCoordsFromBounds(bounds) {
+  const [[south, west], [north, east]] = bounds;
+  return [[west, north], [east, north], [east, south], [west, south]];
+}
 
 const gradeRadius = (g) => g === 'high' ? 9 : g === 'anom' ? 7.5 : 6;
 const esc = (t) => String(t || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
@@ -89,7 +129,6 @@ export default function MineralXWorkspace() {
   const [dataTab, setDataTab] = useState('chips');
   const [dataPreset, setDataPreset] = useState('');
   const [basemap, setBasemap] = useState('satellite');
-  const [mapMode, setMapMode] = useState('flat'); // 'flat' | 'globe' — globe is an isolated landing view, not the working map
   const [activeElement, setActiveElement] = useState('Au');
   // Terrain analysis: one cached run per viewport, five toggleable
   // sub-layers (+ one dynamic row per occurrence commodity) render from
@@ -103,6 +142,7 @@ export default function MineralXWorkspace() {
   const [flowSubOn, setFlowSubOn] = useState({ drainage: false, targets: false, heatmap: false, correlated: false });
   const [flowOpacity, setFlowOpacity] = useState({ drainage: 0.65, heatmap: 0.5 });
   const [mapReady, setMapReady] = useState(false);
+  const [mapEpoch, setMapEpoch] = useState(0); // bumped to force a full map remount after a recovered render crash
   const [programOpen, setProgramOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -112,20 +152,22 @@ export default function MineralXWorkspace() {
 
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
-  const baseLayer = useRef(null);
-  const leaflet = useRef(null);
-  const groups = useRef(new Map());   // `${pid}:chips|holes|bnd` -> layerGroup
-  const markers = useRef(new Map());  // featureId -> marker
-  const wmsLayers = useRef(new Map()); // public layerId -> tileLayer.wms
+  const mgl = useRef(null); // the maplibre-gl module itself, once dynamically imported
+  const markers = useRef(new Map());       // featureId -> maplibregl.Marker (samples + collars)
+  const groupMembers = useRef(new Map());  // `${pid}:chips|holes` -> Set of feature ids currently added to the map
+  const boundaryLayers = useRef(new Map()); // pid -> { sourceId, fillLayerId, lineLayerId }
+  const wmsLayers = useRef(new Set());     // public layerId -> currently-added (source+layer exist)
   const flowCache = useRef(null); // { grid, flow, targets, occurrencesByCommodity } for the last analysed viewport
-  const flowLayerRefs = useRef({}); // sub-layer key -> Leaflet layer/layerGroup currently on the map
+  const flowLayerRefs = useRef({}); // sub-layer key -> { sourceId, layerId } (raster) or Marker[] (points) currently on the map
+  const flownToProject = useRef(false); // guards the one-time auto fly-in on initial load
+  const recoveryAttempts = useRef(0); // caps auto-recovery from a crashed render loop (see error listener below)
 
   const activeProject = store.projects.find(p => p.id === store.activeProjectId) || store.projects[0];
 
-  // Landing centroid for the globe view: the active project's boundary
-  // (if drawn) or its samples/collars, else a wide North QLD default —
-  // this app's own regional focus, not an arbitrary 0,0.
-  const globeCenter = useMemo(() => {
+  // Landing centroid for the initial globe→project fly-in: the active
+  // project's boundary (if drawn) or its samples/collars, else a wide
+  // North QLD default — this app's own regional focus, not an arbitrary 0,0.
+  const initialCenter = useMemo(() => {
     const coords = activeProject?.boundary?.coords;
     if (coords?.length) {
       const lat = coords.reduce((s, c) => s + c[0], 0) / coords.length;
@@ -185,9 +227,12 @@ export default function MineralXWorkspace() {
   const focusOn = useCallback((lat, lng, featureId) => {
     const map = mapInstance.current;
     if (!map) return;
-    map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14), duration: 600 });
     if (featureId) {
-      setTimeout(() => markers.current.get(featureId)?.openPopup(), 650);
+      setTimeout(() => {
+        const m = markers.current.get(featureId);
+        if (m && !m.getPopup()?.isOpen()) m.togglePopup();
+      }, 650);
     }
   }, []);
 
@@ -222,8 +267,7 @@ export default function MineralXWorkspace() {
       updateProject(pid, p => ({ ...p, boundary: { name, coords } }));
       if (fileName) addFile(pid, fileName, 'KML', '1 boundary polygon');
       const map = mapInstance.current;
-      const L = leaflet.current;
-      if (map && L) map.fitBounds(L.latLngBounds(coords).pad(0.25));
+      if (map && mgl.current) map.fitBounds(boundsOfCoords(mgl.current, coords), { padding: 60, duration: 800 });
     },
     attachPhoto: (pid, sampleId, dataUrl) => {
       updateProject(pid, p => ({
@@ -267,8 +311,7 @@ export default function MineralXWorkspace() {
       }));
       if (boundary) {
         const map = mapInstance.current;
-        const L = leaflet.current;
-        if (map && L) setTimeout(() => map.fitBounds(L.latLngBounds(boundary.coords).pad(0.25)), 50);
+        if (map && mgl.current) setTimeout(() => map.fitBounds(boundsOfCoords(mgl.current, boundary.coords), { padding: 60, duration: 800 }), 50);
       }
       return { boundaryError };
     },
@@ -283,83 +326,184 @@ export default function MineralXWorkspace() {
     },
   }), [store.projects, updateProject, addFile, focusOn]);
 
-  // ── Leaflet bootstrap ───────────────────────────────────────────────
+  // ── MapLibre bootstrap: globe projection, whole-Earth start, no data ──
+  // layers yet — the auto fly-in to the active project happens in a
+  // separate one-time effect below, once hydration has settled. Keyed on
+  // `mapEpoch` so the error-recovery effect below can force a clean
+  // rebuild without a full page reload.
   useEffect(() => {
-    if (!mapRef.current || mapInstance.current) return;
+    if (!mapRef.current) return;
     let cancelled = false;
+    if (mapInstance.current) {
+      try { mapInstance.current.remove(); } catch { /* already broken; discard anyway */ }
+      mapInstance.current = null;
+    }
     (async () => {
-      const L = (await import('leaflet')).default;
-      if (cancelled || mapInstance.current) return;
-      leaflet.current = L;
-      const map = L.map(mapRef.current, {
-        zoomControl: false, attributionControl: false,
-        center: [-20.075, 146.26], zoom: 13,
+      const maplibregl = (await import('maplibre-gl')).default;
+      if (cancelled) return;
+      mgl.current = maplibregl;
+      const map = new maplibregl.Map({
+        container: mapRef.current,
+        style: {
+          version: 8,
+          // Globe must be declared in the style spec — MapLibre v5's Map
+          // constructor has no top-level `projection` option (a bare
+          // `projection: 'globe'` there is silently ignored, leaving the
+          // map in flat Mercator). This is what makes the sphere render
+          // at low zoom and flatten continuously as the camera flies in.
+          projection: { type: 'globe' },
+          sources: {
+            basemap: { type: 'raster', tiles: [BASEMAP_TILES.satellite], tileSize: 256, attribution: 'Esri' },
+          },
+          layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+        },
+        center: [134, -25], // whole-Australia framing at globe zoom, before the fly-in narrows to the project
+        zoom: 1.4,
+        attributionControl: false,
       });
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-      baseLayer.current = L.tileLayer(BASEMAP_TILES.satellite, { maxZoom: 19 }).addTo(map);
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
       mapInstance.current = map;
-      setMapReady(true);
-      setTimeout(() => map.invalidateSize(), 250);
+      if (process.env.NODE_ENV !== 'production') window.__mxDebugMap = map;
+      map.on('load', () => {
+        if (cancelled) return;
+        setMapReady(true);
+        if (process.env.NODE_ENV !== 'production') window.__mxMapLoaded = true;
+        setTimeout(() => map.resize(), 250);
+      });
     })();
     return () => { cancelled = true; };
+  }, [mapEpoch]);
+
+  // ── Render-crash recovery ─────────────────────────────────────────────
+  // MapLibre's globe projection has a known fragility: a raster tile that
+  // fails to load (a dead WMS guess, a network hiccup) can throw inside
+  // its internal render loop and leave the map frozen — unlike Leaflet,
+  // which just skips a broken tile. Since this app already treats a
+  // wrong/guessed GEORES endpoint as an expected, recoverable case (the
+  // "unavailable" badge), a crashed globe render gets the same treatment:
+  // catch it and rebuild the map from current React state rather than
+  // leaving the workspace stuck, capped so a persistently-broken source
+  // can't loop forever.
+  useEffect(() => {
+    const onError = (event) => {
+      const fromMapLibre = event.filename?.includes('maplibre-gl') || event.error?.stack?.includes('maplibre-gl');
+      if (!fromMapLibre || recoveryAttempts.current >= 3) return;
+      recoveryAttempts.current += 1;
+      event.preventDefault();
+      markers.current.forEach(m => { try { m.remove(); } catch { /* noop */ } });
+      markers.current.clear();
+      groupMembers.current.clear();
+      boundaryLayers.current.clear();
+      wmsLayers.current.clear();
+      flowLayerRefs.current = {};
+      setMapReady(false);
+      setMapEpoch(e => e + 1);
+    };
+    window.addEventListener('error', onError);
+    return () => window.removeEventListener('error', onError);
   }, []);
+
+  // ── Auto fly-in: sphere → project, once, on initial load ─────────────
+  // The globe naturally flattens into the familiar flat view as MapLibre's
+  // globe projection crosses its own zoom-5 sphere/Mercator threshold —
+  // one continuous camera, not a separate view or a mode switch.
+  useEffect(() => {
+    if (!mapReady || !hydrated || flownToProject.current) return;
+    flownToProject.current = true;
+    const map = mapInstance.current;
+    map.flyTo({ center: [initialCenter.lng, initialCenter.lat], zoom: 13, duration: 2600, curve: 1.4 });
+  }, [mapReady, hydrated, initialCenter]);
 
   // ── Rebuild project layers when data changes ────────────────────────
   useEffect(() => {
     if (!mapReady) return;
-    const L = leaflet.current;
     const map = mapInstance.current;
-    markers.current.clear();
 
-    // Remove groups for deleted projects
-    const validKeys = new Set(store.projects.flatMap(p => [`${p.id}:chips`, `${p.id}:holes`, `${p.id}:bnd`]));
-    [...groups.current.keys()].forEach(key => {
-      if (!validKeys.has(key)) {
-        map.removeLayer(groups.current.get(key));
-        groups.current.delete(key);
+    // Remove markers/boundary for deleted projects.
+    const validPids = new Set(store.projects.map(p => p.id));
+    [...groupMembers.current.keys()].forEach(key => {
+      const pid = key.split(':')[0];
+      if (!validPids.has(pid)) {
+        groupMembers.current.get(key).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
+        groupMembers.current.delete(key);
+      }
+    });
+    [...boundaryLayers.current.keys()].forEach(pid => {
+      if (!validPids.has(pid)) {
+        const { sourceId, fillLayerId, lineLayerId } = boundaryLayers.current.get(pid);
+        if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
+        if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+        boundaryLayers.current.delete(pid);
       }
     });
 
     store.projects.forEach(p => {
-      const ensure = (key) => {
-        if (!groups.current.has(key)) groups.current.set(key, L.layerGroup().addTo(map));
-        const g = groups.current.get(key);
-        g.clearLayers();
-        return g;
-      };
-
-      const chipGroup = ensure(`${p.id}:chips`);
+      // Samples: clear this project's existing sample markers, rebuild.
+      const chipKey = `${p.id}:chips`;
+      (groupMembers.current.get(chipKey) || new Set()).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
+      const chipIds = new Set();
       p.samples.forEach(s => {
         const g = gradeOf(s, activeElement);
-        const m = L.circleMarker([s.lat, s.lng], {
-          radius: gradeRadius(g),
-          color: g === 'pending' ? '#8A857A' : '#FAF9F4',
-          weight: 2,
-          dashArray: g === 'pending' ? '2 3' : null,
-          fillColor: GRADE_COLORS[g],
-          fillOpacity: g === 'pending' ? 0.55 : 1,
-        })
-          .bindTooltip(s.id, { className: 'lx-tip', direction: 'top', offset: [0, -6] })
-          .bindPopup(samplePopupHtml(s), { className: 'mx-popup', closeButton: false, maxWidth: 260 })
-          .addTo(chipGroup);
-        markers.current.set(s.id, m);
+        const swatch = {
+          width: `${gradeRadius(g) * 2}px`, height: `${gradeRadius(g) * 2}px`, borderRadius: '50%',
+          background: GRADE_COLORS[g], opacity: g === 'pending' ? 0.55 : 1,
+          border: `2px ${g === 'pending' ? 'dashed' : 'solid'} ${g === 'pending' ? '#8A857A' : '#FAF9F4'}`,
+        };
+        const el = buildMarkerEl(swatch, s.id);
+        const marker = new mgl.current.Marker({ element: el })
+          .setLngLat([s.lng, s.lat])
+          .setPopup(new mgl.current.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '260px' }).setHTML(samplePopupHtml(s)))
+          .addTo(map);
+        markers.current.set(s.id, marker);
+        chipIds.add(s.id);
       });
+      groupMembers.current.set(chipKey, chipIds);
 
-      const holeGroup = ensure(`${p.id}:holes`);
+      // Drill collars.
+      const holeKey = `${p.id}:holes`;
+      (groupMembers.current.get(holeKey) || new Set()).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
+      const holeIds = new Set();
       p.collars.forEach(c => {
-        const icon = L.divIcon({ className: '', iconSize: [14, 14], html: '<div style="width:12px;height:12px;background:#F3F1E9;border:2px solid #211E1A;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>' });
-        const m = L.marker([c.lat, c.lng], { icon })
-          .bindTooltip(c.id, { className: 'lx-tip', direction: 'top', offset: [0, -8] })
-          .bindPopup(collarPopupHtml(c, p.intervals || [], activeElement), { className: 'mx-popup', closeButton: false, maxWidth: 260 })
-          .addTo(holeGroup);
-        markers.current.set(c.id, m);
+        const el = buildMarkerEl(
+          { width: '12px', height: '12px', background: '#F3F1E9', border: '2px solid #211E1A', boxShadow: '0 1px 4px rgba(0,0,0,0.4)' },
+          c.id,
+        );
+        const marker = new mgl.current.Marker({ element: el })
+          .setLngLat([c.lng, c.lat])
+          .setPopup(new mgl.current.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '260px' }).setHTML(collarPopupHtml(c, p.intervals || [], activeElement)))
+          .addTo(map);
+        markers.current.set(c.id, marker);
+        holeIds.add(c.id);
       });
+      groupMembers.current.set(holeKey, holeIds);
 
-      const bndGroup = ensure(`${p.id}:bnd`);
+      // Boundary polygon.
+      const existingBnd = boundaryLayers.current.get(p.id);
+      if (existingBnd) {
+        if (map.getLayer(existingBnd.fillLayerId)) map.removeLayer(existingBnd.fillLayerId);
+        if (map.getLayer(existingBnd.lineLayerId)) map.removeLayer(existingBnd.lineLayerId);
+        if (map.getSource(existingBnd.sourceId)) map.removeSource(existingBnd.sourceId);
+        boundaryLayers.current.delete(p.id);
+      }
       if (p.boundary) {
-        L.polygon(p.boundary.coords, {
-          color: '#F6F3EC', weight: 2, dashArray: '7 7', fillColor: p.color, fillOpacity: 0.06,
-        }).bindTooltip(p.boundary.name, { className: 'lx-tip', sticky: true }).addTo(bndGroup);
+        const sourceId = `bnd-src-${p.id}`;
+        const fillLayerId = `bnd-fill-${p.id}`;
+        const lineLayerId = `bnd-line-${p.id}`;
+        map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: { name: p.boundary.name },
+            geometry: { type: 'Polygon', coordinates: [p.boundary.coords.map(([lat, lng]) => [lng, lat])] },
+          },
+        });
+        map.addLayer({ id: fillLayerId, type: 'fill', source: sourceId, paint: { 'fill-color': p.color, 'fill-opacity': 0.06 } });
+        map.addLayer({ id: lineLayerId, type: 'line', source: sourceId, paint: { 'line-color': '#F6F3EC', 'line-width': 2, 'line-dasharray': [3, 3] } });
+        const bndPopup = new mgl.current.Popup({ className: 'mx-popup', closeButton: false });
+        map.on('mousemove', fillLayerId, (e) => bndPopup.setLngLat(e.lngLat).setHTML(`<div class="mx-pop-row">${esc(p.boundary.name)}</div>`).addTo(map));
+        map.on('mouseleave', fillLayerId, () => bndPopup.remove());
+        boundaryLayers.current.set(p.id, { sourceId, fillLayerId, lineLayerId });
       }
     });
   }, [store, mapReady, activeElement]);
@@ -370,141 +514,174 @@ export default function MineralXWorkspace() {
     const map = mapInstance.current;
     store.projects.forEach(p => {
       const projectHidden = hidden[`proj:${p.id}`];
-      [['chips', `chips:${p.id}`], ['holes', `holes:${p.id}`], ['bnd', `bnd:${p.id}`]].forEach(([suffix, nodeId]) => {
-        const group = groups.current.get(`${p.id}:${suffix}`);
-        if (!group) return;
+      [['chips', `chips:${p.id}`], ['holes', `holes:${p.id}`]].forEach(([suffix, nodeId]) => {
+        const ids = groupMembers.current.get(`${p.id}:${suffix}`);
+        if (!ids) return;
         const show = !projectHidden && !hidden[nodeId];
-        if (show && !map.hasLayer(group)) map.addLayer(group);
-        if (!show && map.hasLayer(group)) map.removeLayer(group);
+        ids.forEach(id => {
+          const marker = markers.current.get(id);
+          if (!marker) return;
+          const el = marker.getElement();
+          el.style.display = show ? '' : 'none';
+        });
       });
+      const bnd = boundaryLayers.current.get(p.id);
+      if (bnd) {
+        const show = !projectHidden && !hidden[`bnd:${p.id}`];
+        const vis = show ? 'visible' : 'none';
+        map.setLayoutProperty(bnd.fillLayerId, 'visibility', vis);
+        map.setLayoutProperty(bnd.lineLayerId, 'visibility', vis);
+      }
     });
   }, [hidden, store, mapReady]);
 
   // ── Public WMS layers ───────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady) return;
-    const L = leaflet.current;
     const map = mapInstance.current;
+
+    // A WMS raster whose tiles fail (a wrong/guessed endpoint, or one that
+    // doesn't send CORS headers — which MapLibre's WebGL raster path
+    // requires) must be torn out of the style, not just badged: MapLibre's
+    // globe raster renderer throws every frame on a textureless source
+    // ("reading 'bind'" inside renderLayer), which Leaflet's <img> tiles
+    // never did. Removing the failed source stops the crash and leaves the
+    // "unavailable" badge — the same graceful-degradation contract this app
+    // already gives a bad GEORES guess. Deferred to a microtask so the
+    // style isn't mutated from inside MapLibre's own render/error callback.
+    const onSourceError = (e) => {
+      if (!e.sourceId?.startsWith('wms-src-')) return;
+      const layerId = e.sourceId.replace(/^wms-src-/, '');
+      setWmsErrors(prev => (prev[layerId] ? prev : { ...prev, [layerId]: true }));
+      queueMicrotask(() => {
+        const m = mapInstance.current;
+        if (!m || !wmsLayers.current.has(layerId)) return;
+        const renderId = `wms-layer-${layerId}`;
+        if (m.getLayer(renderId)) m.removeLayer(renderId);
+        if (m.getSource(e.sourceId)) m.removeSource(e.sourceId);
+        wmsLayers.current.delete(layerId);
+      });
+    };
+    map.on('error', onSourceError);
+
     PUBLIC_DATA_CATALOG.forEach(group => group.layers.forEach(layer => {
       const on = Boolean(publicOn[layer.id]);
-      const existing = wmsLayers.current.get(layer.id);
-      if (on && !existing) {
-        const wms = L.tileLayer.wms(layer.url, {
-          layers: layer.wmsLayers,
-          format: 'image/png',
-          transparent: true,
-          opacity: publicOpacity[layer.id] ?? 0.7,
-        });
-        wms.on('tileerror', () => setWmsErrors(prev => (prev[layer.id] ? prev : { ...prev, [layer.id]: true })));
-        wms.on('tileload', () => setWmsErrors(prev => {
-          if (!prev[layer.id]) return prev;
-          const next = { ...prev };
-          delete next[layer.id];
-          return next;
-        }));
-        wms.addTo(map);
-        wmsLayers.current.set(layer.id, wms);
-      } else if (!on && existing) {
-        map.removeLayer(existing);
+      const sourceId = `wms-src-${layer.id}`;
+      const layerRenderId = `wms-layer-${layer.id}`;
+      const existing = wmsLayers.current.has(layer.id);
+      // Don't re-add a source `onSourceError` just tore out — that would
+      // reinstate the every-frame render crash. The badge stays until the
+      // user toggles the layer off (which clears it), so off→on is the retry.
+      if (on && !existing && !wmsErrors[layer.id]) {
+        map.addSource(sourceId, { type: 'raster', tiles: [wmsTileUrl(layer)], tileSize: 256, attribution: layer.attribution });
+        map.addLayer({ id: layerRenderId, type: 'raster', source: sourceId, paint: { 'raster-opacity': publicOpacity[layer.id] ?? 0.7 } });
+        wmsLayers.current.add(layer.id);
+      } else if (!on) {
+        if (map.getLayer(layerRenderId)) map.removeLayer(layerRenderId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
         wmsLayers.current.delete(layer.id);
+        if (wmsErrors[layer.id]) setWmsErrors(prev => { const next = { ...prev }; delete next[layer.id]; return next; });
       } else if (on && existing) {
-        existing.setOpacity(publicOpacity[layer.id] ?? 0.7);
+        map.setPaintProperty(layerRenderId, 'raster-opacity', publicOpacity[layer.id] ?? 0.7);
       }
     }));
-  }, [publicOn, publicOpacity, mapReady]);
+
+    return () => { map.off('error', onSourceError); };
+  }, [publicOn, publicOpacity, mapReady, wmsErrors]);
 
   // ── Terrain flow analysis: drainage, heatmap, targets, known gold ────
   // occurrences (GEORES), and their correlation — five+ sub-layers all
   // rendered from a single cached analysis of the current viewport.
 
-  // Adds/removes each sub-layer's Leaflet layer from cached results —
-  // never fetches or recomputes. Called on every toggle/opacity change.
+  // Adds/removes each sub-layer's MapLibre layer/markers from cached
+  // results — never fetches or recomputes. Called on every toggle/opacity
+  // change. Raster overlays (drainage/heatmap) live in `refs` as
+  // {sourceId, layerId}; point overlays (targets/correlated/occurrences/
+  // historic mines) live in `refs` as arrays of Marker instances.
   const syncFlowLayers = useCallback(() => {
     const map = mapInstance.current;
-    const L = leaflet.current;
+    const maplibregl = mgl.current;
     const refs = flowLayerRefs.current;
     const cache = flowCache.current;
 
-    const setLayer = (key, wantOn, factory) => {
+    const removeRasterLayer = (key) => {
+      const ref = refs[key];
+      if (!ref) return;
+      if (map.getLayer(ref.layerId)) map.removeLayer(ref.layerId);
+      if (map.getSource(ref.sourceId)) map.removeSource(ref.sourceId);
+      delete refs[key];
+    };
+    const setRasterLayer = (key, wantOn, opacity, buildCanvas, bounds) => {
       const existing = refs[key];
       if (wantOn && !existing) {
-        const layer = factory();
-        if (layer) { layer.addTo(map); refs[key] = layer; }
+        const canvas = buildCanvas();
+        const sourceId = `flow-src-${key}`;
+        const layerId = `flow-layer-${key}`;
+        map.addSource(sourceId, { type: 'image', url: canvas.toDataURL('image/png'), coordinates: imageCoordsFromBounds(bounds) });
+        map.addLayer({ id: layerId, type: 'raster', source: sourceId, paint: { 'raster-opacity': opacity } });
+        refs[key] = { sourceId, layerId };
       } else if (!wantOn && existing) {
-        map.removeLayer(existing);
-        delete refs[key];
+        removeRasterLayer(key);
+      } else if (wantOn && existing) {
+        map.setPaintProperty(existing.layerId, 'raster-opacity', opacity);
       }
     };
 
-    if (!map || !L) return;
+    const removeMarkerGroup = (key) => {
+      (refs[key] || []).forEach(m => m.remove());
+      delete refs[key];
+    };
+    const setMarkerGroup = (key, wantOn, buildMarkers) => {
+      const existing = refs[key];
+      if (wantOn && !existing) {
+        refs[key] = buildMarkers();
+      } else if (!wantOn && existing) {
+        removeMarkerGroup(key);
+      }
+    };
+
+    if (!map || !maplibregl) return;
     if (!cache) {
-      Object.keys(refs).forEach(k => { map.removeLayer(refs[k]); delete refs[k]; });
+      Object.keys(refs).forEach(k => {
+        if (Array.isArray(refs[k])) removeMarkerGroup(k); else removeRasterLayer(k);
+      });
       return;
     }
     const { grid, flow, targets, occurrencesByCommodity, historicMines } = cache;
 
-    setLayer('drainage', !!flowSubOn.drainage, () => {
-      const canvas = renderDrainageOverlay(flow, grid.w, grid.h);
-      return L.imageOverlay(canvas.toDataURL('image/png'), grid.bounds, { opacity: flowOpacity.drainage ?? 0.65 });
-    });
-    refs.drainage?.setOpacity(flowOpacity.drainage ?? 0.65);
+    setRasterLayer('drainage', !!flowSubOn.drainage, flowOpacity.drainage ?? 0.65, () => renderDrainageOverlay(flow, grid.w, grid.h), grid.bounds);
+    setRasterLayer('heatmap', !!flowSubOn.heatmap, flowOpacity.heatmap ?? 0.5, () => renderConcentrationHeatmap(flow, grid.w, grid.h), grid.bounds);
 
-    setLayer('heatmap', !!flowSubOn.heatmap, () => {
-      const canvas = renderConcentrationHeatmap(flow, grid.w, grid.h);
-      return L.imageOverlay(canvas.toDataURL('image/png'), grid.bounds, { opacity: flowOpacity.heatmap ?? 0.5 });
-    });
-    refs.heatmap?.setOpacity(flowOpacity.heatmap ?? 0.5);
+    setMarkerGroup('targets', !!flowSubOn.targets, () => targets.map(t => {
+      const s = targetStyle(t);
+      const el = buildMarkerEl({ width: `${s.radius * 2}px`, height: `${s.radius * 2}px`, borderRadius: '50%', background: s.fillColor, border: `${s.weight}px solid ${s.color}` }, targetLabel(t));
+      return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).addTo(map);
+    }));
 
-    setLayer('targets', !!flowSubOn.targets, () => {
-      const group = L.layerGroup();
-      targets.forEach(t => {
-        L.circleMarker([t.lat, t.lng], { ...targetStyle(t), fillOpacity: 0.9 })
-          .bindTooltip(targetLabel(t), { className: 'lx-tip', direction: 'top', offset: [0, -6] })
-          .addTo(group);
-      });
-      return group;
-    });
-
-    setLayer('correlated', !!flowSubOn.correlated, () => {
-      const group = L.layerGroup();
-      targets.filter(t => t.sample && t.occurrence).forEach(t => {
-        L.circleMarker([t.lat, t.lng], { radius: 13, weight: 2, color: '#FAF9F4', fillColor: 'none', fill: false, dashArray: '3 3' })
-          .bindTooltip('Highest confidence: known Gold occurrence + your own sample both drain here', { className: 'lx-tip', direction: 'top', offset: [0, -10] })
-          .addTo(group);
-      });
-      return group;
-    });
+    setMarkerGroup('correlated', !!flowSubOn.correlated, () => targets.filter(t => t.sample && t.occurrence).map(t => {
+      const el = buildMarkerEl({ width: '26px', height: '26px', borderRadius: '50%', background: 'transparent', border: '2px dashed #FAF9F4' }, 'Highest confidence: known Gold occurrence + your own sample both drain here');
+      return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).addTo(map);
+    }));
 
     Object.entries(occurrencesByCommodity || {}).forEach(([commodity, points], idx) => {
       const key = `occ:${commodity}`;
-      setLayer(key, !!flowSubOn[key], () => {
-        const group = L.layerGroup();
-        points.forEach(o => {
-          L.circleMarker([o.lat, o.lng], {
-            radius: 6, weight: 2, color: '#FAF9F4', fillColor: commodityColor(commodity, idx), fillOpacity: 0.95,
-          }).bindTooltip(`${o.name} · ${commodity}`, { className: 'lx-tip', direction: 'top', offset: [0, -6] }).addTo(group);
-        });
-        return group;
-      });
+      setMarkerGroup(key, !!flowSubOn[key], () => points.map(o => {
+        const el = buildMarkerEl({ width: '12px', height: '12px', borderRadius: '50%', background: commodityColor(commodity, idx), border: '2px solid #FAF9F4' }, `${o.name} · ${commodity}`);
+        return new maplibregl.Marker({ element: el }).setLngLat([o.lng, o.lat]).addTo(map);
+      }));
     });
 
-    setLayer('historicMines', !!flowSubOn.historicMines, () => {
-      const group = L.layerGroup();
-      (historicMines || []).forEach(m => {
-        L.circleMarker([m.lat, m.lng], {
-          radius: 6, weight: 2, color: '#FAF9F4', fillColor: '#5E6E7A', fillOpacity: 0.95,
-        }).bindTooltip(`${m.name} · ${m.mineType}`, { className: 'lx-tip', direction: 'top', offset: [0, -6] }).addTo(group);
-      });
-      return group;
-    });
+    setMarkerGroup('historicMines', !!flowSubOn.historicMines, () => (historicMines || []).map(m => {
+      const el = buildMarkerEl({ width: '12px', height: '12px', borderRadius: '50%', background: '#5E6E7A', border: '2px solid #FAF9F4' }, `${m.name} · ${m.mineType}`);
+      return new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map);
+    }));
   }, [flowSubOn, flowOpacity]);
 
   useEffect(() => { syncFlowLayers(); }, [syncFlowLayers]);
 
   const runFlowAnalysis = useCallback(async () => {
     const map = mapInstance.current;
-    const L = leaflet.current;
-    if (!map || !L) return;
+    if (!map) return;
     setFlowState(s => ({ ...s, status: 'running' }));
     try {
       const bounds = map.getBounds();
@@ -556,8 +733,10 @@ export default function MineralXWorkspace() {
 
   // ── Basemap ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapReady || !baseLayer.current) return;
-    baseLayer.current.setUrl(BASEMAP_TILES[basemap] || BASEMAP_TILES.satellite);
+    if (!mapReady) return;
+    const map = mapInstance.current;
+    const src = map.getSource('basemap');
+    if (src) src.setTiles([BASEMAP_TILES[basemap] || BASEMAP_TILES.satellite]);
   }, [basemap, mapReady]);
 
   // ── Search ──────────────────────────────────────────────────────────
@@ -587,16 +766,6 @@ export default function MineralXWorkspace() {
     <div className="mx-workspace">
       <div ref={mapRef} className="mx-map" />
 
-      {mapMode === 'globe' && (
-        <GlobeView
-          center={globeCenter}
-          boundary={activeProject?.boundary}
-          onEnterWorkspace={() => setMapMode('flat')}
-        />
-      )}
-
-      {mapMode === 'flat' && (
-      <>
       {/* TOP BAR */}
       <div className="mx-topbar">
         <button
@@ -605,13 +774,12 @@ export default function MineralXWorkspace() {
           title="Zoom to active project"
           onClick={() => {
             const map = mapInstance.current;
-            const L = leaflet.current;
-            if (!map || !L || !activeProject) return;
+            if (!map || !mgl.current || !activeProject) return;
             if (activeProject.boundary) {
-              map.fitBounds(L.latLngBounds(activeProject.boundary.coords).pad(0.25));
+              map.fitBounds(boundsOfCoords(mgl.current, activeProject.boundary.coords), { padding: 60, duration: 800 });
             } else {
               const pts = [...activeProject.samples, ...activeProject.collars].map(f => [f.lat, f.lng]);
-              if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.35));
+              if (pts.length) map.fitBounds(boundsOfCoords(mgl.current, pts), { padding: 80, duration: 800 });
             }
           }}
         >
@@ -637,8 +805,7 @@ export default function MineralXWorkspace() {
                     setProgramOpen(false);
                     if (p.boundary) {
                       const map = mapInstance.current;
-                      const L = leaflet.current;
-                      if (map && L) map.fitBounds(L.latLngBounds(p.boundary.coords).pad(0.25));
+                      if (map && mgl.current) map.fitBounds(boundsOfCoords(mgl.current, p.boundary.coords), { padding: 60, duration: 800 });
                     }
                   }}
                 >
@@ -761,7 +928,6 @@ export default function MineralXWorkspace() {
             wmsErrors={wmsErrors}
             basemap={basemap}
             setBasemap={setBasemap}
-            onOpenGlobe={() => setMapMode('globe')}
             activeElement={activeElement}
             setActiveElement={setActiveElement}
             availableElements={availableElements}
@@ -809,8 +975,6 @@ export default function MineralXWorkspace() {
         <div className="mx-dock-sep" />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4 L11 13" /><path d="M7 8 L11 4 L15 8" /><path d="M5 17 H17" /></svg>} title="Add data" active={activePanel === 'upload'} onClick={() => setActivePanel(activePanel === 'upload' ? null : 'upload')} />
       </div>
-      </>
-      )}
     </div>
   );
 }
@@ -1039,7 +1203,7 @@ function UploadPanel({ onClose, project, api }) {
 }
 
 // ── Layers panel ───────────────────────────────────────────────────────
-function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, onOpenGlobe, activeElement, setActiveElement, availableElements, flowState, flowSubOn, flowOpacity, setFlowOpacity, onToggleFlowSub, onRerunFlow, onManage, onClose }) {
+function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, flowSubOn, flowOpacity, setFlowOpacity, onToggleFlowSub, onRerunFlow, onManage, onClose }) {
   const toggleHidden = (id) => setHidden(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleExpanded = (id, dflt) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? dflt) }));
 
@@ -1265,7 +1429,6 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
           <button type="button" className={`mx-basemap-btn ${basemap === 'satellite' ? 'active' : ''}`} onClick={() => setBasemap('satellite')}>Satellite</button>
           <button type="button" className={`mx-basemap-btn ${basemap === 'topo' ? 'active' : ''}`} onClick={() => setBasemap('topo')}>Topographic</button>
         </div>
-        <button type="button" className="mx-globe-open-btn" onClick={onOpenGlobe}>View as globe</button>
       </div>
     </div>
   );
