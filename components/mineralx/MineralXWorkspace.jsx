@@ -153,6 +153,7 @@ export default function MineralXWorkspace() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const mgl = useRef(null); // the maplibre-gl module itself, once dynamically imported
+  const resizeObs = useRef(null); // ResizeObserver keeping the canvas matched to its container
   const markers = useRef(new Map());       // featureId -> maplibregl.Marker (samples + collars)
   const groupMembers = useRef(new Map());  // `${pid}:chips|holes` -> Set of feature ids currently added to the map
   const boundaryLayers = useRef(new Map()); // pid -> { sourceId, fillLayerId, lineLayerId }
@@ -370,8 +371,21 @@ export default function MineralXWorkspace() {
         if (process.env.NODE_ENV !== 'production') window.__mxMapLoaded = true;
         setTimeout(() => map.resize(), 250);
       });
+
+      // Keep the canvas matched to its container across every reflow —
+      // device rotation, browser-chrome show/hide (dvh changes), a panel
+      // opening beside the map, or a desktop window resize. Without this
+      // the WebGL canvas keeps its initial size and the globe renders into
+      // the wrong box (letterboxed or clipped) on mobile.
+      const ro = new ResizeObserver(() => map.resize());
+      ro.observe(mapRef.current);
+      resizeObs.current = ro;
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      resizeObs.current?.disconnect();
+      resizeObs.current = null;
+    };
   }, [mapEpoch]);
 
   // ── Render-crash recovery ─────────────────────────────────────────────

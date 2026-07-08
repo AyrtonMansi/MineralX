@@ -5,9 +5,13 @@
 
 const QLD_WMS = 'https://gisservices.information.qld.gov.au/arcgis/services';
 
+// Served through our own /api/basemap proxy (see app/api/basemap) rather
+// than pointed straight at Esri: MapLibre's WebGL raster path needs CORS
+// headers the arcgisonline endpoints don't reliably send, which otherwise
+// leaves the globe blank. Same-origin URLs sidestep CORS entirely.
 export const BASEMAP_TILES = {
-  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+  satellite: '/api/basemap/satellite/{z}/{x}/{y}',
+  topo: '/api/basemap/topo/{z}/{x}/{y}',
 };
 
 // Themes mirror GeoResGlobe's own official map-product categories

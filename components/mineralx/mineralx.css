@@ -28,9 +28,15 @@
 }
 
 /* ── Map ──────────────────────────────────────────────────────── */
-.mx-map {
+/* Scoped under .mx-workspace so this out-specifies maplibre-gl.css's
+   `.maplibregl-map { position: relative }` (the container carries both
+   classes). Without the higher specificity that rule wins on load order,
+   collapsing the container to height:0 and stranding MapLibre on its 300px
+   fallback canvas — i.e. a tiny/blank map. */
+.mx-workspace .mx-map {
   position: absolute;
   inset: 0;
+  height: auto; /* beat any `height` MapLibre's own class might set */
   z-index: 1;
 }
 .mx-workspace .maplibregl-map { background: #CFCABC; font-family: 'Instrument Sans', sans-serif; }
