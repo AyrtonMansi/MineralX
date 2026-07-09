@@ -2,6 +2,7 @@
   "name": "mineralx-resources",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Corporate website for MineralX Resources — Australian gold exploration and development.",
   "engines": {
     "node": "22.x"
@@ -10,7 +11,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:unit": "node --test",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:e2e"
   },
   "dependencies": {
     "framer-motion": "^11.3.19",
@@ -21,6 +25,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20.14.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

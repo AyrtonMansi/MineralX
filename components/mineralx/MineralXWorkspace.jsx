@@ -364,11 +364,16 @@ export default function MineralXWorkspace() {
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
       mapInstance.current = map;
-      if (process.env.NODE_ENV !== 'production') window.__mxDebugMap = map;
+      // Opt-in only (unset in real deploys) — exposes map internals for
+      // the e2e suite, which runs against a production build and so can't
+      // rely on NODE_ENV !== 'production' to tell it apart from a real
+      // deploy. Never enabled unless NEXT_PUBLIC_MX_DEBUG is explicitly set.
+      const debugHooks = process.env.NEXT_PUBLIC_MX_DEBUG === '1';
+      if (debugHooks) window.__mxDebugMap = map;
       map.on('load', () => {
         if (cancelled) return;
         setMapReady(true);
-        if (process.env.NODE_ENV !== 'production') window.__mxMapLoaded = true;
+        if (debugHooks) window.__mxMapLoaded = true;
         setTimeout(() => map.resize(), 250);
       });
 
