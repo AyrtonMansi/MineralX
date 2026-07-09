@@ -1,35 +1,17 @@
 // Proxies a bbox query to public historic-mines ArcGIS REST services.
 // Same rationale as app/api/mineral-occurrences/route.js: WMS <img>
 // tiles don't need CORS but vector `query` endpoints often do, so this
-// isolates the fetch server-side. Also the one place holding the exact
-// unverified upstream URL/layer index (outbound to *.qld.gov.au is
-// blocked from the dev sandbox that built this).
+// isolates the fetch server-side. The candidate URLs/layer index live in
+// lib/geores-sources.js (not here — Next's route-export type checker
+// rejects any export from a route.js beyond its recognized fields) and
+// could not be verified from the dev sandbox that built this (outbound
+// blocked to *.qld.gov.au); run `npm run verify:endpoints` from an
+// environment with real internet access to check them.
 //
 // Response shape: { source, features: [{ id, lat, lng, name, mineType }] }
 // or { error } with a non-200 status on total failure.
 
-const CANDIDATES = [
-  {
-    // QLD GeoResGlobe — abandoned mines / historic workings layer.
-    // Naming mirrors the sibling services in layer-data.js and the
-    // mineral-occurrences route. Layer index 0 is a guess.
-    source: 'qld-geores',
-    url: (bbox) =>
-      `https://gisservices.information.qld.gov.au/arcgis/rest/services/GeoscientificInformation/AbandonedMines/MapServer/0/query` +
-      `?f=geojson&outFields=*&returnGeometry=true&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&spatialRel=esriSpatialRelIntersects` +
-      `&geometry=${encodeURIComponent(bbox)}`,
-  },
-  {
-    // Geoscience Australia national historic mines dataset — broader
-    // coverage fallback if the QLD-specific service above doesn't
-    // resolve or isn't the right path/layer.
-    source: 'ga-national',
-    url: (bbox) =>
-      `https://services.ga.gov.au/gis/rest/services/HistoricMines/MapServer/0/query` +
-      `?f=geojson&outFields=*&returnGeometry=true&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&spatialRel=esriSpatialRelIntersects` +
-      `&geometry=${encodeURIComponent(bbox)}`,
-  },
-];
+import { HISTORIC_MINE_CANDIDATES as CANDIDATES } from '@/lib/geores-sources';
 
 const MAX_FEATURES = 500;
 

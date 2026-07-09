@@ -1,37 +1,18 @@
 // Proxies a bbox query to public mineral-occurrence ArcGIS REST services
 // so the browser never has to deal with ArcGIS's inconsistent CORS
 // support (WMS <img> tiles don't need CORS; vector `query` endpoints
-// often do, and frequently don't send the header). Also the one place
-// that isolates the exact upstream URL/layer index, which could not be
-// verified from the dev sandbox that built this (outbound blocked to
-// *.qld.gov.au) — see the fallback list below.
+// often do, and frequently don't send the header). The candidate
+// URLs/layer indices live in lib/geores-sources.js (not here — Next's
+// route-export type checker rejects any export from a route.js beyond
+// its recognized fields) and could not be verified from the dev sandbox
+// that built this (outbound blocked to *.qld.gov.au); run
+// `npm run verify:endpoints` from an environment with real internet
+// access to check them.
 //
 // Response shape: { source, features: [{ id, lat, lng, name, commodity }] }
 // or { error } with a non-200 status on total failure.
 
-const CANDIDATES = [
-  {
-    // QLD GeoResGlobe — Geological Survey of Queensland "Mines and
-    // Mineral Occurrences" layer. Naming mirrors the sibling services
-    // already wired up in components/mineralx/layer-data.js
-    // (GeologyDetailed, Boreholes). Layer index 0 is a guess.
-    source: 'qld-geores',
-    url: (bbox) =>
-      `https://gisservices.information.qld.gov.au/arcgis/rest/services/GeoscientificInformation/MinesAndMineralOccurrences/MapServer/0/query` +
-      `?f=geojson&outFields=*&returnGeometry=true&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&spatialRel=esriSpatialRelIntersects` +
-      `&geometry=${encodeURIComponent(bbox)}`,
-  },
-  {
-    // Geoscience Australia national mineral occurrences dataset —
-    // broader coverage fallback if the QLD-specific service above
-    // doesn't resolve or isn't the right path/layer.
-    source: 'ga-national',
-    url: (bbox) =>
-      `https://services.ga.gov.au/gis/rest/services/Minerals/MapServer/0/query` +
-      `?f=geojson&outFields=*&returnGeometry=true&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&spatialRel=esriSpatialRelIntersects` +
-      `&geometry=${encodeURIComponent(bbox)}`,
-  },
-];
+import { MINERAL_OCCURRENCE_CANDIDATES as CANDIDATES } from '@/lib/geores-sources';
 
 const MAX_FEATURES = 500;
 

@@ -14,7 +14,8 @@
     "lint": "next lint",
     "test:unit": "node --test",
     "test:e2e": "playwright test",
-    "test": "npm run test:unit && npm run test:e2e"
+    "test": "npm run test:unit && npm run test:e2e",
+    "verify:endpoints": "node scripts/verify-endpoints.mjs"
   },
   "dependencies": {
     "framer-motion": "^11.3.19",

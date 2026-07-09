@@ -1,0 +1,35 @@
+name: Verify GEORES endpoints
+
+# Every WMS layer index and vector-service URL under components/mineralx/
+# layer-data.js and app/api/{mineral-occurrences,historic-mines}/route.js
+# was a best-guess at build time (this project's dev sandbox blocks
+# outbound to *.qld.gov.au and services.ga.gov.au, so they were never
+# hit live). GitHub Actions runners have normal internet access, so this
+# is where that actually gets checked — weekly, since these are
+# third-party services QLD/GA can change without notice, and on every PR
+# that touches the endpoint lists.
+on:
+  schedule:
+    - cron: '0 3 * * 1' # Monday 03:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'components/mineralx/layer-data.js'
+      - 'app/api/mineral-occurrences/route.js'
+      - 'app/api/historic-mines/route.js'
+      - 'scripts/verify-endpoints.mjs'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Non-blocking: an upstream outage or a genuinely wrong guess
+      # shouldn't fail unrelated PRs. The job output is what to read —
+      # check it whenever this runs, especially the scheduled Monday run.
+      - name: Verify endpoints against the live services
+        run: node scripts/verify-endpoints.mjs
+        continue-on-error: true
