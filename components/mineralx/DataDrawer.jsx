@@ -20,6 +20,14 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) onClose();
   };
 
+  // Project scope: a program spans several projects, often in different
+  // countries. Default to the active project so the lists open focused, not
+  // buried under every other site's data; "All projects" widens them.
+  const [projectFilter, setProjectFilter] = useState(store.activeProjectId || 'all');
+  const scoped = (list) => (projectFilter === 'all' ? list : list.filter(x => x.project.id === projectFilter));
+  // When looking across projects, each row shows which project it's from.
+  const showProject = projectFilter === 'all' && store.projects.length > 1;
+
   const allSamples = useMemo(() =>
     store.projects.flatMap(p => p.samples.map(s => ({ ...s, project: p }))), [store]);
   const allCollars = useMemo(() =>
@@ -33,20 +41,21 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)), [store]);
 
   // 'pending' is a status filter, not just text: matches unassayed chips.
-  const samples = q
+  const samples = scoped(q
     ? allSamples.filter(s =>
         (q === 'pending' && Object.keys(s.assays || {}).length === 0) ||
         s.id.toLowerCase().includes(q) || (s.lith || '').toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q))
-    : allSamples;
-  const collars = q ? allCollars.filter(c => c.id.toLowerCase().includes(q)) : allCollars;
-  const files = q ? allFiles.filter(f => f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)) : allFiles;
-  const targets = q
+    : allSamples);
+  const collars = scoped(q ? allCollars.filter(c => c.id.toLowerCase().includes(q)) : allCollars);
+  const files = scoped(q ? allFiles.filter(f => f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)) : allFiles);
+  const targets = scoped(q
     ? allTargets.filter(t => t.id.toLowerCase().includes(q) || t.status.includes(q) || evidenceSummary(t).toLowerCase().includes(q))
-    : allTargets;
+    : allTargets);
 
   const exportCurrent = () => {
-    if (tab === 'chips') downloadText('rock_chips.csv', samplesToCsv(allSamples));
-    if (tab === 'holes') downloadText('drill_collars.csv', collarsToCsv(allCollars));
+    // Export what's in scope (the selected project, or the whole program).
+    if (tab === 'chips') downloadText('rock_chips.csv', samplesToCsv(scoped(allSamples)));
+    if (tab === 'holes') downloadText('drill_collars.csv', collarsToCsv(scoped(allCollars)));
   };
 
   // Field tasking: the shown targets (the filter doubles as a selection),
@@ -87,11 +96,22 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
 
         <div className="mx-data-controls">
           <div className="mx-manage-tabs">
-            <button type="button" className={`mx-manage-tab ${tab === 'chips' ? 'active' : ''}`} onClick={() => setTab('chips')}>Rock chips ({allSamples.length})</button>
-            <button type="button" className={`mx-manage-tab ${tab === 'holes' ? 'active' : ''}`} onClick={() => setTab('holes')}>Drill holes ({allCollars.length})</button>
-            <button type="button" className={`mx-manage-tab ${tab === 'targets' ? 'active' : ''}`} onClick={() => setTab('targets')}>Targets ({allTargets.length})</button>
-            <button type="button" className={`mx-manage-tab ${tab === 'files' ? 'active' : ''}`} onClick={() => setTab('files')}>Files ({allFiles.length})</button>
+            <button type="button" className={`mx-manage-tab ${tab === 'chips' ? 'active' : ''}`} onClick={() => setTab('chips')}>Rock chips ({scoped(allSamples).length})</button>
+            <button type="button" className={`mx-manage-tab ${tab === 'holes' ? 'active' : ''}`} onClick={() => setTab('holes')}>Drill holes ({scoped(allCollars).length})</button>
+            <button type="button" className={`mx-manage-tab ${tab === 'targets' ? 'active' : ''}`} onClick={() => setTab('targets')}>Targets ({scoped(allTargets).length})</button>
+            <button type="button" className={`mx-manage-tab ${tab === 'files' ? 'active' : ''}`} onClick={() => setTab('files')}>Files ({scoped(allFiles).length})</button>
           </div>
+          {store.projects.length > 1 && (
+            <select
+              className="mx-input mx-data-project-select"
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              title="Scope to one project or view the whole program"
+            >
+              <option value="all">All projects ({store.projects.length})</option>
+              {store.projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <input
             type="text"
             className="mx-input mx-data-filter"
@@ -116,6 +136,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                       <div className="mx-data-id">
                         {s.id}
                         {s.photo && <span className="mx-data-photo-tag" title="Has photo">photo</span>}
+                        {showProject && <ProjectBadge project={s.project} />}
                       </div>
                       <div className="mx-data-sub">{s.lith || '—'}{s.notes ? ` · ${s.notes}` : ''}</div>
                     </div>
@@ -150,7 +171,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                       <span className="mx-data-caret">{open ? MxIcons.chevronDown : MxIcons.chevronRight}</span>
                       <span className="mx-data-collar" />
                       <div className="mx-data-main">
-                        <div className="mx-data-id">{c.id}</div>
+                        <div className="mx-data-id">{c.id}{showProject && <ProjectBadge project={c.project} />}</div>
                         <div className="mx-data-sub">
                           {c.depth != null ? `${c.depth} m` : 'depth n/a'}
                           {c.azimuth != null ? ` · ${c.azimuth}°/${c.dip ?? '?'}°` : ''}
@@ -191,7 +212,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                       onKeyDown={(e) => { if (e.key === 'Enter') focusFeature(t.lat, t.lng, t.id); }}>
                       <span className="mx-data-target-dot" style={{ background: meta.color }} />
                       <div className="mx-data-main">
-                        <div className="mx-data-id">{t.id}</div>
+                        <div className="mx-data-id">{t.id}{showProject && <ProjectBadge project={t.project} />}</div>
                         <div className="mx-data-sub">{evidenceSummary(t)}{linkedSamples.length ? ` · ${linkedSamples.length} linked sample${linkedSamples.length === 1 ? '' : 's'}` : ''}</div>
                       </div>
                       <select
@@ -236,7 +257,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                 <div key={`${f.project.id}-${f.name}-${i}`} className="mx-data-row mx-data-row-static">
                   <span className="mx-data-dot" style={{ background: '#8A857A', borderRadius: 3 }} />
                   <div className="mx-data-main">
-                    <div className="mx-data-id">{f.name}</div>
+                    <div className="mx-data-id">{f.name}{showProject && <ProjectBadge project={f.project} />}</div>
                     <div className="mx-data-sub">{f.meta}{f.date ? ` · ${f.date}` : ''}</div>
                   </div>
                   <span className="mx-recent-tag">{f.category}</span>
@@ -301,6 +322,18 @@ function TargetAssess({ target, linkedSamples, api, activeElement }) {
       )}
       {assessed && <div className="mx-target-assess-done">Feeds the model hit-rate in the Layers panel.</div>}
     </div>
+  );
+}
+
+// A small project tag on a data row, so records from different projects
+// (often different countries) are distinguishable when viewing the whole
+// program at once.
+function ProjectBadge({ project }) {
+  return (
+    <span className="mx-data-project" title={project.name}>
+      <span className="mx-data-project-dot" style={{ background: project.color }} />
+      {project.name}
+    </span>
   );
 }
 

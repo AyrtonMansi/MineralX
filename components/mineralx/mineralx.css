@@ -89,6 +89,18 @@
   padding: 3px 5px; cursor: pointer; flex: none;
 }
 
+/* Project scoping in the Data drawer (multi-project programs). */
+.mx-data-project-select { margin-bottom: 8px; width: 100%; font-size: 12px; }
+.mx-data-project {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px; padding: 1px 7px 1px 5px;
+  font-size: 10px; color: #6B655B;
+  background: rgba(33,30,26,0.05); border-radius: 20px;
+  vertical-align: middle; max-width: 140px; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.mx-data-project-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+
 /* Linked-samples detail under a target row. */
 .mx-target-links { padding: 2px 0 8px 34px; }
 .mx-target-link-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 0; }
