@@ -4,7 +4,7 @@ import { MxIcons } from './MineralXIcons';
 import {
   nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
-  compressImage, today, ELEMENT_SYMBOLS, elementInfo, isProjectedCoord,
+  compressImage, today, ELEMENT_SYMBOLS, elementInfo, isProjectedCoord, crsLabel,
 } from './project-store';
 import ZonePicker from './ZonePicker';
 
@@ -202,14 +202,14 @@ function RockChipManager({ project, api, onClose }) {
     reader.readAsText(file);
   };
 
-  const confirmProjection = (zone) => {
+  const confirmProjection = (crs) => {
     if (!pendingProjection) return;
     const { text, fileName } = pendingProjection;
-    const r = parseSampleCsv(text, project.samples, project.idPrefix, zone);
+    const r = parseSampleCsv(text, project.samples, project.idPrefix, crs);
     setPendingProjection(null);
     if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
     api.addSamples(project.id, r.samples, fileName);
-    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+    setImportMsg({ error: false, text: `Reprojected from ${crsLabel(crs)} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
   };
 
   return (
@@ -325,14 +325,14 @@ function DrillHoleManager({ project, api, onClose }) {
     reader.readAsText(file);
   };
 
-  const confirmProjection = (zone) => {
+  const confirmProjection = (crs) => {
     if (!pendingProjection) return;
     const { text, fileName } = pendingProjection;
-    const r = parseCollarCsv(text, project.collars, holePrefix, zone);
+    const r = parseCollarCsv(text, project.collars, holePrefix, crs);
     setPendingProjection(null);
     if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
     api.addCollars(project.id, r.collars, fileName);
-    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+    setImportMsg({ error: false, text: `Reprojected from ${crsLabel(crs)} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
   };
 
   const importIntervals = (file) => {

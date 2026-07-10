@@ -8,7 +8,7 @@ import {
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   pushUndo, undo, redo, undoAvailable, redoAvailable,
-  nextId, targetKey, targetPrefix, targetHitRate,
+  nextId, targetKey, targetPrefix, targetHitRate, crsLabel,
 } from './project-store';
 import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
@@ -1128,19 +1128,19 @@ function UploadPanel({ onClose, project, api }) {
     reader.readAsText(file);
   }, [cat, project, api]);
 
-  const confirmProjection = useCallback((zone) => {
+  const confirmProjection = useCallback((crs) => {
     if (!pendingProjection || !project) return;
     const { text, kind, fileName } = pendingProjection;
     if (kind === 'chips') {
-      const r = parseSampleCsv(text, project.samples, project.idPrefix, zone);
+      const r = parseSampleCsv(text, project.samples, project.idPrefix, crs);
       if (r.error) { setMsg({ error: true, text: r.error }); setPendingProjection(null); return; }
       api.addSamples(project.id, r.samples, fileName);
-      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+      setMsg({ error: false, text: `Reprojected from ${crsLabel(crs)} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
     } else {
-      const r = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'), zone);
+      const r = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'), crs);
       if (r.error) { setMsg({ error: true, text: r.error }); setPendingProjection(null); return; }
       api.addCollars(project.id, r.collars, fileName);
-      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+      setMsg({ error: false, text: `Reprojected from ${crsLabel(crs)} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
     }
     setPendingProjection(null);
   }, [pendingProjection, project, api]);

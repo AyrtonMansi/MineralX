@@ -649,7 +649,9 @@
 .mx-zone-body { font-size: 12px; line-height: 1.55; color: #5F5A50; margin-bottom: 14px; }
 .mx-zone-body strong { font-family: 'IBM Plex Mono', monospace; color: #211E1A; }
 .mx-zone-select-row { margin-bottom: 14px; }
-.mx-zone-options { display: flex; gap: 6px; margin-top: 6px; }
+.mx-zone-systems { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mx-zone-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mx-zone-number { margin-top: 6px; width: 100%; }
 .mx-zone-actions { display: flex; gap: 8px; }
 
 /* ── Sample popup ─────────────────────────────────────────────── */

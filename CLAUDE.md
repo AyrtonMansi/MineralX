@@ -59,10 +59,13 @@ These are settled decisions. Do not re-litigate or "improve" them without
 being asked.
 
 1. **Never silently reproject or guess a coordinate zone.** CSV imports with
-   MGA-magnitude easting/northing (`isProjectedCoord`) must stop and return
-   `needsProjection: true`; conversion happens only after the user confirms
-   the zone in the ZonePicker. A wrong guess puts a real drill hole on the
-   wrong side of the country. Covered by unit + e2e tests — keep them.
+   projected-magnitude easting/northing (`isProjectedCoord`) must stop and
+   return `needsProjection: true`; conversion happens only after the user
+   confirms the coordinate system + zone in the ZonePicker. Supported grids
+   are worldwide (`CRS_SYSTEMS`): GDA2020 MGA for Australia and WGS84 UTM
+   north/south elsewhere — programs run in more than one country. A wrong
+   guess puts a real drill hole on the wrong side of the planet. Covered by
+   unit + e2e tests — keep them.
 2. **Persistence is localStorage, on purpose.** A cloud backend was proposed
    and explicitly declined for now. Keep `saveStore()`'s boolean return, the
    save-failed banner, and the export-staleness nudge working. Do not add a

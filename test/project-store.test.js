@@ -28,6 +28,7 @@ import {
   targetHitRate,
   bestLinkedGrade,
   targetsToCsv,
+  crsLabel,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -53,6 +54,41 @@ test('reprojectEastingNorthing: MGA Zone 55 round-trips to the expected North QL
 
 test('reprojectEastingNorthing: rejects an unsupported zone rather than silently guessing one', () => {
   assert.throws(() => reprojectEastingNorthing(445000, 7778000, 99), /Unsupported MGA zone/);
+  assert.throws(() => reprojectEastingNorthing(445000, 7778000, { system: 'mga2020', zone: 40 }), /Unsupported MGA zone/);
+  assert.throws(() => reprojectEastingNorthing(445000, 7778000, { system: 'nonsense', zone: 5 }), /Unsupported coordinate system/);
+});
+
+test('reprojectEastingNorthing: worldwide grids reproject to the right country', () => {
+  // Western Australia, MGA2020 zone 50 (zone covers ~114–120°E): a valid
+  // WA location well away from the QLD zones this app used to be limited to.
+  const wa = reprojectEastingNorthing(353000, 6597000, { system: 'mga2020', zone: 50 });
+  assert.ok(wa.lat > -32 && wa.lat < -29 && wa.lng > 114 && wa.lng < 118, `WA got ${wa.lat},${wa.lng}`);
+
+  // Ghana (Ashanti gold belt), WGS84 UTM zone 30N ~ 6.7N, 1.6W.
+  const gh = reprojectEastingNorthing(650000, 740000, { system: 'utm-north', zone: 30 });
+  assert.ok(gh.lat > 6 && gh.lat < 7.5 && gh.lng > -2.5 && gh.lng < -0.5, `Ghana got ${gh.lat},${gh.lng}`);
+
+  // Nevada (Carlin trend), WGS84 UTM zone 11N ~ 40.8N, 116.3W.
+  const nv = reprojectEastingNorthing(560000, 4517000, { system: 'utm-north', zone: 11 });
+  assert.ok(nv.lat > 40 && nv.lat < 41.5 && nv.lng > -117.5 && nv.lng < -115.5, `Nevada got ${nv.lat},${nv.lng}`);
+});
+
+test('crsLabel: reads back each supported system', () => {
+  assert.equal(crsLabel(55), 'MGA Zone 55');
+  assert.equal(crsLabel({ system: 'mga2020', zone: 50 }), 'MGA Zone 50');
+  assert.equal(crsLabel({ system: 'utm-north', zone: 30 }), 'UTM Zone 30N');
+  assert.equal(crsLabel({ system: 'utm-south', zone: 34 }), 'UTM Zone 34S');
+});
+
+test('parseSampleCsv: reprojects a non-Australian UTM file once its CRS is confirmed', () => {
+  // A Ghana rock-chip file in UTM 30N metres.
+  const csv = 'sample_id,easting,northing,au\nGH-RC-1,650000,740000,5.5\n';
+  const flagged = parseSampleCsv(csv, [], 'GH-RC-');
+  assert.equal(flagged.needsProjection, true); // never guessed
+  const done = parseSampleCsv(csv, [], 'GH-RC-', { system: 'utm-north', zone: 30 });
+  assert.equal(done.error, null);
+  assert.equal(done.samples.length, 1);
+  assert.ok(done.samples[0].lat > 6 && done.samples[0].lat < 7.5, `lat ${done.samples[0].lat}`);
 });
 
 test('gradeOf: pending when no assays at all', () => {

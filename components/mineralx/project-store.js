@@ -5,13 +5,55 @@
 
 import proj4 from 'proj4';
 
-// GDA2020 MGA zones covering Queensland (54/55/56). Definitions per the
-// standard EPSG registry; used only after a human confirms the zone —
-// see isProjectedCoord()/reprojectEastingNorthing() below.
-proj4.defs('EPSG:28354', '+proj=utm +zone=54 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
-proj4.defs('EPSG:28355', '+proj=utm +zone=55 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
-proj4.defs('EPSG:28356', '+proj=utm +zone=56 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
-const MGA_ZONE_EPSG = { 54: 'EPSG:28354', 55: 'EPSG:28355', 56: 'EPSG:28356' };
+// Projected-coordinate support is worldwide, because a real exploration
+// group runs projects in different countries. A file's grid can't be
+// inferred from the numbers alone (an easting/northing doesn't encode its
+// zone or hemisphere), so the user always confirms the CRS in the
+// ZonePicker — this app never guesses one (hard rule #1).
+//
+// A CRS is either a bare MGA zone number (legacy/Australia default) or a
+// descriptor { system, zone }:
+//   - 'mga2020'   GDA2020 MGA, Australia, zones 49–56 (EPSG:283xx)
+//   - 'utm-south' WGS84 UTM, southern hemisphere, zones 1–60
+//   - 'utm-north' WGS84 UTM, northern hemisphere, zones 1–60
+export const MGA_ZONES = [49, 50, 51, 52, 53, 54, 55, 56];
+export const UTM_ZONES = Array.from({ length: 60 }, (_, i) => i + 1);
+export const CRS_SYSTEMS = [
+  { id: 'mga2020', label: 'Australia · GDA2020 MGA', zones: MGA_ZONES, defaultZone: 55 },
+  { id: 'utm-south', label: 'UTM · Southern hemisphere', zones: UTM_ZONES, defaultZone: 50 },
+  { id: 'utm-north', label: 'UTM · Northern hemisphere', zones: UTM_ZONES, defaultZone: 30 },
+];
+
+const normaliseCrs = (crs) => (typeof crs === 'number' ? { system: 'mga2020', zone: crs } : (crs || {}));
+
+// The proj4 source-CRS string for a confirmed grid. GRS80/GDA2020 for MGA
+// (matches the Australian national datum); plain WGS84 for UTM elsewhere.
+function crsToProjString(crs) {
+  const { system, zone } = normaliseCrs(crs);
+  if (!Number.isInteger(zone) || zone < 1 || zone > 60) {
+    throw new Error(`Unsupported ${system === 'mga2020' ? 'MGA' : 'UTM'} zone: ${zone}`);
+  }
+  switch (system) {
+    case 'mga2020':
+      if (zone < 46 || zone > 56) throw new Error(`Unsupported MGA zone: ${zone}`);
+      return `+proj=utm +zone=${zone} +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
+    case 'utm-south':
+      return `+proj=utm +zone=${zone} +south +datum=WGS84 +units=m +no_defs`;
+    case 'utm-north':
+      return `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs`;
+    default:
+      throw new Error(`Unsupported coordinate system: ${system}`);
+  }
+}
+
+// Human label for a confirmed CRS, used in import-result messages.
+export function crsLabel(crs) {
+  const { system, zone } = normaliseCrs(crs);
+  if (system === 'mga2020') return `MGA Zone ${zone}`;
+  if (system === 'utm-north') return `UTM Zone ${zone}N`;
+  if (system === 'utm-south') return `UTM Zone ${zone}S`;
+  return 'the selected grid';
+}
 
 // A decimal-degree lat is always -90..90, lng -180..180 — an MGA/UTM
 // easting (~100,000-900,000) or northing (~1,000,000-10,000,000) is off
@@ -21,12 +63,10 @@ export function isProjectedCoord(lat, lng) {
   return Math.abs(lat) > 90 || Math.abs(lng) > 180;
 }
 
-// Converts a GDA2020 MGA easting/northing to WGS84 lon/lat. Only ever
-// called after a human has confirmed the zone — never guessed silently.
-export function reprojectEastingNorthing(easting, northing, zone) {
-  const epsg = MGA_ZONE_EPSG[zone];
-  if (!epsg) throw new Error(`Unsupported MGA zone: ${zone}`);
-  const [lng, lat] = proj4(epsg, 'WGS84', [easting, northing]);
+// Converts a projected easting/northing to WGS84 lon/lat under a confirmed
+// CRS. Only ever called after a human has confirmed it — never guessed.
+export function reprojectEastingNorthing(easting, northing, crs) {
+  const [lng, lat] = proj4(crsToProjString(crs), 'WGS84', [easting, northing]);
   return { lat, lng };
 }
 
@@ -374,7 +414,7 @@ function readAssays(cells, elementCols) {
 // such row and returns `needsProjection: true` for the caller to show
 // a zone-picker; with `zone` set (only after the user has confirmed
 // it), it reprojects every row to WGS84 before building samples.
-export function parseSampleCsv(text, existing, prefix, zone) {
+export function parseSampleCsv(text, existing, prefix, crs) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { samples: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
@@ -403,8 +443,8 @@ export function parseSampleCsv(text, existing, prefix, zone) {
     }
 
     let lat = rawLat, lng = rawLng;
-    if (zone) {
-      ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, zone));
+    if (crs) {
+      ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, crs));
     } else if (isProjectedCoord(rawLat, rawLng)) {
       return { samples: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
     }
@@ -433,7 +473,7 @@ export function parseSampleCsv(text, existing, prefix, zone) {
 // azimuth/azi, dip, depth/eoh. Same projected-coordinate handling as
 // parseSampleCsv (see its comment): refuses to silently mis-place MGA
 // easting/northing without a confirmed `zone`.
-export function parseCollarCsv(text, existing, prefix, zone) {
+export function parseCollarCsv(text, existing, prefix, crs) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { collars: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
@@ -458,8 +498,8 @@ export function parseCollarCsv(text, existing, prefix, zone) {
     }
 
     let lat = rawLat, lng = rawLng;
-    if (zone) {
-      ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, zone));
+    if (crs) {
+      ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, crs));
     } else if (isProjectedCoord(rawLat, rawLng)) {
       return { collars: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
     }
