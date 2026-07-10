@@ -201,6 +201,25 @@ export function nextId(items, prefix) {
   return `${prefix}${String(max + 1).padStart(4, '0')}`;
 }
 
+// ── Validation ─────────────────────────────────────────────────────────
+// Post-parse guards. isProjectedCoord() catches MGA-magnitude values
+// before they're misread as degrees; this catches everything else that
+// would put a marker at a nonsense location (NaN, out-of-range after a
+// wrong-zone reprojection of garbage input).
+export function validateCoordinates(lat, lng) {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return false;
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return false;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+  return true;
+}
+
+// Negative assay values are lab below-detection-limit markers (e.g.
+// "-0.01" meaning <0.01), not grades — treat them as absent rather than
+// plotting a nonsense negative grade.
+export function validateAssayValue(value) {
+  return typeof value === 'number' && !Number.isNaN(value) && value >= 0;
+}
+
 // ── CSV ────────────────────────────────────────────────────────────────
 function splitCsv(text) {
   return text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(',').map(c => c.trim()));
@@ -246,7 +265,7 @@ function readAssays(cells, elementCols) {
   const assays = {};
   elementCols.forEach(({ index, element }) => {
     const v = parseFloat(cells[index]);
-    if (!Number.isNaN(v)) assays[element] = v;
+    if (validateAssayValue(v)) assays[element] = v;
   });
   return assays;
 }
@@ -275,17 +294,30 @@ export function parseSampleCsv(text, existing, prefix, zone) {
 
   const out = [];
   let pool = existing;
+  // Row problems are collected per-row (with the row number) instead of
+  // being silently skipped — surfaced as `warnings` so a mostly-good file
+  // still imports while the user learns exactly which rows didn't.
+  // `error` stays fatal-only: callers treat it as "nothing imported".
+  const rowErrors = [];
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
     const rawLat = parseFloat(cells[iLat]);
     const rawLng = parseFloat(cells[iLng]);
-    if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) continue;
+    if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) {
+      rowErrors.push(`row ${r + 1}: invalid coordinates`);
+      continue;
+    }
 
     let lat = rawLat, lng = rawLng;
     if (zone) {
       ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, zone));
     } else if (isProjectedCoord(rawLat, rawLng)) {
       return { samples: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
+    }
+
+    if (!validateCoordinates(lat, lng)) {
+      rowErrors.push(`row ${r + 1}: coordinates out of range`);
+      continue;
     }
 
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
@@ -299,8 +331,8 @@ export function parseSampleCsv(text, existing, prefix, zone) {
     out.push(sample);
     pool = [...pool, sample];
   }
-  if (!out.length) return { samples: [], error: 'No rows with valid coordinates found.' };
-  return { samples: out, error: null };
+  if (!out.length) return { samples: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No rows with valid coordinates found.' };
+  return { samples: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
 }
 
 // Drill collar CSV → collars. hole_id/id, lat/northing, lng/easting,
@@ -321,11 +353,15 @@ export function parseCollarCsv(text, existing, prefix, zone) {
 
   const out = [];
   let pool = existing;
+  const rowErrors = []; // same per-row collection contract as parseSampleCsv
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
     const rawLat = parseFloat(cells[iLat]);
     const rawLng = parseFloat(cells[iLng]);
-    if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) continue;
+    if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) {
+      rowErrors.push(`row ${r + 1}: invalid coordinates`);
+      continue;
+    }
 
     let lat = rawLat, lng = rawLng;
     if (zone) {
@@ -334,14 +370,19 @@ export function parseCollarCsv(text, existing, prefix, zone) {
       return { collars: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
     }
 
+    if (!validateCoordinates(lat, lng)) {
+      rowErrors.push(`row ${r + 1}: coordinates out of range`);
+      continue;
+    }
+
     const num = (i) => { const v = i >= 0 ? parseFloat(cells[i]) : NaN; return Number.isNaN(v) ? null : v; };
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
     const collar = { id, lat, lng, azimuth: num(iAzi), dip: num(iDip), depth: num(iDepth), date: today() };
     out.push(collar);
     pool = [...pool, collar];
   }
-  if (!out.length) return { collars: [], error: 'No rows with valid coordinates found.' };
-  return { collars: out, error: null };
+  if (!out.length) return { collars: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No rows with valid coordinates found.' };
+  return { collars: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
 }
 
 // Assay CSV → links lab results to existing samples by ID. Any element
@@ -386,15 +427,19 @@ export function parseIntervalCsv(text) {
   const elementCols = detectElementColumns(rows[0]);
   if (iHole < 0 || iFrom < 0 || iTo < 0) return { intervals: [], error: 'Interval CSV needs hole_id, from and to columns.' };
   const out = [];
+  const rowErrors = []; // same per-row collection contract as parseSampleCsv
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
     const from = parseFloat(cells[iFrom]);
     const to = parseFloat(cells[iTo]);
-    if (!cells[iHole] || Number.isNaN(from) || Number.isNaN(to)) continue;
+    if (!cells[iHole] || Number.isNaN(from) || Number.isNaN(to) || from > to) {
+      rowErrors.push(`row ${r + 1}: invalid interval`);
+      continue;
+    }
     out.push({ holeId: cells[iHole], from, to, assays: readAssays(cells, elementCols) });
   }
-  if (!out.length) return { intervals: [], error: 'No valid interval rows found.' };
-  return { intervals: out, error: null };
+  if (!out.length) return { intervals: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No valid interval rows found.' };
+  return { intervals: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
 }
 
 export function samplesToCsv(samples) {
@@ -479,4 +524,51 @@ export function compressImage(file, maxDim = 800, quality = 0.7) {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
     img.src = url;
   });
+}
+
+// ── Undo / redo ────────────────────────────────────────────────────────
+// Snapshot-based history over the whole store. Module-level state is
+// fine here because the store itself is a singleton (one workspace per
+// page). Snapshots are deep clones — the store is plain JSON data and
+// small enough (localStorage-scale) that cloning per mutation is cheap.
+//
+// Contract: callers push a snapshot BEFORE mutating; undo(current) and
+// redo(current) both take the caller's current state so the opposite
+// stack always receives the state being navigated away from — the part
+// a naive implementation gets wrong, corrupting history on the first
+// undo→redo→undo round trip.
+let undoStack = [];
+let redoStack = [];
+const MAX_UNDO = 20;
+const cloneStore = (s) => JSON.parse(JSON.stringify(s));
+
+export function pushUndo(state) {
+  undoStack.push(cloneStore(state));
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack = []; // a new action invalidates the redo branch
+}
+
+export function undo(currentState) {
+  if (!undoStack.length) return null;
+  redoStack.push(cloneStore(currentState));
+  return undoStack.pop();
+}
+
+export function redo(currentState) {
+  if (!redoStack.length) return null;
+  undoStack.push(cloneStore(currentState));
+  return redoStack.pop();
+}
+
+export function undoAvailable() {
+  return undoStack.length > 0;
+}
+
+export function redoAvailable() {
+  return redoStack.length > 0;
+}
+
+export function clearUndo() {
+  undoStack = [];
+  redoStack = [];
 }

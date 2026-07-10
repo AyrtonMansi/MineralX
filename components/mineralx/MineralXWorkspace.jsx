@@ -7,11 +7,13 @@ import {
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  pushUndo, undo, redo, undoAvailable, redoAvailable,
 } from './project-store';
 import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
 import DataDrawer from './DataDrawer';
 import ZonePicker from './ZonePicker';
+import ExtractPanel from './ExtractPanel';
 import {
   wmsTileUrl, buildMarkerEl, boundsOfCoords,
   gradeRadius, esc, samplePopupHtml, collarPopupHtml,
@@ -137,15 +139,21 @@ export default function MineralXWorkspace() {
     }
   }, []);
 
+  // Every data mutation snapshots the store first (pushUndo) so the
+  // change is reversible with Ctrl/Cmd+Z — field data entered on a phone
+  // with a fat-fingered delete is otherwise gone for good. Read-only
+  // operations (focusOn, exportProject) don't snapshot.
   const api = useMemo(() => ({
     focusOn,
     addSamples: (pid, samples, fileName) => {
+      pushUndo(store);
       updateProject(pid, p => ({ ...p, samples: [...p.samples, ...samples] }));
       if (fileName) addFile(pid, fileName, 'Rock chips', `${samples.length} samples`);
       const last = samples[samples.length - 1];
       if (last) focusOn(last.lat, last.lng);
     },
     addCollars: (pid, collars, fileName) => {
+      pushUndo(store);
       updateProject(pid, p => ({ ...p, collars: [...p.collars, ...collars] }));
       if (fileName) addFile(pid, fileName, 'Drill collars', `${collars.length} collars`);
       const last = collars[collars.length - 1];
@@ -155,41 +163,56 @@ export default function MineralXWorkspace() {
       const project = store.projects.find(p => p.id === pid);
       const result = parseAssayCsv(text, project.samples);
       if (!result.error && result.updated) {
+        pushUndo(store);
         updateProject(pid, p => ({ ...p, samples: result.updated }));
         if (fileName) addFile(pid, fileName, 'Assays', `${result.matched} results linked`);
       }
       return result;
     },
     addIntervals: (pid, intervals, fileName) => {
+      pushUndo(store);
       updateProject(pid, p => ({ ...p, intervals: [...(p.intervals || []), ...intervals] }));
       if (fileName) addFile(pid, fileName, 'Drill assays', `${intervals.length} intervals`);
     },
     setBoundary: (pid, name, coords, fileName) => {
+      pushUndo(store);
       updateProject(pid, p => ({ ...p, boundary: { name, coords } }));
       if (fileName) addFile(pid, fileName, 'KML', '1 boundary polygon');
       const map = mapInstance.current;
       if (map && mgl.current) map.fitBounds(boundsOfCoords(mgl.current, coords), { padding: 60, duration: 800 });
     },
     attachPhoto: (pid, sampleId, dataUrl) => {
+      pushUndo(store);
       updateProject(pid, p => ({
         ...p,
         samples: p.samples.map(s => (s.id === sampleId ? { ...s, photo: dataUrl } : s)),
       }));
     },
-    deleteSample: (pid, id) => updateProject(pid, p => ({ ...p, samples: p.samples.filter(s => s.id !== id) })),
-    deleteCollar: (pid, id) => updateProject(pid, p => ({
-      ...p,
-      collars: p.collars.filter(c => c.id !== id),
-      intervals: (p.intervals || []).filter(i => i.holeId !== id),
-    })),
-    renameProject: (pid, name) => updateProject(pid, p => ({ ...p, name })),
+    deleteSample: (pid, id) => {
+      pushUndo(store);
+      updateProject(pid, p => ({ ...p, samples: p.samples.filter(s => s.id !== id) }));
+    },
+    deleteCollar: (pid, id) => {
+      pushUndo(store);
+      updateProject(pid, p => ({
+        ...p,
+        collars: p.collars.filter(c => c.id !== id),
+        intervals: (p.intervals || []).filter(i => i.holeId !== id),
+      }));
+    },
+    renameProject: (pid, name) => {
+      pushUndo(store);
+      updateProject(pid, p => ({ ...p, name }));
+    },
     deleteProject: (pid) => {
+      pushUndo(store);
       setStore(prev => {
         const projects = prev.projects.filter(p => p.id !== pid);
         return { ...prev, projects, activeProjectId: projects[0]?.id || null };
       });
     },
     createProject: (name, kmlText) => {
+      pushUndo(store);
       const id = `proj-${Date.now()}`;
       let boundary = null;
       let boundaryError = null;
@@ -225,7 +248,40 @@ export default function MineralXWorkspace() {
       setLastExportAt(Date.now());
       setStaleDismissed(false);
     },
-  }), [store.projects, updateProject, addFile, focusOn]);
+    // `store` (not `store.projects`) in deps: pushUndo snapshots the whole
+    // store, so a stale closure would capture an out-of-date activeProjectId.
+  }), [store, updateProject, addFile, focusOn]);
+
+  // Undo/redo: keyboard (Ctrl/Cmd+Z, +Shift for redo) and topbar buttons.
+  // The guard skips editable targets so native text-field undo keeps
+  // working — hijacking Ctrl+Z inside the search box or a form input
+  // would revert map data while the user thinks they're editing text.
+  const doUndo = useCallback(() => {
+    const prev = undo(store);
+    if (prev) setStore(prev);
+  }, [store]);
+  const doRedo = useCallback(() => {
+    const next = redo(store);
+    if (next) setStore(next);
+  }, [store]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      if (e.shiftKey) doRedo(); else doUndo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [doUndo, doRedo]);
+
+  // Reading module-level stack state during render is safe here: every
+  // stack change (pushUndo in api, undo/redo above) is paired with a
+  // setStore, so a re-render always follows.
+  const canUndo = undoAvailable();
+  const canRedo = redoAvailable();
 
   // ── MapLibre bootstrap: globe projection, whole-Earth start, no data ──
   // layers yet — the auto fly-in to the active project happens in a
@@ -600,6 +656,20 @@ export default function MineralXWorkspace() {
             </div>
           )}
         </div>
+        <div className="mx-undo-group">
+          <button
+            type="button" className="mx-undo-btn" title="Undo (Ctrl+Z)"
+            disabled={!canUndo} onClick={doUndo}
+          >
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4 L3 8 L7 12" /><path d="M3 8 H12 a5 5 0 0 1 0 10 H8" /></svg>
+          </button>
+          <button
+            type="button" className="mx-undo-btn" title="Redo (Ctrl+Shift+Z)"
+            disabled={!canRedo} onClick={doRedo}
+          >
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 4 L17 8 L13 12" /><path d="M17 8 H8 a5 5 0 0 0 0 10 H12" /></svg>
+          </button>
+        </div>
         <div style={{ flex: 1 }} />
         <div className="mx-topbar-search">
           <div className="mx-diamond mx-diamond-sm" />
@@ -645,6 +715,7 @@ export default function MineralXWorkspace() {
                 onClick={() => {
                   setUserMenuOpen(false);
                   if (window.confirm('Reset to demo data? This clears all projects on this device.')) {
+                    pushUndo(store); // an accidental reset is the most valuable thing to undo
                     const fresh = createDemoStore();
                     setStore(fresh);
                     saveStore(fresh);
@@ -828,6 +899,7 @@ function UploadPanel({ onClose, project, api }) {
   const [cat, setCat] = useState('Auto');
   const [msg, setMsg] = useState(null);
   const [pendingProjection, setPendingProjection] = useState(null); // {text, kind, fileName, easting, northing}
+  const [extractOpen, setExtractOpen] = useState(false); // AI report-text extraction flow
   const fileInput = useRef(null);
 
   const accept = cat === 'KML' ? '.kml' : cat === 'Photos' ? 'image/*' : cat === 'Auto' ? '.csv,text/csv,.kml,image/*' : '.csv,text/csv';
@@ -872,14 +944,14 @@ function UploadPanel({ onClose, project, api }) {
           if (r.needsProjection) return setPendingProjection({ text, kind: 'chips', fileName: file.name, easting: r.easting, northing: r.northing });
           if (r.error) return setMsg({ error: true, text: r.error });
           api.addSamples(project.id, r.samples, file.name);
-          setMsg({ error: false, text: `${detected('chips')}imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
+          setMsg({ error: false, text: `${detected('chips')}imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
         },
         collars: () => {
           const r = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'));
           if (r.needsProjection) return setPendingProjection({ text, kind: 'collars', fileName: file.name, easting: r.easting, northing: r.northing });
           if (r.error) return setMsg({ error: true, text: r.error });
           api.addCollars(project.id, r.collars, file.name);
-          setMsg({ error: false, text: `${detected('collars')}imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
+          setMsg({ error: false, text: `${detected('collars')}imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
         },
         assays: () => {
           const r = api.applyAssays(project.id, text, file.name);
@@ -920,12 +992,12 @@ function UploadPanel({ onClose, project, api }) {
       const r = parseSampleCsv(text, project.samples, project.idPrefix, zone);
       if (r.error) { setMsg({ error: true, text: r.error }); setPendingProjection(null); return; }
       api.addSamples(project.id, r.samples, fileName);
-      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
+      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
     } else {
       const r = parseCollarCsv(text, project.collars, project.idPrefix.replace('-RC-', '-DD-'), zone);
       if (r.error) { setMsg({ error: true, text: r.error }); setPendingProjection(null); return; }
       api.addCollars(project.id, r.collars, fileName);
-      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
+      setMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
     }
     setPendingProjection(null);
   }, [pendingProjection, project, api]);
@@ -938,6 +1010,8 @@ function UploadPanel({ onClose, project, api }) {
       </div>
       {pendingProjection ? (
         <ZonePicker easting={pendingProjection.easting} northing={pendingProjection.northing} onConfirm={confirmProjection} onCancel={() => setPendingProjection(null)} />
+      ) : extractOpen ? (
+        <ExtractPanel project={project} api={api} onBack={() => setExtractOpen(false)} />
       ) : (
         <div className="mx-upload-zone">
           <div
@@ -958,6 +1032,9 @@ function UploadPanel({ onClose, project, api }) {
               <button key={c} type="button" className={`mx-cat-chip ${cat === c ? 'active' : ''}`} onClick={() => { setCat(c); setMsg(null); }}>{c}</button>
             ))}
           </div>
+          <button type="button" className="mx-extract-open" onClick={() => setExtractOpen(true)}>
+            &#10022; Extract from report text (AI)
+          </button>
         </div>
       )}
       <div className="mx-recent-section">

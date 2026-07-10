@@ -78,12 +78,48 @@ The contact form is backend-free: it composes an email to
 `info@mineral-x.com.au` via the visitor's mail client. Wire it to a form
 service or API route if server-side handling is required later.
 
+## Field-geology workspace (`/mineralx`)
+
+The same project also hosts an internal field-geology workspace at
+[`/mineralx`](app/mineralx) — a MapLibre GL globe map for managing rock-chip
+samples, drill holes, tenement boundaries, Queensland government
+(GeoResGlobe) reference layers, and a terrain-hydrology targeting model.
+It is noindex-only and stores all project data in the browser
+(localStorage) by design; CSV export is the backup path.
+
+Notable behaviours:
+
+- **Coordinate safety** — CSV imports with MGA-magnitude easting/northing
+  pause for explicit zone confirmation before any reprojection.
+- **Undo/redo** — every data mutation (add/edit/delete/import) is
+  snapshotted; Ctrl+Z / Ctrl+Shift+Z or the topbar buttons walk history.
+- **AI extraction** — the Add-data panel can send pasted report text to
+  `/api/extract`, which uses the Claude API to read samples, collars and
+  intervals out of unstructured text for review before import. This
+  requires an `ANTHROPIC_API_KEY` environment variable on the deployment;
+  without it the endpoint returns an honest 503 and the panel explains
+  the feature is not configured. Extracted rows with projected
+  (easting/northing) coordinates are never auto-converted — they are
+  listed as skipped, to be imported via CSV with zone confirmation.
+
+Workspace testing:
+
+```bash
+npm run test:unit        # node --test — store/coordinate logic
+npm run test:e2e         # Playwright against a production build
+npm run verify:endpoints # checks GeoResGlobe/GA service URLs live
+```
+
+See [CLAUDE.md](CLAUDE.md) for the full conventions and hard rules.
+
 ## Deploying to Vercel
 
 1. Push this repository to GitHub.
 2. Import the project in [Vercel](https://vercel.com/new) — framework is
    auto-detected (Next.js); no extra configuration required.
 3. Add the `mineral-x.com.au` domain in the Vercel project settings.
+4. Optionally set `ANTHROPIC_API_KEY` in the project's environment
+   variables to enable AI extraction in the workspace.
 
 ## License
 

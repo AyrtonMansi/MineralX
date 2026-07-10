@@ -125,7 +125,7 @@ function ProjectManager({ project, api, onClose }) {
         <button
           type="button" className="mx-btn-danger mx-btn-sm"
           onClick={() => {
-            if (window.confirm(`Delete “${project.name}” and all its data? This cannot be undone.`)) {
+            if (window.confirm(`Delete “${project.name}” and all its data? (Undo with Ctrl+Z if you change your mind.)`)) {
               api.deleteProject(project.id);
               onClose();
             }

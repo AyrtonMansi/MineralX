@@ -75,9 +75,17 @@ being asked.
    resets user state — don't, without a migration.
 6. **No invented geology.** No made-up resources, reserves, ounces, grades,
    partners or staff anywhere — site copy or workspace demo data (see the
-   header of `lib/content.ts`).
+   header of `lib/content.ts`). This extends to `/api/extract`: when
+   `ANTHROPIC_API_KEY` is absent it returns a 503 with `notConfigured` —
+   never a mocked extraction — and extracted rows with projected
+   coordinates go to `skipped[]`, never auto-reprojected (rule 1 applies).
 7. **Do not create pull requests unless explicitly asked.** Commit and push
    to the designated working branch.
+8. **Every store mutation snapshots first.** All `api.*` mutations in
+   `MineralXWorkspace.jsx` call `pushUndo(store)` before applying; Ctrl+Z /
+   Ctrl+Shift+Z and the topbar buttons walk the history (capped at 20).
+   A new mutation path without a snapshot silently breaks undo — the
+   delete-confirm dialogs now promise "Undo with Ctrl+Z", so keep it true.
 
 ## MapLibre: lessons already paid for
 

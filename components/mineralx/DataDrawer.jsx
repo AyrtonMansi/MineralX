@@ -96,7 +96,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                       type="button" className="mx-data-delete" title="Delete sample"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm(`Delete ${s.id}? This cannot be undone.`)) api.deleteSample(s.project.id, s.id);
+                        if (window.confirm(`Delete ${s.id}? (Undo with Ctrl+Z if you change your mind.)`)) api.deleteSample(s.project.id, s.id);
                       }}
                     >{MxIcons.trash}</button>
                   </div>
@@ -134,7 +134,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                         type="button" className="mx-data-delete" title="Delete hole"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`Delete ${c.id} and its intervals? This cannot be undone.`)) api.deleteCollar(c.project.id, c.id);
+                          if (window.confirm(`Delete ${c.id} and its intervals? (Undo with Ctrl+Z if you change your mind.)`)) api.deleteCollar(c.project.id, c.id);
                         }}
                       >{MxIcons.trash}</button>
                     </div>
