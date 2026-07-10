@@ -101,6 +101,27 @@
 }
 .mx-target-unlink:hover { background: rgba(139,58,58,0.08); }
 
+/* Target assessment: predicted evidence vs actual grade, close-the-loop. */
+.mx-target-assess { margin-top: 6px; padding-top: 8px; border-top: 1px solid rgba(33,30,26,0.08); }
+.mx-target-assess-line { display: flex; align-items: baseline; gap: 8px; }
+.mx-target-assess-label { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; color: #8A857A; text-transform: uppercase; }
+.mx-target-assess-val { font-size: 12px; color: #4A4640; }
+.mx-target-assess-pending { color: #8A857A; font-style: italic; }
+.mx-target-assess-actions { display: flex; gap: 6px; margin-top: 6px; }
+.mx-assess-btn {
+  font-size: 11px; padding: 4px 12px; cursor: pointer;
+  background: #F3F1E9; color: #4A4640;
+  border: 1px solid rgba(33,30,26,0.18); border-radius: 7px;
+}
+.mx-assess-btn:hover { border-color: rgba(33,30,26,0.4); }
+.mx-assess-confirmed { background: #C15F3C; color: #FAF9F4; border-color: #C15F3C; }
+.mx-assess-barren { background: #8A857A; color: #FAF9F4; border-color: #8A857A; }
+.mx-target-assess-done { font-size: 10.5px; color: #8A857A; margin-top: 5px; }
+
+/* Model hit-rate note in the Target Analysis group. */
+.mx-hitrate { border-left: 2px solid #6E7A5E; padding-left: 8px; }
+.mx-hitrate strong { color: #4A5540; }
+
 /* ── Top bar ──────────────────────────────────────────────────── */
 .mx-topbar {
   position: absolute;

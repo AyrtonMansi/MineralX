@@ -101,6 +101,17 @@ Notable behaviours:
   the feature is not configured. Extracted rows with projected
   (easting/northing) coordinates are never auto-converted — they are
   listed as skipped, to be imported via CSV with zone confirmation.
+- **Exploration targeting cycle** — the terrain analysis proposes scored
+  drainage-trap candidates; a geologist promotes the good ones into a
+  persistent, ranked **Targets** worklist (the diamond dock icon). Each
+  target carries a frozen evidence snapshot and moves through a status
+  pipeline (proposed → planned → visited → sampled → confirmed/barren).
+  Dismissed candidates are remembered so a re-run never resurfaces them.
+  Targets export as GPX/CSV waypoints for a handheld GPS; a rock chip
+  taken within 100 m of a target auto-links and advances it; and once a
+  linked sample is assayed, one-click confirmed/barren feeds an honest
+  model hit-rate shown in the Layers panel — all computed from the
+  program's own records, never seeded.
 
 Workspace testing:
 

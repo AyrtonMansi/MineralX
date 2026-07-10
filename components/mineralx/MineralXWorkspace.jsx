@@ -8,7 +8,7 @@ import {
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   pushUndo, undo, redo, undoAvailable, redoAvailable,
-  nextId, targetKey, targetPrefix,
+  nextId, targetKey, targetPrefix, targetHitRate,
 } from './project-store';
 import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
@@ -1364,6 +1364,19 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
                 Heuristic terrain model: field-check targets.
               </div>
             )}
+
+            {/* Model calibration: real hit-rate from the user's own assessed */}
+            {/* targets — closes the exploration loop. Never a seeded number. */}
+            {(() => {
+              const hr = targetHitRate(store);
+              if (!hr.assessed) return null;
+              return (
+                <div className="mx-flow-note mx-hitrate">
+                  Model calibration · {hr.assessed} target{hr.assessed === 1 ? '' : 's'} assessed:
+                  {' '}<strong>{hr.confirmed} confirmed</strong>, {hr.barren} barren
+                </div>
+              );
+            })()}
           </>
         )}
 

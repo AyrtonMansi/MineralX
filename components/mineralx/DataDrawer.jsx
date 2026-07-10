@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText, TARGET_STATUSES } from './project-store';
+import { gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText, TARGET_STATUSES, bestLinkedGrade } from './project-store';
 import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
 import { orderTargetsForField, targetsToGpx, targetsToWaypointCsv } from './target-tasking';
 import { MxIcons } from './MineralXIcons';
@@ -220,6 +220,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                               onClick={(e) => { e.stopPropagation(); api.unlinkSample(t.project.id, t.id, s.id); }}>unlink</button>
                           </div>
                         ))}
+                        <TargetAssess target={t} linkedSamples={linkedSamples} api={api} activeElement={activeElement} />
                       </div>
                     )}
                   </div>
@@ -263,6 +264,42 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Assessment for one target: put the frozen evidence that generated it
+// next to the actual grade its linked samples returned, and let the
+// geologist close the loop with one click. The verdict is theirs — the
+// panel only surfaces the number to decide on.
+function TargetAssess({ target, linkedSamples, api, activeElement }) {
+  const element = target.provenance?.element || activeElement;
+  const best = bestLinkedGrade(linkedSamples, element);
+  const t = elementInfo(element);
+  const assessed = target.status === 'confirmed' || target.status === 'barren';
+  return (
+    <div className="mx-target-assess">
+      <div className="mx-target-assess-line">
+        <span className="mx-target-assess-label">Result</span>
+        {best != null
+          ? <span className="mx-target-assess-val">{formatAssay(element, best)}{best >= t.high ? ' · high' : best >= t.anom ? ' · anomalous' : ' · background'}</span>
+          : <span className="mx-target-assess-val mx-target-assess-pending">awaiting assay on linked sample{linkedSamples.length === 1 ? '' : 's'}</span>}
+      </div>
+      {best != null && (
+        <div className="mx-target-assess-actions">
+          <button type="button"
+            className={`mx-assess-btn ${target.status === 'confirmed' ? 'mx-assess-confirmed' : ''}`}
+            onClick={(e) => { e.stopPropagation(); api.setTargetStatus(target.project.id, target.id, 'confirmed'); }}>
+            Confirmed
+          </button>
+          <button type="button"
+            className={`mx-assess-btn ${target.status === 'barren' ? 'mx-assess-barren' : ''}`}
+            onClick={(e) => { e.stopPropagation(); api.setTargetStatus(target.project.id, target.id, 'barren'); }}>
+            Barren
+          </button>
+        </div>
+      )}
+      {assessed && <div className="mx-target-assess-done">Feeds the model hit-rate in the Layers panel.</div>}
     </div>
   );
 }

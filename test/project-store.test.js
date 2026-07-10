@@ -25,6 +25,8 @@ import {
   targetKey,
   targetPrefix,
   nextId,
+  targetHitRate,
+  bestLinkedGrade,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -244,4 +246,33 @@ test('targetPrefix: derives a -TG- id prefix from the sample prefix', () => {
   // nextId then produces a clean sequence off the target prefix.
   assert.equal(nextId([], targetPrefix('CT-RC-')), 'CT-TG-0001');
   assert.equal(nextId([{ id: 'CT-TG-0003' }], targetPrefix('CT-RC-')), 'CT-TG-0004');
+});
+
+test('targetHitRate: counts only assessed targets, from the store alone', () => {
+  const store = {
+    projects: [
+      { targets: [{ status: 'confirmed' }, { status: 'barren' }, { status: 'proposed' }, { status: 'sampled' }] },
+      { targets: [{ status: 'confirmed' }] },
+      { targets: [] },
+    ],
+  };
+  assert.deepEqual(targetHitRate(store), { assessed: 3, confirmed: 2, barren: 1 });
+});
+
+test('targetHitRate: zero when nothing has been assessed (no fabricated number)', () => {
+  const store = { projects: [{ targets: [{ status: 'proposed' }, { status: 'planned' }] }] };
+  assert.deepEqual(targetHitRate(store), { assessed: 0, confirmed: 0, barren: 0 });
+});
+
+test('bestLinkedGrade: returns the top valid grade for the element, or null when unassayed', () => {
+  const samples = [
+    { id: 'A', assays: { Au: 1.2 } },
+    { id: 'B', assays: { Au: 4.8, Ag: 20 } },
+    { id: 'C', assays: {} }, // awaiting assay
+  ];
+  assert.equal(bestLinkedGrade(samples, 'Au'), 4.8);
+  assert.equal(bestLinkedGrade(samples, 'Cu'), null); // none assayed for Cu
+  assert.equal(bestLinkedGrade([{ assays: {} }], 'Au'), null);
+  // A below-detection negative value is not a grade.
+  assert.equal(bestLinkedGrade([{ assays: { Au: -0.01 } }], 'Au'), null);
 });

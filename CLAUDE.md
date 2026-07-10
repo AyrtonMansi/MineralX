@@ -16,10 +16,14 @@ the mismatch rather than silently following either.
 2. **Field-geology workspace** (`/mineralx` — `app/mineralx/`,
    `components/mineralx/`, `app/api/`) The active product: a MapLibre-GL
    globe map where geologists manage rock-chip samples, drill holes, tenement
-   boundaries, Queensland government (GeoResGlobe) reference layers, and a
-   terrain-hydrology targeting model. Plain JS/JSX + a hand-rolled CSS design
-   system in `components/mineralx/mineralx.css` (earthy glass-morphism — do
-   NOT use Tailwind classes inside `components/mineralx/`).
+   boundaries, Queensland government (GeoResGlobe) reference layers, a
+   terrain-hydrology targeting model, and an **exploration targeting cycle**
+   (promote a scored candidate → track it through a status pipeline → export
+   field waypoints → auto-link samples → assess against assays → model
+   hit-rate; pure logic in `target-tasking.js` + `project-store.js`, worklist
+   UI in the Data drawer's Targets tab). Plain JS/JSX + a hand-rolled CSS
+   design system in `components/mineralx/mineralx.css` (earthy glass-morphism
+   — do NOT use Tailwind classes inside `components/mineralx/`).
 
 Stack: Next.js 14.2 App Router · React 18 · MapLibre GL v5 (globe projection)
 · proj4 · `"type": "module"`. Hosted on Vercel; pushes to the working branch
@@ -62,7 +66,10 @@ being asked.
 2. **Persistence is localStorage, on purpose.** A cloud backend was proposed
    and explicitly declined for now. Keep `saveStore()`'s boolean return, the
    save-failed banner, and the export-staleness nudge working. Do not add a
-   database, auth, or any billable infrastructure unprompted.
+   database, auth, or any billable infrastructure unprompted. The store is
+   versioned (`STORE_KEY` = `mx-store-v4`) with a forward migration chain
+   (`migrateV2`→`migrateV3`); a new persisted field needs a version bump and
+   a migration, both unit-tested, or existing users' data silently breaks.
 3. **`/mineralx` is noindex-only** (`app/robots.ts` disallow). It stays
    publicly reachable — no feature flag, no auth gate, unless asked.
 4. **The analysis caching guarantee:** the terrain analysis fetches
@@ -70,9 +77,11 @@ being asked.
    every layer toggle afterwards only adds/removes already-computed layers.
    Toggles must never trigger a network request. The e2e suite asserts this.
 5. **Layer-tree node ids are persistence keys.** `'pub'`, `'flow'`,
-   `occ:${commodity}`, `historicMines`, etc. live in users' localStorage
-   expand/toggle state. Renaming a *label* is fine; renaming an *id* silently
-   resets user state — don't, without a migration.
+   `occ:${commodity}`, `historicMines`, `chips:${pid}`, `holes:${pid}`,
+   `targets:${pid}`, etc. live in users' localStorage expand/toggle state.
+   Renaming a *label* is fine; renaming an *id* silently resets user state —
+   don't, without a migration. Same for target statuses and the `-TG-` id
+   prefix: they're written into stored targets.
 6. **No invented geology.** No made-up resources, reserves, ounces, grades,
    partners or staff anywhere — site copy or workspace demo data (see the
    header of `lib/content.ts`). This extends to `/api/extract`: when

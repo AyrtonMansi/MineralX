@@ -256,6 +256,31 @@ export function targetKey(lat, lng) {
 // separately (dismissedTargets) — a dismissed candidate is not a target.
 export const TARGET_STATUSES = ['proposed', 'planned', 'visited', 'sampled', 'confirmed', 'barren'];
 
+// The terrain model's hit-rate against ground truth, computed purely from
+// targets the user has assessed (marked confirmed or barren). This is the
+// closing of the loop — real calibration from the program's own results,
+// never a fabricated or seeded number (see the no-invented-geology rule).
+export function targetHitRate(store) {
+  let confirmed = 0, barren = 0;
+  store.projects.forEach(p => (p.targets || []).forEach(t => {
+    if (t.status === 'confirmed') confirmed += 1;
+    else if (t.status === 'barren') barren += 1;
+  }));
+  return { assessed: confirmed + barren, confirmed, barren };
+}
+
+// The best grade among a target's linked samples for a given element — the
+// "actual" a promoted target's evidence gets checked against at assessment
+// time. Returns null when no linked sample has been assayed for it yet.
+export function bestLinkedGrade(linkedSamples, element) {
+  let best = null;
+  linkedSamples.forEach(s => {
+    const v = s?.assays?.[element];
+    if (validateAssayValue(v) && (best == null || v > best)) best = v;
+  });
+  return best;
+}
+
 // One-line plain-English account of why a target exists, from the frozen
 // provenance snapshot — the evidence that travels with the target through
 // its whole life, so a geologist months later still knows what flagged it.
