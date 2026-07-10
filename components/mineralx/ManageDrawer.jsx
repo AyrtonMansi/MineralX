@@ -197,7 +197,7 @@ function RockChipManager({ project, api, onClose }) {
       if (r.needsProjection) { setPendingProjection({ text, easting: r.easting, northing: r.northing, fileName: file.name }); return; }
       if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
       api.addSamples(project.id, r.samples, file.name);
-      setImportMsg({ error: false, text: `Imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
+      setImportMsg({ error: false, text: `Imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
     };
     reader.readAsText(file);
   };
@@ -209,7 +209,7 @@ function RockChipManager({ project, api, onClose }) {
     setPendingProjection(null);
     if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
     api.addSamples(project.id, r.samples, fileName);
-    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.` });
+    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
   };
 
   return (
@@ -320,7 +320,7 @@ function DrillHoleManager({ project, api, onClose }) {
       if (r.needsProjection) { setPendingProjection({ text, easting: r.easting, northing: r.northing, fileName: file.name }); return; }
       if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
       api.addCollars(project.id, r.collars, file.name);
-      setImportMsg({ error: false, text: `Imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
+      setImportMsg({ error: false, text: `Imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
     };
     reader.readAsText(file);
   };
@@ -332,21 +332,21 @@ function DrillHoleManager({ project, api, onClose }) {
     setPendingProjection(null);
     if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
     api.addCollars(project.id, r.collars, fileName);
-    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.` });
+    setImportMsg({ error: false, text: `Reprojected from MGA Zone ${zone} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
   };
 
   const importIntervals = (file) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const { intervals, error: err } = parseIntervalCsv(String(reader.result));
+      const { intervals, error: err, warnings } = parseIntervalCsv(String(reader.result));
       if (err) { setImportMsg({ error: true, text: err }); return; }
       const known = new Set(project.collars.map(c => c.id));
       const matched = intervals.filter(i => known.has(i.holeId));
       const skipped = intervals.length - matched.length;
       if (!matched.length) { setImportMsg({ error: true, text: 'No hole IDs in this file matched the project.' }); return; }
       api.addIntervals(project.id, matched, file.name);
-      setImportMsg({ error: false, text: `Imported ${matched.length} interval${matched.length === 1 ? '' : 's'}.${skipped ? ` ${skipped} skipped (unknown hole ID).` : ''}` });
+      setImportMsg({ error: false, text: `Imported ${matched.length} interval${matched.length === 1 ? '' : 's'}.${skipped ? ` ${skipped} skipped (unknown hole ID).` : ''}${warnings ? ` ${warnings}` : ''}` });
     };
     reader.readAsText(file);
   };
