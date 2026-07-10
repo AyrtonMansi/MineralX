@@ -77,6 +77,24 @@ test('assessing a target as confirmed feeds the model hit-rate in the Layers pan
   await page.locator('.mx-data-drawer-wrap .mx-close-btn').click(); // reveal the panel behind
   await expect(page.locator('.mx-hitrate')).toContainText('1 target assessed');
   await expect(page.locator('.mx-hitrate')).toContainText('1 confirmed');
+
+  // Director view: the program overview surfaces the targeting program on
+  // the first screen — a targets stat and the hit-rate headline — so it
+  // isn't buried in a drawer.
+  await page.locator('.mx-dock-btn[title="Program"]').click();
+  await expect(page.locator('.mx-stat-targets')).toHaveText('1');
+  await expect(page.locator('.mx-home-targets')).toContainText('1/1');
+
+  // Director export: "Export all program data" now includes the target
+  // worklist, not just chips/collars/boundary — the program is the
+  // worklist, and a report export that dropped it would be incomplete.
+  const files = [];
+  page.on('download', (d) => files.push(d.suggestedFilename()));
+  await page.locator('.mx-panel-header .mx-close-btn').click();
+  await page.locator('.mx-avatar').click();
+  await page.locator('.mx-user-item', { hasText: 'Export all program data' }).click();
+  await page.waitForTimeout(1000);
+  expect(files.some((f) => /targets\.csv$/.test(f))).toBe(true);
 });
 
 test('the assess buttons only appear once a linked sample has been assayed', async ({ page }) => {

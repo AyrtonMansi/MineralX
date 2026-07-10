@@ -27,6 +27,7 @@ import {
   nextId,
   targetHitRate,
   bestLinkedGrade,
+  targetsToCsv,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -262,6 +263,16 @@ test('targetHitRate: counts only assessed targets, from the store alone', () => 
 test('targetHitRate: zero when nothing has been assessed (no fabricated number)', () => {
   const store = { projects: [{ targets: [{ status: 'proposed' }, { status: 'planned' }] }] };
   assert.deepEqual(targetHitRate(store), { assessed: 0, confirmed: 0, barren: 0 });
+});
+
+test('targetsToCsv: emits a report row per target with status, links and evidence', () => {
+  const csv = targetsToCsv([
+    { id: 'CT-TG-0001', lat: -20.07, lng: 146.26, status: 'confirmed', score: 12.3, linkedSampleIds: ['CT-RC-9001', 'CT-RC-9002'], provenance: { sample: true, occurrence: true, element: 'Au', analysedAt: '2026-07-10' } },
+  ]);
+  const [header, row] = csv.split('\n');
+  assert.equal(header, 'target_id,lat,lng,status,score,element,linked_samples,flagged,evidence');
+  assert.match(row, /^CT-TG-0001,-20.07,146.26,confirmed,12.3,Au,CT-RC-9001 CT-RC-9002,2026-07-10,/);
+  assert.match(row, /occurrence and your anomalous sample/);
 });
 
 test('bestLinkedGrade: returns the top valid grade for the element, or null when unassayed', () => {

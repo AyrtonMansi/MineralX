@@ -221,7 +221,20 @@
 .mx-stat-item { flex: 1; }
 .mx-stat-num { font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 500; }
 .mx-stat-pending { color: #8A4A2E; }
+.mx-stat-targets { color: #3E6C8C; }
 .mx-stat-label { font-size: 10px; color: #8A857A; margin-top: 2px; }
+
+/* Exploration-program headline on the overview panel. */
+.mx-home-targets {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 18px 4px; padding: 9px 12px;
+  background: rgba(62,108,140,0.08); border: 1px solid rgba(62,108,140,0.2);
+  border-radius: 9px; cursor: pointer; text-align: left;
+  font-family: 'Instrument Sans', sans-serif; font-size: 12px; color: #3B4652;
+}
+.mx-home-targets:hover { background: rgba(62,108,140,0.14); }
+.mx-home-targets strong { color: #2C3A47; }
+.mx-home-targets-go { font-size: 10.5px; color: #3E6C8C; white-space: nowrap; }
 
 /* ── Panel actions ────────────────────────────────────────────── */
 .mx-panel-actions { padding: 0 18px 18px; display: flex; gap: 8px; }

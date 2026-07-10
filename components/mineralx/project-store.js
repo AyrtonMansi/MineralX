@@ -556,6 +556,25 @@ export function collarsToCsv(collars) {
   ].join('\n');
 }
 
+// The target worklist as a report-grade CSV: every promoted target with
+// its pipeline status, score, seeding element, linked samples, and the
+// evidence that flagged it. This is what makes the program export a
+// complete handover — the worklist is the exploration program, not a
+// by-product of it.
+export function targetsToCsv(targets) {
+  const header = 'target_id,lat,lng,status,score,element,linked_samples,flagged,evidence';
+  return [
+    header,
+    ...targets.map(t => [
+      t.id, t.lat, t.lng, t.status, t.score ?? '',
+      t.provenance?.element || '',
+      (t.linkedSampleIds || []).join(' '),
+      t.provenance?.analysedAt || t.createdAt || '',
+      `"${evidenceSummary(t).replace(/"/g, "'")}"`,
+    ].join(',')),
+  ].join('\n');
+}
+
 export function downloadText(filename, text, mime = 'text/csv') {
   const blob = new Blob([text], { type: mime });
   const a = document.createElement('a');

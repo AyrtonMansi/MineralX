@@ -132,9 +132,13 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
     setRasterLayer('drainage', !!flowSubOn.drainage, flowOpacity.drainage ?? 0.65, () => renderDrainageOverlay(flow, grid.w, grid.h), grid.bounds);
     setRasterLayer('heatmap', !!flowSubOn.heatmap, flowOpacity.heatmap ?? 0.5, () => renderConcentrationHeatmap(flow, grid.w, grid.h), grid.bounds);
 
+    // Candidates render as hollow rings, not solid dots, so they read at a
+    // glance as the model's *suggestions* — unmistakably different from the
+    // geologist's own solid sample dots and the white collar squares. Once
+    // promoted they become solid status-coloured diamonds.
     setMarkerGroup('targets', !!flowSubOn.targets, () => targets.map((t) => {
       const s = targetStyle(t);
-      const el = buildMarkerEl({ width: `${s.radius * 2}px`, height: `${s.radius * 2}px`, borderRadius: '50%', background: s.fillColor, border: `${s.weight}px solid ${s.color}` }, targetLabel(t));
+      const el = buildMarkerEl({ width: `${s.radius * 2}px`, height: `${s.radius * 2}px`, borderRadius: '50%', background: 'transparent', border: `3px solid ${s.fillColor}`, boxShadow: '0 0 0 1.5px rgba(250,249,244,0.55), 0 1px 4px rgba(0,0,0,0.4)' }, targetLabel(t));
       el.classList.add('mx-analysis-target');
       return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).setPopup(promotePopup(t)).addTo(map);
     }));

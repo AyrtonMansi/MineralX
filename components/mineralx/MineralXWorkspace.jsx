@@ -6,7 +6,7 @@ import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
-  samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  samplesToCsv, collarsToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   pushUndo, undo, redo, undoAvailable, redoAvailable,
   nextId, targetKey, targetPrefix, targetHitRate,
 } from './project-store';
@@ -102,13 +102,18 @@ export default function MineralXWorkspace() {
   const [staleDismissed, setStaleDismissed] = useState(false);
 
   const stats = useMemo(() => {
-    let chips = 0, holes = 0, pending = 0;
+    let chips = 0, holes = 0, pending = 0, targets = 0, confirmed = 0, barren = 0;
     store.projects.forEach(p => {
       chips += p.samples.length;
       holes += p.collars.length;
       pending += p.samples.filter(s => gradeOf(s, activeElement) === 'pending').length;
+      (p.targets || []).forEach(t => {
+        targets += 1;
+        if (t.status === 'confirmed') confirmed += 1;
+        else if (t.status === 'barren') barren += 1;
+      });
     });
-    return { chips, holes, pending };
+    return { chips, holes, pending, targets, assessed: confirmed + barren, confirmed, barren };
   }, [store, activeElement]);
 
   const availableElements = useMemo(() => elementsInStore(store), [store]);
@@ -321,10 +326,16 @@ export default function MineralXWorkspace() {
       return { boundaryError };
     },
     exportProject: (project) => {
-      downloadText(`${project.name.replace(/\s+/g, '_')}_rock_chips.csv`, samplesToCsv(project.samples));
-      downloadText(`${project.name.replace(/\s+/g, '_')}_collars.csv`, collarsToCsv(project.collars));
+      const stem = project.name.replace(/\s+/g, '_');
+      downloadText(`${stem}_rock_chips.csv`, samplesToCsv(project.samples));
+      downloadText(`${stem}_collars.csv`, collarsToCsv(project.collars));
+      // The target worklist is part of the program — a report/handover
+      // export that dropped it would lose the exploration decisions.
+      if (project.targets?.length) {
+        downloadText(`${stem}_targets.csv`, targetsToCsv(project.targets));
+      }
       if (project.boundary) {
-        downloadText(`${project.name.replace(/\s+/g, '_')}_boundary.kml`, boundaryToKml(project.boundary.name, project.boundary.coords), 'application/vnd.google-earth.kml+xml');
+        downloadText(`${stem}_boundary.kml`, boundaryToKml(project.boundary.name, project.boundary.coords), 'application/vnd.google-earth.kml+xml');
       }
       setLastExportAt(Date.now());
       setStaleDismissed(false);
@@ -973,20 +984,36 @@ function HomePanel({ stats, project, onUpload, onLayers, onData, onClose }) {
           CSV — drop either into <strong>Add data</strong> and it lands on the map.
         </div>
       ) : (
-        <div className="mx-stats-row">
-          <button type="button" className="mx-stat-item" onClick={() => onData('chips')}>
-            <div className="mx-stat-num">{stats.chips}</div>
-            <div className="mx-stat-label">rock chips</div>
-          </button>
-          <button type="button" className="mx-stat-item" onClick={() => onData('holes')}>
-            <div className="mx-stat-num">{stats.holes}</div>
-            <div className="mx-stat-label">drill holes</div>
-          </button>
-          <button type="button" className="mx-stat-item" onClick={() => onData('chips', 'pending')}>
-            <div className="mx-stat-num mx-stat-pending">{stats.pending}</div>
-            <div className="mx-stat-label">awaiting assay</div>
-          </button>
-        </div>
+        <>
+          <div className="mx-stats-row">
+            <button type="button" className="mx-stat-item" onClick={() => onData('chips')}>
+              <div className="mx-stat-num">{stats.chips}</div>
+              <div className="mx-stat-label">rock chips</div>
+            </button>
+            <button type="button" className="mx-stat-item" onClick={() => onData('holes')}>
+              <div className="mx-stat-num">{stats.holes}</div>
+              <div className="mx-stat-label">drill holes</div>
+            </button>
+            <button type="button" className="mx-stat-item" onClick={() => onData('chips', 'pending')}>
+              <div className="mx-stat-num mx-stat-pending">{stats.pending}</div>
+              <div className="mx-stat-label">awaiting assay</div>
+            </button>
+            <button type="button" className="mx-stat-item" onClick={() => onData('targets')}>
+              <div className="mx-stat-num mx-stat-targets">{stats.targets}</div>
+              <div className="mx-stat-label">targets</div>
+            </button>
+          </div>
+          {/* The exploration program's headline: how the targeting is going,
+              on the first screen — not buried in a drawer. */}
+          {stats.targets > 0 && (
+            <button type="button" className="mx-home-targets" onClick={() => onData('targets')}>
+              {stats.assessed > 0
+                ? <span>Model hit-rate · <strong>{stats.confirmed}/{stats.assessed}</strong> assessed targets confirmed</span>
+                : <span>{stats.targets} target{stats.targets === 1 ? '' : 's'} on the worklist — none assessed yet</span>}
+              <span className="mx-home-targets-go">Open worklist →</span>
+            </button>
+          )}
+        </>
       )}
       <div className="mx-panel-actions">
         <button type="button" className="mx-btn-primary" onClick={onUpload}>Add data</button>
@@ -1345,7 +1372,7 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
             )}
 
             <FlowSubRow
-              label="Metal Concentration Zones" swatch={{ background: '#8A6A3E', borderRadius: '50%', width: 8, height: 8 }}
+              label="Metal Concentration Zones" swatch={{ background: 'transparent', border: '2px solid #8A6A3E', borderRadius: '50%', width: 8, height: 8 }}
               on={flowSubOn.targets} onToggle={() => onToggleFlowSub('targets')}
             />
             <FlowSubRow
