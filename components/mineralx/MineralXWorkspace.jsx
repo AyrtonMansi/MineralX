@@ -225,6 +225,42 @@ export default function MineralXWorkspace() {
       };
       updateProject(pid, p => ({ ...p, targets: [...(p.targets || []), target] }));
     },
+    // Move a target along the exploration pipeline (proposed → planned →
+    // … → confirmed/barren). Undoable like every mutation.
+    setTargetStatus: (pid, targetId, status) => {
+      pushUndo(store);
+      updateProject(pid, p => ({
+        ...p,
+        targets: (p.targets || []).map(t => (t.id === targetId ? { ...t, status } : t)),
+      }));
+    },
+    // Remove a promoted target AND remember its location, so a later
+    // analysis re-run never resurfaces a spot the user already walked off
+    // and rejected — the "data travels with the object, never re-entered"
+    // principle applied to a negative decision. Undo restores both.
+    dismissTarget: (pid, targetId) => {
+      pushUndo(store);
+      updateProject(pid, p => {
+        const target = (p.targets || []).find(t => t.id === targetId);
+        const key = target ? targetKey(target.lat, target.lng) : null;
+        return {
+          ...p,
+          targets: (p.targets || []).filter(t => t.id !== targetId),
+          dismissedTargets: key && !(p.dismissedTargets || []).includes(key)
+            ? [...(p.dismissedTargets || []), key]
+            : (p.dismissedTargets || []),
+        };
+      });
+    },
+    // Reject an analysis candidate straight from the map without ever
+    // promoting it — same "won't come back" guarantee.
+    dismissCandidate: (pid, cand) => {
+      const key = targetKey(cand.lat, cand.lng);
+      const project = store.projects.find(p => p.id === pid);
+      if (!project || (project.dismissedTargets || []).includes(key)) return;
+      pushUndo(store);
+      updateProject(pid, p => ({ ...p, dismissedTargets: [...(p.dismissedTargets || []), key] }));
+    },
     renameProject: (pid, name) => {
       pushUndo(store);
       updateProject(pid, p => ({ ...p, name }));
@@ -285,11 +321,14 @@ export default function MineralXWorkspace() {
   const onPromoteTarget = useCallback((cand) => {
     if (activeProject) api.promoteTarget(activeProject.id, cand);
   }, [api, activeProject]);
+  const onDismissCandidate = useCallback((cand) => {
+    if (activeProject) api.dismissCandidate(activeProject.id, cand);
+  }, [api, activeProject]);
 
   const {
     flowState, flowSubOn, flowOpacity, setFlowOpacity,
     toggleFlowSub, runFlowAnalysis, flowLayerRefs,
-  } = useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget });
+  } = useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget, onDismissCandidate });
 
   // Undo/redo: keyboard (Ctrl/Cmd+Z, +Shift for redo) and topbar buttons.
   // The guard skips editable targets so native text-field undo keeps
@@ -878,6 +917,7 @@ export default function MineralXWorkspace() {
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L19 11 L11 19 L3 11 Z" /></svg>} title="Program" active={activePanel === 'home'} onClick={() => setActivePanel(activePanel === 'home' ? null : 'home')} />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22"><circle cx="11" cy="11" r="5.5" fill="currentColor" /></svg>} title="Rock chips" active={dataOpen && dataTab === 'chips'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'chips') { setDataOpen(false); } else { setDataTab('chips'); setDataOpen(true); } }} />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="7.5" y="4" width="7" height="5" rx="1" /><path d="M11 9 L11 19" /></svg>} title="Drill holes" active={dataOpen && dataTab === 'holes'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'holes') { setDataOpen(false); } else { setDataTab('holes'); setDataOpen(true); } }} />
+        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L18 11 L11 19 L4 11 Z" /></svg>} title="Targets" active={dataOpen && dataTab === 'targets'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'targets') { setDataOpen(false); } else { setDataTab('targets'); setDataOpen(true); } }} />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L19 7.5 L11 12 L3 7.5 Z" /><path d="M3 12 L11 16.5 L19 12" /></svg>} title="Layers" active={activePanel === 'layers'} onClick={() => setActivePanel(activePanel === 'layers' ? null : 'layers')} />
         <div className="mx-dock-sep" />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4 L11 13" /><path d="M7 8 L11 4 L15 8" /><path d="M5 17 H17" /></svg>} title="Add data" active={activePanel === 'upload'} onClick={() => setActivePanel(activePanel === 'upload' ? null : 'upload')} />

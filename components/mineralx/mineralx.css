@@ -71,6 +71,23 @@
   font-size: 12px; padding: 6px 10px;
 }
 .mx-pop-promote-btn:disabled { opacity: 0.6; cursor: default; background: #6E7A5E; }
+.mx-pop-dismiss-btn {
+  margin-top: 6px; width: 100%;
+  font-size: 11.5px; padding: 5px 10px;
+  background: transparent; color: #8A857A;
+  border: 1px solid rgba(138,133,122,0.4); border-radius: 8px; cursor: pointer;
+}
+.mx-pop-dismiss-btn:hover { color: #6B655B; border-color: rgba(138,133,122,0.7); }
+.mx-pop-dismiss-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Targets worklist rows in the Data drawer. */
+.mx-data-target-dot { width: 11px; height: 11px; transform: rotate(45deg); flex: none; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+.mx-target-status {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+  color: #4A4640; background: #F3F1E9;
+  border: 1px solid rgba(33,30,26,0.15); border-radius: 6px;
+  padding: 3px 5px; cursor: pointer; flex: none;
+}
 
 /* ── Top bar ──────────────────────────────────────────────────── */
 .mx-topbar {

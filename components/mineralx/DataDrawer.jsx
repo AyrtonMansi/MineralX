@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText } from './project-store';
+import { gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText, TARGET_STATUSES } from './project-store';
+import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
 import { MxIcons } from './MineralXIcons';
 
 // The home of all project data: a clean list per dataset, not a GIS
@@ -23,6 +24,11 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
     store.projects.flatMap(p => p.collars.map(c => ({ ...c, project: p, intervals: (p.intervals || []).filter(i => i.holeId === c.id) }))), [store]);
   const allFiles = useMemo(() =>
     store.projects.flatMap(p => p.files.map(f => ({ ...f, project: p }))), [store]);
+  // Highest-scoring targets first — the worklist is a ranked queue.
+  const allTargets = useMemo(() =>
+    store.projects
+      .flatMap(p => (p.targets || []).map(t => ({ ...t, project: p })))
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)), [store]);
 
   // 'pending' is a status filter, not just text: matches unassayed chips.
   const samples = q
@@ -32,6 +38,9 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
     : allSamples;
   const collars = q ? allCollars.filter(c => c.id.toLowerCase().includes(q)) : allCollars;
   const files = q ? allFiles.filter(f => f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)) : allFiles;
+  const targets = q
+    ? allTargets.filter(t => t.id.toLowerCase().includes(q) || t.status.includes(q) || evidenceSummary(t).toLowerCase().includes(q))
+    : allTargets;
 
   const exportCurrent = () => {
     if (tab === 'chips') downloadText('rock_chips.csv', samplesToCsv(allSamples));
@@ -62,6 +71,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
           <div className="mx-manage-tabs">
             <button type="button" className={`mx-manage-tab ${tab === 'chips' ? 'active' : ''}`} onClick={() => setTab('chips')}>Rock chips ({allSamples.length})</button>
             <button type="button" className={`mx-manage-tab ${tab === 'holes' ? 'active' : ''}`} onClick={() => setTab('holes')}>Drill holes ({allCollars.length})</button>
+            <button type="button" className={`mx-manage-tab ${tab === 'targets' ? 'active' : ''}`} onClick={() => setTab('targets')}>Targets ({allTargets.length})</button>
             <button type="button" className={`mx-manage-tab ${tab === 'files' ? 'active' : ''}`} onClick={() => setTab('files')}>Files ({allFiles.length})</button>
           </div>
           <input
@@ -145,6 +155,46 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
             </div>
           )}
 
+          {tab === 'targets' && (
+            <div className="mx-data-list">
+              {targets.length === 0 && (
+                <div className="mx-empty-hint">
+                  {q ? 'No targets match.' : 'No targets yet. Open Layers → Target Analysis, then click a candidate on the map and “Add to targets” to start your worklist.'}
+                </div>
+              )}
+              {targets.map(t => {
+                const meta = targetStatusMeta(t.status);
+                const linked = (t.linkedSampleIds || []).length;
+                return (
+                  <div key={`${t.project.id}-${t.id}`} className="mx-data-row" role="button" tabIndex={0}
+                    onClick={() => focusFeature(t.lat, t.lng, t.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') focusFeature(t.lat, t.lng, t.id); }}>
+                    <span className="mx-data-target-dot" style={{ background: meta.color }} />
+                    <div className="mx-data-main">
+                      <div className="mx-data-id">{t.id}</div>
+                      <div className="mx-data-sub">{evidenceSummary(t)}{linked ? ` · ${linked} linked` : ''}</div>
+                    </div>
+                    <select
+                      className="mx-target-status" value={t.status}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); api.setTargetStatus(t.project.id, t.id, e.target.value); }}
+                      title="Target status"
+                    >
+                      {TARGET_STATUSES.map(s => <option key={s} value={s}>{targetStatusMeta(s).label}</option>)}
+                    </select>
+                    <button
+                      type="button" className="mx-data-delete" title="Dismiss target — won't reappear on re-run"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Dismiss ${t.id}? It won't come back when you re-run the analysis. (Undo with Ctrl+Z.)`)) api.dismissTarget(t.project.id, t.id);
+                      }}
+                    >{MxIcons.trash}</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {tab === 'files' && (
             <div className="mx-data-list">
               {files.length === 0 && <div className="mx-empty-hint">{q ? 'No files match.' : 'Nothing uploaded yet — imports appear here.'}</div>}
@@ -162,7 +212,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
           )}
         </div>
 
-        {tab !== 'files' && (
+        {(tab === 'chips' || tab === 'holes') && (
           <div className="mx-data-footer">
             <button type="button" className="mx-btn-primary mx-btn-sm" onClick={() => onAdd(tab)}>
               + {tab === 'chips' ? 'Add sample' : 'Add collar'}

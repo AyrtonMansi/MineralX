@@ -10,7 +10,7 @@
 // effect can still clear it directly (`flowLayerRefs.current = {}`),
 // exactly as it did when this lived inline.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { gradeOf } from './project-store';
+import { gradeOf, targetKey } from './project-store';
 import {
   fetchElevationGrid, runAnalysis, fetchMineralOccurrences, fetchHistoricMines,
   renderDrainageOverlay, renderConcentrationHeatmap,
@@ -19,7 +19,7 @@ import {
   imageCoordsFromBounds, buildMarkerEl, commodityColor, targetStyle, targetLabel,
 } from './map-render-helpers';
 
-export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget }) {
+export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget, onDismissCandidate }) {
   const [flowState, setFlowState] = useState({
     status: 'idle', targets: 0, commodities: [], occurrencesError: false,
     historicMinesCount: 0, historicMinesError: false,
@@ -98,12 +98,25 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
       btn.type = 'button';
       btn.className = 'mx-btn-primary mx-pop-promote-btn';
       btn.textContent = 'Add to targets';
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.className = 'mx-pop-dismiss-btn';
+      dismiss.textContent = 'Not a target';
       btn.onclick = () => {
         onPromoteTarget?.(t);
         btn.textContent = 'Added to worklist ✓';
         btn.disabled = true;
+        dismiss.style.display = 'none';
       };
-      node.append(head, meta, btn);
+      // Rejecting a candidate here remembers the spot so a re-run won't
+      // resurface it — the negative decision is as durable as the positive.
+      dismiss.onclick = () => {
+        onDismissCandidate?.(t);
+        dismiss.textContent = 'Dismissed ✓';
+        dismiss.disabled = true;
+        btn.style.display = 'none';
+      };
+      node.append(head, meta, btn, dismiss);
       return new maplibregl.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '240px' }).setDOMContent(node);
     };
 
@@ -144,7 +157,7 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
       const el = buildMarkerEl({ width: '12px', height: '12px', borderRadius: '50%', background: '#5E6E7A', border: '2px solid #FAF9F4' }, `${m.name} · ${m.mineType}`);
       return new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map);
     }));
-  }, [flowSubOn, flowOpacity, mapInstance, mgl, onPromoteTarget]);
+  }, [flowSubOn, flowOpacity, mapInstance, mgl, onPromoteTarget, onDismissCandidate]);
 
   useEffect(() => { syncFlowLayers(); }, [syncFlowLayers]);
 
@@ -165,7 +178,11 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
       ]);
 
       const goldOccurrences = occurrenceResult.features.filter((o) => o.commodity === 'Gold');
-      const { flow, targets } = runAnalysis(grid, hotSamples, goldOccurrences);
+      const { flow, targets: rawTargets } = runAnalysis(grid, hotSamples, goldOccurrences);
+      // Drop candidates the user has already rejected anywhere in the
+      // program — a dismissed spot never resurfaces on a re-run.
+      const dismissed = new Set(store.projects.flatMap((p) => p.dismissedTargets || []));
+      const targets = rawTargets.filter((t) => !dismissed.has(targetKey(t.lat, t.lng)));
 
       const occurrencesByCommodity = {};
       occurrenceResult.features.forEach((o) => {
