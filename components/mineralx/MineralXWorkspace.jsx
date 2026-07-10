@@ -20,6 +20,7 @@ import {
   gradeRadius, esc, samplePopupHtml, collarPopupHtml,
   buildTargetMarkerEl, targetPopupHtml,
 } from './map-render-helpers';
+import { autoLinkSamples } from './target-tasking';
 import { useFlowAnalysis } from './useFlowAnalysis';
 
 // ── Main component ─────────────────────────────────────────────────────
@@ -144,7 +145,15 @@ export default function MineralXWorkspace() {
     focusOn,
     addSamples: (pid, samples, fileName) => {
       pushUndo(store);
-      updateProject(pid, p => ({ ...p, samples: [...p.samples, ...samples] }));
+      // Any new sample that lands within range of a target links to it and
+      // advances that target to 'sampled' — the geologist collects, the
+      // app does the bookkeeping (Engage). Applies to manual adds, CSV
+      // imports and AI extraction alike, since all three land here.
+      updateProject(pid, p => ({
+        ...p,
+        samples: [...p.samples, ...samples],
+        targets: autoLinkSamples(p.targets || [], samples),
+      }));
       if (fileName) addFile(pid, fileName, 'Rock chips', `${samples.length} samples`);
       const last = samples[samples.length - 1];
       if (last) focusOn(last.lat, last.lng);
@@ -260,6 +269,17 @@ export default function MineralXWorkspace() {
       if (!project || (project.dismissedTargets || []).includes(key)) return;
       pushUndo(store);
       updateProject(pid, p => ({ ...p, dismissedTargets: [...(p.dismissedTargets || []), key] }));
+    },
+    // Detach a sample the auto-linker attached to a target — the human
+    // override on the machine's bookkeeping. Leaves status alone (the
+    // status control is the user's to set).
+    unlinkSample: (pid, targetId, sampleId) => {
+      pushUndo(store);
+      updateProject(pid, p => ({
+        ...p,
+        targets: (p.targets || []).map(t =>
+          t.id === targetId ? { ...t, linkedSampleIds: (t.linkedSampleIds || []).filter(id => id !== sampleId) } : t),
+      }));
     },
     renameProject: (pid, name) => {
       pushUndo(store);

@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText, TARGET_STATUSES } from './project-store';
 import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
+import { orderTargetsForField, targetsToGpx, targetsToWaypointCsv } from './target-tasking';
 import { MxIcons } from './MineralXIcons';
 
 // The home of all project data: a clean list per dataset, not a GIS
@@ -9,6 +10,7 @@ import { MxIcons } from './MineralXIcons';
 export default function DataDrawer({ store, api, tab, setTab, activeElement, initialFilter, onAdd, onClose }) {
   const [filter, setFilter] = useState(initialFilter || '');
   const [expanded, setExpanded] = useState(null); // hole id whose assay table is open
+  const [expandedTarget, setExpandedTarget] = useState(null); // target id whose linked-samples list is open
   const q = filter.trim().toLowerCase();
 
   // On phones the drawer is full-width: close it after flying to a
@@ -45,6 +47,22 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
   const exportCurrent = () => {
     if (tab === 'chips') downloadText('rock_chips.csv', samplesToCsv(allSamples));
     if (tab === 'holes') downloadText('drill_collars.csv', collarsToCsv(allCollars));
+  };
+
+  // Field tasking: the shown targets (the filter doubles as a selection),
+  // ordered into a walkable sequence, exported as GPX for a handheld GPS
+  // plus a plain CSV. Two files in one click, like the program export.
+  const exportWaypoints = () => {
+    const ordered = orderTargetsForField(targets);
+    downloadText('field_targets.gpx', targetsToGpx(ordered), 'application/gpx+xml');
+    downloadText('field_targets.csv', targetsToWaypointCsv(ordered));
+  };
+
+  // Which samples across the program a target is linked to (for the
+  // expandable detail + unlink).
+  const linkedSamplesOf = (t) => {
+    const byId = new Map(allSamples.map(s => [s.id, s]));
+    return (t.linkedSampleIds || []).map(id => byId.get(id)).filter(Boolean);
   };
 
   const sampleValue = (s) => {
@@ -164,31 +182,46 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
               )}
               {targets.map(t => {
                 const meta = targetStatusMeta(t.status);
-                const linked = (t.linkedSampleIds || []).length;
+                const linkedSamples = linkedSamplesOf(t);
+                const open = expandedTarget === t.id;
                 return (
-                  <div key={`${t.project.id}-${t.id}`} className="mx-data-row" role="button" tabIndex={0}
-                    onClick={() => focusFeature(t.lat, t.lng, t.id)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') focusFeature(t.lat, t.lng, t.id); }}>
-                    <span className="mx-data-target-dot" style={{ background: meta.color }} />
-                    <div className="mx-data-main">
-                      <div className="mx-data-id">{t.id}</div>
-                      <div className="mx-data-sub">{evidenceSummary(t)}{linked ? ` · ${linked} linked` : ''}</div>
+                  <div key={`${t.project.id}-${t.id}`}>
+                    <div className="mx-data-row" role="button" tabIndex={0}
+                      onClick={() => { if (linkedSamples.length) setExpandedTarget(open ? null : t.id); focusFeature(t.lat, t.lng, t.id); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') focusFeature(t.lat, t.lng, t.id); }}>
+                      <span className="mx-data-target-dot" style={{ background: meta.color }} />
+                      <div className="mx-data-main">
+                        <div className="mx-data-id">{t.id}</div>
+                        <div className="mx-data-sub">{evidenceSummary(t)}{linkedSamples.length ? ` · ${linkedSamples.length} linked sample${linkedSamples.length === 1 ? '' : 's'}` : ''}</div>
+                      </div>
+                      <select
+                        className="mx-target-status" value={t.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => { e.stopPropagation(); api.setTargetStatus(t.project.id, t.id, e.target.value); }}
+                        title="Target status"
+                      >
+                        {TARGET_STATUSES.map(s => <option key={s} value={s}>{targetStatusMeta(s).label}</option>)}
+                      </select>
+                      <button
+                        type="button" className="mx-data-delete" title="Dismiss target — won't reappear on re-run"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Dismiss ${t.id}? It won't come back when you re-run the analysis. (Undo with Ctrl+Z.)`)) api.dismissTarget(t.project.id, t.id);
+                        }}
+                      >{MxIcons.trash}</button>
                     </div>
-                    <select
-                      className="mx-target-status" value={t.status}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => { e.stopPropagation(); api.setTargetStatus(t.project.id, t.id, e.target.value); }}
-                      title="Target status"
-                    >
-                      {TARGET_STATUSES.map(s => <option key={s} value={s}>{targetStatusMeta(s).label}</option>)}
-                    </select>
-                    <button
-                      type="button" className="mx-data-delete" title="Dismiss target — won't reappear on re-run"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`Dismiss ${t.id}? It won't come back when you re-run the analysis. (Undo with Ctrl+Z.)`)) api.dismissTarget(t.project.id, t.id);
-                      }}
-                    >{MxIcons.trash}</button>
+                    {open && linkedSamples.length > 0 && (
+                      <div className="mx-target-links">
+                        {linkedSamples.map(s => (
+                          <div key={s.id} className="mx-target-link-row">
+                            <span className="mx-target-link-id">{s.id}</span>
+                            <span className="mx-target-link-val">{Object.keys(s.assays || {}).length ? Object.entries(s.assays).slice(0, 2).map(([el, v]) => formatAssay(el, v)).join(' · ') : 'awaiting assay'}</span>
+                            <button type="button" className="mx-target-unlink" title="Unlink this sample from the target"
+                              onClick={(e) => { e.stopPropagation(); api.unlinkSample(t.project.id, t.id, s.id); }}>unlink</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -219,6 +252,13 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
             </button>
             <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportCurrent}>
               {MxIcons.download} Export CSV
+            </button>
+          </div>
+        )}
+        {tab === 'targets' && targets.length > 0 && (
+          <div className="mx-data-footer">
+            <button type="button" className="mx-btn-primary mx-btn-sm" onClick={exportWaypoints}>
+              {MxIcons.download} Export field waypoints ({targets.length})
             </button>
           </div>
         )}

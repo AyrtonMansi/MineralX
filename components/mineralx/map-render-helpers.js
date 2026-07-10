@@ -2,7 +2,9 @@
 // DOM/string builders and styling lookups with no closure over component
 // state or MapLibre instances. Split out of MineralXWorkspace.jsx purely
 // to keep that file's size down; nothing here changed behavior.
-import { PROJECT_COLORS, formatAssay } from './project-store';
+import { PROJECT_COLORS, formatAssay, evidenceSummary } from './project-store';
+
+export { evidenceSummary }; // re-exported for callers already importing it from here
 
 // WMS GetMap request built by hand for a MapLibre raster source — there's
 // no L.tileLayer.wms equivalent; {bbox-epsg-3857} is a MapLibre-native
@@ -80,18 +82,6 @@ export const TARGET_STATUS_META = {
 };
 
 export const targetStatusMeta = (status) => TARGET_STATUS_META[status] || TARGET_STATUS_META.proposed;
-
-// One-line plain-English account of why a target exists, from the frozen
-// provenance snapshot — the evidence that travels with the target through
-// its whole life, so a geologist months later still knows what flagged it.
-export function evidenceSummary(t) {
-  const p = t.provenance || {};
-  const el = p.element || 'Au';
-  if (p.sample && p.occurrence) return `Downstream of a known ${el} occurrence and your anomalous sample`;
-  if (p.occurrence) return `Downstream of a known ${el} occurrence`;
-  if (p.sample) return `Downstream of your anomalous ${el} samples`;
-  return 'Alluvial trap in the drainage network';
-}
 
 // A promoted target's map marker: a diamond in its status colour, visually
 // distinct from round sample dots and the white collar squares.

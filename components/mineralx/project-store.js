@@ -256,6 +256,20 @@ export function targetKey(lat, lng) {
 // separately (dismissedTargets) — a dismissed candidate is not a target.
 export const TARGET_STATUSES = ['proposed', 'planned', 'visited', 'sampled', 'confirmed', 'barren'];
 
+// One-line plain-English account of why a target exists, from the frozen
+// provenance snapshot — the evidence that travels with the target through
+// its whole life, so a geologist months later still knows what flagged it.
+// Pure (no DOM), so it lives with the data and both the renderer and the
+// field-tasking export can share it.
+export function evidenceSummary(t) {
+  const p = t.provenance || {};
+  const el = p.element || 'Au';
+  if (p.sample && p.occurrence) return `Downstream of a known ${el} occurrence and your anomalous sample`;
+  if (p.occurrence) return `Downstream of a known ${el} occurrence`;
+  if (p.sample) return `Downstream of your anomalous ${el} samples`;
+  return 'Alluvial trap in the drainage network';
+}
+
 // ── Validation ─────────────────────────────────────────────────────────
 // Post-parse guards. isProjectedCoord() catches MGA-magnitude values
 // before they're misread as degrees; this catches everything else that

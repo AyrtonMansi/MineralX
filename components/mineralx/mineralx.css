@@ -89,6 +89,18 @@
   padding: 3px 5px; cursor: pointer; flex: none;
 }
 
+/* Linked-samples detail under a target row. */
+.mx-target-links { padding: 2px 0 8px 34px; }
+.mx-target-link-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 0; }
+.mx-target-link-id { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #4A4640; }
+.mx-target-link-val { flex: 1; font-size: 11px; color: #6B655B; }
+.mx-target-unlink {
+  font-size: 10.5px; color: #8B3A3A; background: transparent;
+  border: 1px solid rgba(139,58,58,0.3); border-radius: 6px;
+  padding: 2px 8px; cursor: pointer;
+}
+.mx-target-unlink:hover { background: rgba(139,58,58,0.08); }
+
 /* ── Top bar ──────────────────────────────────────────────────── */
 .mx-topbar {
   position: absolute;
