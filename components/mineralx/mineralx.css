@@ -56,6 +56,22 @@
 }
 .mx-mgl-marker:hover .lx-tip { opacity: 1; }
 
+/* Promoted-target marker: a status-coloured diamond, set apart from the
+   round sample dots and square collars so the worklist reads off the map. */
+.mx-target-marker {
+  width: 13px; height: 13px;
+  transform: rotate(45deg);
+  border: 2px solid #FAF9F4;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+}
+
+/* "Add to targets" button inside an analysis-candidate popup. */
+.mx-pop-promote-btn {
+  margin-top: 8px; width: 100%;
+  font-size: 12px; padding: 6px 10px;
+}
+.mx-pop-promote-btn:disabled { opacity: 0.6; cursor: default; background: #6E7A5E; }
+
 /* ── Top bar ──────────────────────────────────────────────────── */
 .mx-topbar {
   position: absolute;

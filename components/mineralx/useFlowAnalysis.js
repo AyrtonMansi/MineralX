@@ -19,7 +19,7 @@ import {
   imageCoordsFromBounds, buildMarkerEl, commodityColor, targetStyle, targetLabel,
 } from './map-render-helpers';
 
-export function useFlowAnalysis({ mapInstance, mgl, store, activeElement }) {
+export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget }) {
   const [flowState, setFlowState] = useState({
     status: 'idle', targets: 0, commodities: [], occurrencesError: false,
     historicMinesCount: 0, historicMinesError: false,
@@ -79,6 +79,34 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement }) {
       }
     };
 
+    // A click-popup with a one-click "Add to targets" button — the promote
+    // step of the exploration cycle. Built as a DOM node (not setHTML) so
+    // the button carries a real handler; on click it calls up to the
+    // workspace and flips to a confirmed state in place. The candidate
+    // itself stays on the map until the next re-run; the promoted target
+    // renders separately as a persistent store-backed marker.
+    const promotePopup = (t) => {
+      const node = document.createElement('div');
+      node.className = 'mx-pop mx-pop-promote';
+      const head = document.createElement('div');
+      head.className = 'mx-pop-assay';
+      head.innerHTML = `<strong>${targetLabel(t)}</strong>`;
+      const meta = document.createElement('div');
+      meta.className = 'mx-pop-notes';
+      meta.textContent = `Score ${Number(t.score ?? 0).toFixed(1)}`;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mx-btn-primary mx-pop-promote-btn';
+      btn.textContent = 'Add to targets';
+      btn.onclick = () => {
+        onPromoteTarget?.(t);
+        btn.textContent = 'Added to worklist ✓';
+        btn.disabled = true;
+      };
+      node.append(head, meta, btn);
+      return new maplibregl.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '240px' }).setDOMContent(node);
+    };
+
     if (!map || !maplibregl) return;
     if (!cache) {
       Object.keys(refs).forEach((k) => {
@@ -94,12 +122,14 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement }) {
     setMarkerGroup('targets', !!flowSubOn.targets, () => targets.map((t) => {
       const s = targetStyle(t);
       const el = buildMarkerEl({ width: `${s.radius * 2}px`, height: `${s.radius * 2}px`, borderRadius: '50%', background: s.fillColor, border: `${s.weight}px solid ${s.color}` }, targetLabel(t));
-      return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).addTo(map);
+      el.classList.add('mx-analysis-target');
+      return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).setPopup(promotePopup(t)).addTo(map);
     }));
 
     setMarkerGroup('correlated', !!flowSubOn.correlated, () => targets.filter((t) => t.sample && t.occurrence).map((t) => {
       const el = buildMarkerEl({ width: '26px', height: '26px', borderRadius: '50%', background: 'transparent', border: '2px dashed #FAF9F4' }, 'Highest confidence: known Gold occurrence + your own sample both drain here');
-      return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).addTo(map);
+      el.classList.add('mx-analysis-target');
+      return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).setPopup(promotePopup(t)).addTo(map);
     }));
 
     Object.entries(occurrencesByCommodity || {}).forEach(([commodity, points], idx) => {
@@ -114,7 +144,7 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement }) {
       const el = buildMarkerEl({ width: '12px', height: '12px', borderRadius: '50%', background: '#5E6E7A', border: '2px solid #FAF9F4' }, `${m.name} · ${m.mineType}`);
       return new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map);
     }));
-  }, [flowSubOn, flowOpacity, mapInstance, mgl]);
+  }, [flowSubOn, flowOpacity, mapInstance, mgl, onPromoteTarget]);
 
   useEffect(() => { syncFlowLayers(); }, [syncFlowLayers]);
 

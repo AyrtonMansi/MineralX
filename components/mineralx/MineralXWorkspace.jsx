@@ -8,6 +8,7 @@ import {
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   pushUndo, undo, redo, undoAvailable, redoAvailable,
+  nextId, targetKey, targetPrefix,
 } from './project-store';
 import { MxIcons } from './MineralXIcons';
 import ManageDrawer from './ManageDrawer';
@@ -17,6 +18,7 @@ import ExtractPanel from './ExtractPanel';
 import {
   wmsTileUrl, buildMarkerEl, boundsOfCoords,
   gradeRadius, esc, samplePopupHtml, collarPopupHtml,
+  buildTargetMarkerEl, targetPopupHtml,
 } from './map-render-helpers';
 import { useFlowAnalysis } from './useFlowAnalysis';
 
@@ -61,11 +63,6 @@ export default function MineralXWorkspace() {
   const recoveryAttempts = useRef(0); // caps auto-recovery from a crashed render loop (see error listener below)
 
   const activeProject = store.projects.find(p => p.id === store.activeProjectId) || store.projects[0];
-
-  const {
-    flowState, flowSubOn, flowOpacity, setFlowOpacity,
-    toggleFlowSub, runFlowAnalysis, flowLayerRefs,
-  } = useFlowAnalysis({ mapInstance, mgl, store, activeElement });
 
   // Landing centroid for the initial globe→project fly-in: the active
   // project's boundary (if drawn) or its samples/collars, else a wide
@@ -200,6 +197,34 @@ export default function MineralXWorkspace() {
         intervals: (p.intervals || []).filter(i => i.holeId !== id),
       }));
     },
+    // Promote a terrain-analysis candidate into a persistent, tracked
+    // target. The evidence (score + what seeded it + the element and date
+    // it was found) is frozen at promotion time so it travels with the
+    // target for the rest of its life. Reads only from the already-computed
+    // candidate — never re-runs analysis. No-ops if this spot is already a
+    // target, so a double-click can't create a duplicate.
+    promoteTarget: (pid, cand) => {
+      const project = store.projects.find(p => p.id === pid);
+      if (!project) return;
+      const key = targetKey(cand.lat, cand.lng);
+      if ((project.targets || []).some(t => targetKey(t.lat, t.lng) === key)) return;
+      pushUndo(store);
+      const target = {
+        id: nextId(project.targets || [], targetPrefix(project.idPrefix)),
+        lat: cand.lat, lng: cand.lng,
+        score: cand.score ?? 0,
+        status: 'proposed',
+        provenance: {
+          sample: !!cand.sample,
+          occurrence: !!cand.occurrence,
+          element: activeElement,
+          analysedAt: today(),
+        },
+        linkedSampleIds: [],
+        createdAt: today(),
+      };
+      updateProject(pid, p => ({ ...p, targets: [...(p.targets || []), target] }));
+    },
     renameProject: (pid, name) => {
       pushUndo(store);
       updateProject(pid, p => ({ ...p, name }));
@@ -250,7 +275,21 @@ export default function MineralXWorkspace() {
     },
     // `store` (not `store.projects`) in deps: pushUndo snapshots the whole
     // store, so a stale closure would capture an out-of-date activeProjectId.
-  }), [store, updateProject, addFile, focusOn]);
+    // activeElement: promoteTarget freezes it into the target's provenance.
+  }), [store, updateProject, addFile, focusOn, activeElement]);
+
+  // Promoting a candidate always lands it in the active project — the one
+  // whose data is on screen when the analysis was run. Defined after `api`
+  // (which it calls), so the flow-analysis hook that consumes it also moves
+  // below here.
+  const onPromoteTarget = useCallback((cand) => {
+    if (activeProject) api.promoteTarget(activeProject.id, cand);
+  }, [api, activeProject]);
+
+  const {
+    flowState, flowSubOn, flowOpacity, setFlowOpacity,
+    toggleFlowSub, runFlowAnalysis, flowLayerRefs,
+  } = useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget });
 
   // Undo/redo: keyboard (Ctrl/Cmd+Z, +Shift for redo) and topbar buttons.
   // The guard skips editable targets so native text-field undo keeps
@@ -456,6 +495,23 @@ export default function MineralXWorkspace() {
       });
       groupMembers.current.set(holeKey, holeIds);
 
+      // Promoted targets — the user's committed worklist, persisted in the
+      // store, so unlike the ephemeral analysis candidates they survive a
+      // reload, a re-run, and a viewport change. Diamond markers coloured
+      // by status; click opens the target's evidence/status popup.
+      const tgtKey = `${p.id}:targets`;
+      (groupMembers.current.get(tgtKey) || new Set()).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
+      const tgtIds = new Set();
+      (p.targets || []).forEach(t => {
+        const marker = new mgl.current.Marker({ element: buildTargetMarkerEl(t) })
+          .setLngLat([t.lng, t.lat])
+          .setPopup(new mgl.current.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '260px' }).setHTML(targetPopupHtml(t)))
+          .addTo(map);
+        markers.current.set(t.id, marker);
+        tgtIds.add(t.id);
+      });
+      groupMembers.current.set(tgtKey, tgtIds);
+
       // Boundary polygon.
       const existingBnd = boundaryLayers.current.get(p.id);
       if (existingBnd) {
@@ -492,7 +548,7 @@ export default function MineralXWorkspace() {
     const map = mapInstance.current;
     store.projects.forEach(p => {
       const projectHidden = hidden[`proj:${p.id}`];
-      [['chips', `chips:${p.id}`], ['holes', `holes:${p.id}`]].forEach(([suffix, nodeId]) => {
+      [['chips', `chips:${p.id}`], ['holes', `holes:${p.id}`], ['targets', `targets:${p.id}`]].forEach(([suffix, nodeId]) => {
         const ids = groupMembers.current.get(`${p.id}:${suffix}`);
         if (!ids) return;
         const show = !projectHidden && !hidden[nodeId];

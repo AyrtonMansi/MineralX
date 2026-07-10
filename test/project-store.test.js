@@ -19,6 +19,12 @@ import {
   undoAvailable,
   redoAvailable,
   clearUndo,
+  migrateV2,
+  migrateV3,
+  createDemoStore,
+  targetKey,
+  targetPrefix,
+  nextId,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -179,4 +185,63 @@ test('undo/redo: a new action clears the redo branch', () => {
   pushUndo(v1); // new action from the restored state
   assert.equal(redoAvailable(), false);
   clearUndo();
+});
+
+// ── Target worklist (v4) ────────────────────────────────────────────────
+
+test('migrateV3: adds empty target/dismissed lists to every project, touching nothing else', () => {
+  const v3 = {
+    version: 3,
+    activeProjectId: 'p1',
+    projects: [
+      { id: 'p1', name: 'A', samples: [{ id: 'S1', assays: { Au: 2 } }], collars: [], intervals: [] },
+    ],
+  };
+  const v4 = migrateV3(v3);
+  assert.equal(v4.version, 4);
+  assert.deepEqual(v4.projects[0].targets, []);
+  assert.deepEqual(v4.projects[0].dismissedTargets, []);
+  // Existing data is carried through untouched.
+  assert.deepEqual(v4.projects[0].samples, v3.projects[0].samples);
+  assert.equal(v4.activeProjectId, 'p1');
+});
+
+test('migrateV3: preserves targets a project already has (idempotent forward)', () => {
+  const already = { version: 4, projects: [{ id: 'p', targets: [{ id: 'T1' }], dismissedTargets: ['1:2'] }] };
+  const out = migrateV3(already);
+  assert.deepEqual(out.projects[0].targets, [{ id: 'T1' }]);
+  assert.deepEqual(out.projects[0].dismissedTargets, ['1:2']);
+});
+
+test('migrateV2 → migrateV3: a v2 store lands at v4 with assays maps and target lists', () => {
+  const v2 = { version: 2, projects: [{ id: 'p', samples: [{ id: 'S1', au: 3.4 }], intervals: [{ holeId: 'H', from: 1, to: 2, au: 5 }] }] };
+  const v4 = migrateV3(migrateV2(v2));
+  assert.equal(v4.version, 4);
+  assert.deepEqual(v4.projects[0].samples[0].assays, { Au: 3.4 });
+  assert.equal(v4.projects[0].samples[0].au, undefined);
+  assert.deepEqual(v4.projects[0].targets, []);
+});
+
+test('createDemoStore: is v4 and every project carries the target lists', () => {
+  const store = createDemoStore();
+  assert.equal(store.version, 4);
+  store.projects.forEach((p) => {
+    assert.ok(Array.isArray(p.targets));
+    assert.ok(Array.isArray(p.dismissedTargets));
+  });
+});
+
+test('targetKey: same spot to ~1m collides, genuinely distinct spots do not', () => {
+  // Sub-1e-5 jitter (what an analysis re-run produces) lands in the same cell.
+  assert.equal(targetKey(-20.066512, 146.257013), targetKey(-20.066514, 146.257011));
+  // A genuinely different target (~1m+ away) keys distinctly.
+  assert.notEqual(targetKey(-20.0665, 146.2570), targetKey(-20.0675, 146.2570));
+});
+
+test('targetPrefix: derives a -TG- id prefix from the sample prefix', () => {
+  assert.equal(targetPrefix('CT-RC-'), 'CT-TG-');
+  assert.equal(targetPrefix('XY-RC-'), 'XY-TG-');
+  // nextId then produces a clean sequence off the target prefix.
+  assert.equal(nextId([], targetPrefix('CT-RC-')), 'CT-TG-0001');
+  assert.equal(nextId([{ id: 'CT-TG-0003' }], targetPrefix('CT-RC-')), 'CT-TG-0004');
 });

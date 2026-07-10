@@ -65,6 +65,64 @@ export const targetLabel = (t) => {
   return 'Alluvial trap target';
 };
 
+// ── Promoted targets ───────────────────────────────────────────────────
+// Status → label + colour for a promoted target. These are the user's own
+// committed worklist items (persisted in the store), distinct from the
+// ephemeral analysis candidates above. Colour tracks the target through
+// the exploration cycle so its state reads off the map at a glance.
+export const TARGET_STATUS_META = {
+  proposed: { label: 'Proposed', color: '#B08A3E' },
+  planned: { label: 'Planned', color: '#3E6C8C' },
+  visited: { label: 'Visited', color: '#6E7A5E' },
+  sampled: { label: 'Sampled', color: '#5E6E7A' },
+  confirmed: { label: 'Confirmed', color: '#C15F3C' },
+  barren: { label: 'Barren', color: '#8A857A' },
+};
+
+export const targetStatusMeta = (status) => TARGET_STATUS_META[status] || TARGET_STATUS_META.proposed;
+
+// One-line plain-English account of why a target exists, from the frozen
+// provenance snapshot — the evidence that travels with the target through
+// its whole life, so a geologist months later still knows what flagged it.
+export function evidenceSummary(t) {
+  const p = t.provenance || {};
+  const el = p.element || 'Au';
+  if (p.sample && p.occurrence) return `Downstream of a known ${el} occurrence and your anomalous sample`;
+  if (p.occurrence) return `Downstream of a known ${el} occurrence`;
+  if (p.sample) return `Downstream of your anomalous ${el} samples`;
+  return 'Alluvial trap in the drainage network';
+}
+
+// A promoted target's map marker: a diamond in its status colour, visually
+// distinct from round sample dots and the white collar squares.
+export function buildTargetMarkerEl(t) {
+  const el = document.createElement('div');
+  el.className = 'mx-mgl-marker mx-target-marker-wrap';
+  const dot = document.createElement('div');
+  dot.className = 'mx-target-marker';
+  dot.style.background = targetStatusMeta(t.status).color;
+  el.appendChild(dot);
+  const tip = document.createElement('div');
+  tip.className = 'lx-tip';
+  tip.textContent = `${t.id} · ${targetStatusMeta(t.status).label}`;
+  el.appendChild(tip);
+  return el;
+}
+
+export function targetPopupHtml(t) {
+  const meta = targetStatusMeta(t.status);
+  const when = t.provenance?.analysedAt || t.createdAt || '';
+  const linked = (t.linkedSampleIds || []).length;
+  return `
+    <div class="mx-pop">
+      <div class="mx-pop-id">${esc(t.id)}</div>
+      <div class="mx-pop-assay"><strong>Target · ${meta.label}</strong></div>
+      <div class="mx-pop-row">${esc(evidenceSummary(t))}</div>
+      <div class="mx-pop-notes">Score ${Number(t.score ?? 0).toFixed(1)}${linked ? ` · ${linked} linked sample${linked === 1 ? '' : 's'}` : ''}${when ? ` · flagged ${esc(when)}` : ''}</div>
+      <div class="mx-pop-coords">${t.lat.toFixed(4)}, ${t.lng.toFixed(4)}</div>
+    </div>`;
+}
+
 export function samplePopupHtml(s) {
   const entries = Object.entries(s.assays || {});
   const assayLine = entries.length
