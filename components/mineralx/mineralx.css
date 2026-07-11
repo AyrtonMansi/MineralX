@@ -799,6 +799,18 @@
   color: #6B655B; background: rgba(180,173,155,0.25);
   padding: 1px 6px; border-radius: 8px;
 }
+/* QAQC badges: a manager scans the list for lab-quality coverage, so
+   these are colour-coded (standard=amber, blank=blue-grey, dup/trip=teal)
+   rather than all reading the same as the neutral photo tag. */
+.mx-data-qaqc-tag { font-size: 8px; font-weight: 700; letter-spacing: 0.5px; padding: 1px 6px; border-radius: 8px; }
+.mx-data-qaqc-standard { color: #8A5E1E; background: rgba(176,138,62,0.18); }
+.mx-data-qaqc-blank { color: #4A5A6A; background: rgba(94,110,122,0.18); }
+.mx-data-qaqc-duplicate, .mx-data-qaqc-triplicate { color: #2E6B5E; background: rgba(62,140,120,0.18); }
+.mx-data-type-tag {
+  font-size: 8px; letter-spacing: 0.4px; text-transform: uppercase;
+  color: #6B655B; background: rgba(180,173,155,0.18);
+  padding: 1px 6px; border-radius: 8px;
+}
 .mx-data-sub { font-size: 11px; color: #8A857A; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mx-data-value { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6B655B; flex-shrink: 0; }
 .mx-data-delete {

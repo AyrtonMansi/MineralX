@@ -21,6 +21,7 @@ import {
   clearUndo,
   migrateV2,
   migrateV3,
+  migrateV4,
   createDemoStore,
   targetKey,
   targetPrefix,
@@ -29,6 +30,13 @@ import {
   bestLinkedGrade,
   targetsToCsv,
   crsLabel,
+  samplesToCsv,
+  isValidSampleType,
+  isValidQaqcType,
+  isValidCoordSource,
+  SAMPLE_TYPES,
+  QAQC_TYPES,
+  COORD_SOURCES,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -261,9 +269,8 @@ test('migrateV2 → migrateV3: a v2 store lands at v4 with assays maps and targe
   assert.deepEqual(v4.projects[0].targets, []);
 });
 
-test('createDemoStore: is v4 and every project carries the target lists', () => {
+test('createDemoStore: every project carries the target lists', () => {
   const store = createDemoStore();
-  assert.equal(store.version, 4);
   store.projects.forEach((p) => {
     assert.ok(Array.isArray(p.targets));
     assert.ok(Array.isArray(p.dismissedTargets));
@@ -322,4 +329,98 @@ test('bestLinkedGrade: returns the top valid grade for the element, or null when
   assert.equal(bestLinkedGrade([{ assays: {} }], 'Au'), null);
   // A below-detection negative value is not a grade.
   assert.equal(bestLinkedGrade([{ assays: { Au: -0.01 } }], 'Au'), null);
+});
+
+// ── Sample provenance / QAQC (v5) ───────────────────────────────────────
+
+test('migrateV4: gives every sample conservative provenance/QAQC defaults', () => {
+  const v4 = {
+    version: 4,
+    projects: [{ id: 'p1', samples: [{ id: 'S1', assays: { Au: 2 } }, { id: 'S2', assays: {}, sampleType: 'soil' }], targets: [], dismissedTargets: [] }],
+  };
+  const v5 = migrateV4(v4);
+  assert.equal(v5.version, 5);
+  // No prior tag at all -> the conservative defaults.
+  assert.deepEqual(
+    { sampleType: v5.projects[0].samples[0].sampleType, qaqcType: v5.projects[0].samples[0].qaqcType, coordSource: v5.projects[0].samples[0].coordSource },
+    { sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
+  );
+  // An existing value (however it got there) is never clobbered by the default.
+  assert.equal(v5.projects[0].samples[1].sampleType, 'soil');
+});
+
+test('createDemoStore: is v5 and every demo sample carries the provenance fields', () => {
+  const store = createDemoStore();
+  assert.equal(store.version, 5);
+  store.projects.forEach(p => p.samples.forEach(s => {
+    assert.equal(isValidSampleType(s.sampleType), true);
+    assert.equal(isValidQaqcType(s.qaqcType), true);
+    assert.equal(isValidCoordSource(s.coordSource), true);
+  }));
+});
+
+test('isValidSampleType/isValidQaqcType/isValidCoordSource: accept only the known enums', () => {
+  SAMPLE_TYPES.forEach(t => assert.equal(isValidSampleType(t), true));
+  QAQC_TYPES.forEach(t => assert.equal(isValidQaqcType(t), true));
+  COORD_SOURCES.forEach(t => assert.equal(isValidCoordSource(t), true));
+  assert.equal(isValidSampleType('nonsense'), false);
+  assert.equal(isValidQaqcType(''), false);
+  assert.equal(isValidCoordSource(undefined), false);
+});
+
+test('parseSampleCsv: reads QAQC/provenance columns, recognising common lab abbreviations', () => {
+  const csv = 'sample_id,lat,lng,au,sample_type,qaqc_type,duplicate_of,coord_source\n'
+    + 'CT-RC-0001,-20.07,146.26,4.2,rock_chip,none,,dgps\n'
+    + 'CT-RC-0002,-20.08,146.27,4.1,,dup,CT-RC-0001,gps\n' // common lab abbreviations
+    + 'CT-RC-0003,-20.09,146.28,0.01,soil,std,,survey\n';
+  const r = parseSampleCsv(csv, [], 'CT-RC-');
+  assert.equal(r.error, null);
+  assert.equal(r.samples.length, 3);
+  assert.equal(r.samples[0].coordSource, 'dgps');
+  assert.equal(r.samples[1].qaqcType, 'duplicate'); // "dup" alias recognised
+  assert.equal(r.samples[1].duplicateOf, 'CT-RC-0001');
+  assert.equal(r.samples[1].coordSource, 'gps_handheld'); // "gps" alias recognised
+  assert.equal(r.samples[2].sampleType, 'soil');
+  assert.equal(r.samples[2].qaqcType, 'standard'); // "std" alias recognised
+});
+
+test('parseSampleCsv: an unrecognised QAQC/type value falls back to the safe default and warns, without dropping the row', () => {
+  const csv = 'sample_id,lat,lng,au,qaqc_type\nCT-RC-0001,-20.07,146.26,4.2,not_a_real_type\n';
+  const r = parseSampleCsv(csv, [], 'CT-RC-');
+  assert.equal(r.error, null);
+  assert.equal(r.samples.length, 1); // row still imports
+  assert.equal(r.samples[0].qaqcType, 'none'); // safe default
+  assert.equal(r.samples[0].assays.Au, 4.2); // assay data intact
+  assert.match(r.warnings, /not recognised/);
+  assert.match(r.warnings, /not_a_real_type/);
+});
+
+test('parseSampleCsv: samples with no QAQC/type columns at all get the conservative defaults', () => {
+  const csv = 'sample_id,lat,lng,au\nCT-RC-0001,-20.07,146.26,4.2\n';
+  const r = parseSampleCsv(csv, [], 'CT-RC-');
+  assert.equal(r.samples[0].sampleType, 'rock_chip');
+  assert.equal(r.samples[0].qaqcType, 'none');
+  assert.equal(r.samples[0].coordSource, 'unknown');
+  assert.equal(r.samples[0].duplicateOf, undefined); // no phantom field when absent
+});
+
+test('samplesToCsv: round-trips sample_type/qaqc_type/duplicate_of/coord_source', () => {
+  const samples = [
+    { id: 'CT-RC-0001', lat: -20.07, lng: 146.26, assays: { Au: 4.2 }, lith: 'Quartz', notes: '', date: '2026-07-01', sampleType: 'soil', qaqcType: 'duplicate', duplicateOf: 'CT-RC-0000', coordSource: 'dgps' },
+  ];
+  const csv = samplesToCsv(samples);
+  const [header, row] = csv.split('\n');
+  assert.match(header, /sample_type,qaqc_type,duplicate_of,coord_source/);
+  const cells = row.split(',');
+  assert.ok(cells.includes('soil'));
+  assert.ok(cells.includes('duplicate'));
+  assert.ok(cells.includes('CT-RC-0000'));
+  assert.ok(cells.includes('dgps'));
+
+  // Round-trip through parseSampleCsv recovers the same values.
+  const reparsed = parseSampleCsv(csv, [], 'CT-RC-');
+  assert.equal(reparsed.samples[0].sampleType, 'soil');
+  assert.equal(reparsed.samples[0].qaqcType, 'duplicate');
+  assert.equal(reparsed.samples[0].duplicateOf, 'CT-RC-0000');
+  assert.equal(reparsed.samples[0].coordSource, 'dgps');
 });

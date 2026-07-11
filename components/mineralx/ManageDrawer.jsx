@@ -5,6 +5,7 @@ import {
   nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   compressImage, today, ELEMENT_SYMBOLS, elementInfo, isProjectedCoord, crsLabel,
+  SAMPLE_TYPES, SAMPLE_TYPE_LABELS, QAQC_TYPES, QAQC_TYPE_LABELS, COORD_SOURCES, COORD_SOURCE_LABELS,
 } from './project-store';
 import ZonePicker from './ZonePicker';
 
@@ -141,7 +142,10 @@ function ProjectManager({ project, api, onClose }) {
 // ── Rock chip manager ──────────────────────────────────────────────────
 function RockChipManager({ project, api, onClose }) {
   const [tab, setTab] = useState('add');
-  const [form, setForm] = useState({ id: '', lith: '', lng: '', lat: '', notes: '' });
+  const [form, setForm] = useState({
+    id: '', lith: '', lng: '', lat: '', notes: '',
+    sampleType: 'rock_chip', qaqcType: 'none', duplicateOf: '', coordSource: 'unknown',
+  });
   const [assayRows, setAssayRows] = useState([{ element: 'Au', value: '' }]);
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState(null);
@@ -150,6 +154,7 @@ function RockChipManager({ project, api, onClose }) {
   const fileInput = useRef(null);
   const photoInput = useRef(null);
   const autoId = nextId(project.samples, project.idPrefix);
+  const isDuplicateType = form.qaqcType === 'duplicate' || form.qaqcType === 'triplicate';
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
@@ -162,6 +167,10 @@ function RockChipManager({ project, api, onClose }) {
     }
     if (isProjectedCoord(lat, lng)) {
       setError('These look like projected metres (MGA easting/northing), not decimal degrees — use CSV import to confirm a zone and reproject.');
+      return;
+    }
+    if (isDuplicateType && !form.duplicateOf.trim()) {
+      setError('A field duplicate/triplicate needs the original sample ID it was taken alongside.');
       return;
     }
     const assays = {};
@@ -177,6 +186,10 @@ function RockChipManager({ project, api, onClose }) {
       notes: form.notes.trim(),
       photo: photo || undefined,
       date: today(),
+      sampleType: form.sampleType,
+      qaqcType: form.qaqcType,
+      coordSource: form.coordSource,
+      ...(isDuplicateType ? { duplicateOf: form.duplicateOf.trim() } : {}),
     }]);
     onClose();
   };
@@ -222,12 +235,37 @@ function RockChipManager({ project, api, onClose }) {
       {tab === 'add' && (
         <div className="mx-manage-form">
           <ManageField label="Sample ID" value={form.id} onChange={setField('id')} placeholder={`Auto: ${autoId}`} />
+          <div className="mx-manage-row-2">
+            <ManageSelect
+              label="Sample type" value={form.sampleType} onChange={setField('sampleType')}
+              options={SAMPLE_TYPES.map(t => [t, SAMPLE_TYPE_LABELS[t]])}
+            />
+            <ManageSelect
+              label="Coordinate source" value={form.coordSource} onChange={setField('coordSource')}
+              title="How this location was obtained — matters for JORC-style disclosure of positional confidence"
+              options={COORD_SOURCES.map(s => [s, COORD_SOURCE_LABELS[s]])}
+            />
+          </div>
           <ManageField label="Lithology" value={form.lith} onChange={setField('lith')} placeholder="e.g. Quartz vein float" />
           <div className="mx-manage-row-2">
             <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="146.2570" />
             <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.0665" />
           </div>
           <AssayInputs rows={assayRows} setRows={setAssayRows} />
+          {/* QAQC: what this sample IS in the lab-quality audit trail — a */}
+          {/* standard/blank/duplicate, or an original. Field duplicates */}
+          {/* record which original sample they were split alongside. */}
+          <ManageSelect
+            label="QAQC type" value={form.qaqcType} onChange={setField('qaqcType')}
+            title="Standards, blanks and duplicates form the QAQC record a Competent Person needs to verify assay quality"
+            options={QAQC_TYPES.map(q => [q, QAQC_TYPE_LABELS[q]])}
+          />
+          {isDuplicateType && (
+            <ManageField
+              label="Original sample ID" value={form.duplicateOf} onChange={setField('duplicateOf')}
+              placeholder={`e.g. ${autoId.replace(/\d+$/, '0001')}`}
+            />
+          )}
           <ManageField label="Notes" value={form.notes} onChange={setField('notes')} placeholder="Surface float, quartz reef" multiline />
           <button type="button" className="mx-photo-attach" onClick={() => photoInput.current?.click()}>
             {/* eslint-disable-next-line @next/next/no-img-element -- dataURL thumbnail; next/image can't optimize these */}
@@ -538,6 +576,17 @@ function ManageField({ label, value, onChange, onBlur, placeholder, readOnly, mu
       ) : (
         <input type="text" className="mx-input" {...valueProps} onBlur={onBlur} placeholder={placeholder} readOnly={readOnly} />
       )}
+    </div>
+  );
+}
+
+function ManageSelect({ label, value, onChange, options, title }) {
+  return (
+    <div className="mx-field">
+      <label className="mx-field-label">{label}</label>
+      <select className="mx-input" value={value} onChange={onChange} title={title}>
+        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+      </select>
     </div>
   );
 }

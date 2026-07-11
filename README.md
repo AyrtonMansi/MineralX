@@ -93,6 +93,20 @@ Notable behaviours:
   pause for explicit zone confirmation before any reprojection.
 - **Undo/redo** — every data mutation (add/edit/delete/import) is
   snapshotted; Ctrl+Z / Ctrl+Shift+Z or the topbar buttons walk history.
+- **Sample provenance & QAQC** — every rock-chip sample carries a sample
+  type (rock chip / soil / channel / trench / float / core), a QAQC type
+  (original / CRM standard / blank / field duplicate / triplicate, with
+  `duplicateOf` linking a duplicate back to its original), and a
+  coordinate source (handheld GPS / DGPS / surveyed / digitised /
+  unknown) — the metadata a JORC Table 1 disclosure (sampling technique,
+  verification of sampling and assaying) actually needs, not just the
+  grade. QAQC-tagged samples get a badge in the Data drawer so lab-quality
+  coverage is visible at a glance. All three fields round-trip through
+  CSV import/export (`sample_type`, `qaqc_type`, `duplicate_of`,
+  `coord_source` columns; common lab abbreviations like "dup"/"std"/"blk"
+  are recognised) and default conservatively (`rock_chip` / `none` /
+  `unknown`) for data that predates these fields — nothing is asserted
+  about existing samples that isn't true.
 - **AI extraction** — the Add-data panel can send pasted report text to
   `/api/extract`, which uses the Claude API to read samples, collars and
   intervals out of unstructured text for review before import. This

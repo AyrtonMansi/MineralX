@@ -70,9 +70,50 @@ export function reprojectEastingNorthing(easting, northing, crs) {
   return { lat, lng };
 }
 
-export const STORE_KEY = 'mx-store-v4';
+export const STORE_KEY = 'mx-store-v5';
+const V4_KEY = 'mx-store-v4';
 const V3_KEY = 'mx-store-v3';
 const V2_KEY = 'mx-store-v2';
+
+// ── Sample provenance & QAQC ─────────────────────────────────────────────
+// A JORC Table 1 disclosure (Section 1: Sampling Techniques and Data;
+// Section 3: Verification of Sampling and Assaying) has to state the
+// sampling method, the QAQC regime, and how coordinates were obtained —
+// none of which existed on a sample before this. Without them the tool
+// can capture grades but not the metadata an ASX announcement or a JORC
+// resource estimate actually requires; a junior can't hand this data to a
+// Competent Person and have it be usable as-is.
+//
+// All fields are optional with a conservative default so nothing about
+// existing data is asserted that isn't true — 'unknown' coordinate source
+// is itself honest information (worth disclosing as a gap), not a guess.
+export const SAMPLE_TYPES = ['rock_chip', 'soil', 'channel', 'trench', 'float', 'core', 'other'];
+export const SAMPLE_TYPE_LABELS = {
+  rock_chip: 'Rock chip', soil: 'Soil', channel: 'Channel', trench: 'Trench',
+  float: 'Float', core: 'Core (RC/diamond)', other: 'Other',
+};
+
+// QAQC type: what this sample IS, for the lab-quality audit trail. A
+// duplicate/triplicate carries `duplicateOf` pointing at the original
+// sample id it was split/re-sampled from, so pairs can be checked for
+// precision at assay time.
+export const QAQC_TYPES = ['none', 'standard', 'blank', 'duplicate', 'triplicate'];
+export const QAQC_TYPE_LABELS = {
+  none: 'Original sample', standard: 'CRM standard', blank: 'Blank',
+  duplicate: 'Field duplicate', triplicate: 'Field triplicate',
+};
+
+// How the coordinate was obtained — directly bears on the positional
+// confidence a Competent Person can claim.
+export const COORD_SOURCES = ['gps_handheld', 'dgps', 'survey', 'digitised', 'unknown'];
+export const COORD_SOURCE_LABELS = {
+  gps_handheld: 'Handheld GPS', dgps: 'Differential GPS', survey: 'Surveyed',
+  digitised: 'Digitised from map/image', unknown: 'Unknown',
+};
+
+export function isValidSampleType(v) { return SAMPLE_TYPES.includes(v); }
+export function isValidQaqcType(v) { return QAQC_TYPES.includes(v); }
+export function isValidCoordSource(v) { return COORD_SOURCES.includes(v); }
 
 export const PROJECT_COLORS = ['#C15F3C', '#6E7A5E', '#5E6E7A', '#B08A3E', '#8A5E7A'];
 
@@ -138,7 +179,7 @@ export function formatAssay(el, value) {
 // Sited in QLD so the GeoResGlobe public layers have data underneath.
 export function createDemoStore() {
   return {
-    version: 4,
+    version: 5,
     activeProjectId: 'proj-demo',
     projects: [{
       id: 'proj-demo',
@@ -160,13 +201,18 @@ export function createDemoStore() {
           [-20.0570, 146.2410], [-20.0572, 146.2810], [-20.0930, 146.2800], [-20.0920, 146.2400],
         ],
       },
+      // sampleType/qaqcType/coordSource default to the same conservative
+      // values the v4->v5 migration gives real user data — 'rock_chip'
+      // (what these demo samples already visually represent), 'none' and
+      // 'unknown' — no QAQC pairing or survey provenance is asserted that
+      // isn't true of this synthetic data (rule: no invented geology).
       samples: [
-        { id: 'CT-RC-0428', lat: -20.0665, lng: 146.2570, assays: { Au: 4.2, Ag: 18 }, lith: 'Quartz vein float', notes: 'Coarse visible sulphides', date: '2026-06-12' },
-        { id: 'CT-RC-0431', lat: -20.0762, lng: 146.2521, assays: { Au: 1.1, Cu: 0.4 }, lith: 'Sheared granodiorite', notes: '', date: '2026-06-12' },
-        { id: 'CT-RC-0433', lat: -20.0708, lng: 146.2691, assays: { Au: 0.2 }, lith: 'Silicified siltstone', notes: 'Background', date: '2026-06-13' },
-        { id: 'CT-RC-0440', lat: -20.0611, lng: 146.2478, assays: { Au: 3.6, Ag: 41 }, lith: 'Quartz reef', notes: 'Sampled at reef contact', date: '2026-06-14' },
-        { id: 'CT-RC-0442', lat: -20.0842, lng: 146.2648, assays: { Au: 0.8, Cu: 0.15 }, lith: 'Ferruginous quartz', notes: '', date: '2026-06-14' },
-        { id: 'CT-RC-0447', lat: -20.0741, lng: 146.2442, assays: {}, lith: 'Quartz-sericite schist', notes: 'Dispatched to ALS 28 Jun', date: '2026-06-28' },
+        { id: 'CT-RC-0428', lat: -20.0665, lng: 146.2570, assays: { Au: 4.2, Ag: 18 }, lith: 'Quartz vein float', notes: 'Coarse visible sulphides', date: '2026-06-12', sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
+        { id: 'CT-RC-0431', lat: -20.0762, lng: 146.2521, assays: { Au: 1.1, Cu: 0.4 }, lith: 'Sheared granodiorite', notes: '', date: '2026-06-12', sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
+        { id: 'CT-RC-0433', lat: -20.0708, lng: 146.2691, assays: { Au: 0.2 }, lith: 'Silicified siltstone', notes: 'Background', date: '2026-06-13', sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
+        { id: 'CT-RC-0440', lat: -20.0611, lng: 146.2478, assays: { Au: 3.6, Ag: 41 }, lith: 'Quartz reef', notes: 'Sampled at reef contact', date: '2026-06-14', sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
+        { id: 'CT-RC-0442', lat: -20.0842, lng: 146.2648, assays: { Au: 0.8, Cu: 0.15 }, lith: 'Ferruginous quartz', notes: '', date: '2026-06-14', sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
+        { id: 'CT-RC-0447', lat: -20.0741, lng: 146.2442, assays: {}, lith: 'Quartz-sericite schist', notes: 'Dispatched to ALS 28 Jun', date: '2026-06-28', sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
       ],
       collars: [
         { id: 'CT-DD-001', lat: -20.0648, lng: 146.2545, azimuth: 90, dip: -60, depth: 250, date: '2026-05-02' },
@@ -215,21 +261,51 @@ export function migrateV3(v3) {
   };
 }
 
+// v4 -> v5 adds sample provenance/QAQC fields (see the block above):
+// sampleType, qaqcType, coordSource default to 'rock_chip' / 'none' /
+// 'unknown' — the same conservative defaults the demo store uses, since
+// pre-v5 data really is of unknown coordinate provenance and wasn't
+// tagged for QAQC. Existing samples aren't asserted to be anything they
+// weren't; the fields are just now present so they CAN be set.
+export function migrateV4(v4) {
+  return {
+    ...v4,
+    version: 5,
+    projects: v4.projects.map(p => ({
+      ...p,
+      samples: (p.samples || []).map(s => ({
+        sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown',
+        ...s, // existing values (if any) win over the defaults above
+      })),
+    })),
+  };
+}
+
 export function loadStore() {
   if (typeof window === 'undefined') return createDemoStore();
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.version === 4 && Array.isArray(parsed.projects)) return parsed;
+      if (parsed?.version === 5 && Array.isArray(parsed.projects)) return parsed;
     }
     // Older schemas migrate forward through the chain, then persist under
     // the current key so the migration only runs once.
+    const v4 = window.localStorage.getItem(V4_KEY);
+    if (v4) {
+      const parsed = JSON.parse(v4);
+      if (parsed?.version === 4 && Array.isArray(parsed.projects)) {
+        const migrated = migrateV4(parsed);
+        window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
+        window.localStorage.removeItem(V4_KEY);
+        return migrated;
+      }
+    }
     const v3 = window.localStorage.getItem(V3_KEY);
     if (v3) {
       const parsed = JSON.parse(v3);
       if (parsed?.version === 3 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV3(parsed);
+        const migrated = migrateV4(migrateV3(parsed));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V3_KEY);
         return migrated;
@@ -239,7 +315,7 @@ export function loadStore() {
     if (v2) {
       const parsed = JSON.parse(v2);
       if (parsed?.version === 2 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV3(migrateV2(parsed));
+        const migrated = migrateV4(migrateV3(migrateV2(parsed)));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V2_KEY);
         return migrated;
@@ -395,6 +471,32 @@ export function detectCsvKind(headers) {
   return null;
 }
 
+// Normalises a free-text CSV cell into one of a known set of enum values.
+// Real lab/field sheets abbreviate ("dup", "std", "blk"), so a few common
+// aliases are recognised alongside the canonical spelling; anything else
+// returns null so the caller can fall back to the default and warn rather
+// than reject the whole row over one messy cell.
+const ENUM_ALIASES = {
+  duplicate: 'duplicate', dup: 'duplicate', fdup: 'duplicate', field_duplicate: 'duplicate',
+  triplicate: 'triplicate', trip: 'triplicate',
+  standard: 'standard', std: 'standard', crm: 'standard',
+  blank: 'blank', blk: 'blank',
+  none: 'none', original: 'none',
+  rock_chip: 'rock_chip', rockchip: 'rock_chip', chip: 'rock_chip',
+  soil: 'soil', channel: 'channel', trench: 'trench', float: 'float', core: 'core', other: 'other',
+  gps_handheld: 'gps_handheld', gps: 'gps_handheld', handheld: 'gps_handheld', handheld_gps: 'gps_handheld',
+  dgps: 'dgps', differential_gps: 'dgps',
+  survey: 'survey', surveyed: 'survey', survey_grade: 'survey',
+  digitised: 'digitised', digitized: 'digitised', map: 'digitised',
+  unknown: 'unknown',
+};
+function normaliseEnum(raw, validSet) {
+  if (!raw) return null;
+  const key = raw.toLowerCase().trim().replace(/[\s-]+/g, '_');
+  const mapped = ENUM_ALIASES[key];
+  return mapped && validSet.includes(mapped) ? mapped : null;
+}
+
 function readAssays(cells, elementCols) {
   const assays = {};
   elementCols.forEach(({ index, element }) => {
@@ -423,6 +525,10 @@ export function parseSampleCsv(text, existing, prefix, crs) {
   const iLng = col('lng', 'lon', 'longitude', 'easting');
   const iLith = col('lith', 'lithology');
   const iNotes = col('notes', 'comment', 'comments');
+  const iSampleType = col('sample_type', 'sampletype', 'type');
+  const iQaqc = col('qaqc_type', 'qaqc', 'qc_type');
+  const iDupOf = col('duplicate_of', 'dup_of', 'original_id');
+  const iCoordSrc = col('coord_source', 'coordsource', 'coord_src');
   const elementCols = detectElementColumns(rows[0]);
   if (iLat < 0 || iLng < 0) return { samples: [], error: 'CSV needs lat/northing and lng/easting columns.' };
 
@@ -433,6 +539,11 @@ export function parseSampleCsv(text, existing, prefix, crs) {
   // still imports while the user learns exactly which rows didn't.
   // `error` stays fatal-only: callers treat it as "nothing imported".
   const rowErrors = [];
+  // Separate from rowErrors: these rows DO import — an unrecognised QAQC/
+  // type/coord-source cell falls back to a safe default rather than
+  // losing the row's assay data, but the user should still be told a
+  // value didn't match anything so they can fix the source file.
+  const fieldWarnings = [];
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
     const rawLat = parseFloat(cells[iLat]);
@@ -455,18 +566,41 @@ export function parseSampleCsv(text, existing, prefix, crs) {
     }
 
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
+
+    let sampleType = 'rock_chip';
+    if (iSampleType >= 0 && cells[iSampleType]) {
+      const v = normaliseEnum(cells[iSampleType], SAMPLE_TYPES);
+      if (v) sampleType = v; else fieldWarnings.push(`row ${r + 1}: unrecognised sample_type "${cells[iSampleType]}"`);
+    }
+    let qaqcType = 'none';
+    if (iQaqc >= 0 && cells[iQaqc]) {
+      const v = normaliseEnum(cells[iQaqc], QAQC_TYPES);
+      if (v) qaqcType = v; else fieldWarnings.push(`row ${r + 1}: unrecognised qaqc_type "${cells[iQaqc]}"`);
+    }
+    let coordSource = 'unknown';
+    if (iCoordSrc >= 0 && cells[iCoordSrc]) {
+      const v = normaliseEnum(cells[iCoordSrc], COORD_SOURCES);
+      if (v) coordSource = v; else fieldWarnings.push(`row ${r + 1}: unrecognised coord_source "${cells[iCoordSrc]}"`);
+    }
+    const duplicateOf = (iDupOf >= 0 && cells[iDupOf]) ? cells[iDupOf] : null;
+
     const sample = {
       id, lat, lng,
       assays: readAssays(cells, elementCols),
       lith: iLith >= 0 ? cells[iLith] || '' : '',
       notes: iNotes >= 0 ? cells[iNotes] || '' : '',
       date: today(),
+      sampleType, qaqcType, coordSource,
+      ...(duplicateOf ? { duplicateOf } : {}),
     };
     out.push(sample);
     pool = [...pool, sample];
   }
   if (!out.length) return { samples: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No rows with valid coordinates found.' };
-  return { samples: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
+  const warningParts = [];
+  if (rowErrors.length) warningParts.push(`Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}`);
+  if (fieldWarnings.length) warningParts.push(`${fieldWarnings.length} value${fieldWarnings.length === 1 ? '' : 's'} not recognised (default applied): ${fieldWarnings.join('; ')}`);
+  return { samples: out, error: null, warnings: warningParts.length ? warningParts.join(' ') : null };
 }
 
 // Drill collar CSV → collars. hole_id/id, lat/northing, lng/easting,
@@ -576,15 +710,20 @@ export function parseIntervalCsv(text) {
   return { intervals: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
 }
 
+// sample_type/qaqc_type/duplicate_of/coord_source round-trip through
+// export/import — a report or handover CSV needs this provenance to be
+// usable by a Competent Person, not just the grades.
 export function samplesToCsv(samples) {
   const elements = [...new Set(samples.flatMap(s => Object.keys(s.assays || {})))];
-  const header = ['sample_id', 'lat', 'lng', ...elements.map(e => e.toLowerCase()), 'lithology', 'notes', 'date'];
+  const header = ['sample_id', 'lat', 'lng', ...elements.map(e => e.toLowerCase()), 'lithology', 'notes', 'sample_type', 'qaqc_type', 'duplicate_of', 'coord_source', 'date'];
   return [
     header.join(','),
     ...samples.map(s => [
       s.id, s.lat, s.lng,
       ...elements.map(e => s.assays?.[e] ?? ''),
-      s.lith || '', (s.notes || '').replace(/,/g, ';'), s.date || '',
+      s.lith || '', (s.notes || '').replace(/,/g, ';'),
+      s.sampleType || 'rock_chip', s.qaqcType || 'none', s.duplicateOf || '', s.coordSource || 'unknown',
+      s.date || '',
     ].join(',')),
   ].join('\n');
 }

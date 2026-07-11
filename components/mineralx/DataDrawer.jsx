@@ -1,9 +1,16 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText, TARGET_STATUSES, bestLinkedGrade } from './project-store';
+import {
+  gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText,
+  TARGET_STATUSES, bestLinkedGrade, QAQC_TYPE_LABELS, SAMPLE_TYPE_LABELS,
+} from './project-store';
 import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
 import { orderTargetsForField, targetsToGpx, targetsToWaypointCsv } from './target-tasking';
 import { MxIcons } from './MineralXIcons';
+
+// Short badge text for the QAQC tag on a sample row — a manager scanning
+// the list needs to see QAQC coverage at a glance, not read a full label.
+const QAQC_BADGE = { standard: 'STD', blank: 'BLANK', duplicate: 'DUP', triplicate: 'TRIP' };
 
 // The home of all project data: a clean list per dataset, not a GIS
 // attribute table. Row click → zoom to the feature and open its popup.
@@ -136,6 +143,14 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                       <div className="mx-data-id">
                         {s.id}
                         {s.photo && <span className="mx-data-photo-tag" title="Has photo">photo</span>}
+                        {s.qaqcType && s.qaqcType !== 'none' && (
+                          <span className={`mx-data-qaqc-tag mx-data-qaqc-${s.qaqcType}`} title={QAQC_TYPE_LABELS[s.qaqcType]}>
+                            {QAQC_BADGE[s.qaqcType]}
+                          </span>
+                        )}
+                        {s.sampleType && s.sampleType !== 'rock_chip' && (
+                          <span className="mx-data-type-tag" title={SAMPLE_TYPE_LABELS[s.sampleType]}>{SAMPLE_TYPE_LABELS[s.sampleType]}</span>
+                        )}
                         {showProject && <ProjectBadge project={s.project} />}
                       </div>
                       <div className="mx-data-sub">{s.lith || '—'}{s.notes ? ` · ${s.notes}` : ''}</div>
