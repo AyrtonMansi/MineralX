@@ -99,6 +99,16 @@ being asked.
    Ctrl+Shift+Z and the topbar buttons walk the history (capped at 20).
    A new mutation path without a snapshot silently breaks undo — the
    delete-confirm dialogs now promise "Undo with Ctrl+Z", so keep it true.
+9. **A lab result that was reported never silently disappears.**
+   `parseAssayCell` (`project-store.js`) reads "<0.01"/negative-number
+   below-detection cells into `detectionLimits`, a sibling map to `assays`
+   on samples and intervals — never dropped via a failed `parseFloat`.
+   `gradeOf`/`assayDisplay` treat a detection-limit-only result as a real
+   background grade, not "pending" or "not analysed" — a below-detection
+   result IS a result. Any new assay-ingestion path (CSV, manual entry, a
+   future PDF/AI extraction of lab certs) must go through
+   `parseAssayCell`/`readAssays`, not raw `parseFloat`, or it regresses
+   this. Covered by unit + e2e tests — keep them.
 
 ## MapLibre: lessons already paid for
 

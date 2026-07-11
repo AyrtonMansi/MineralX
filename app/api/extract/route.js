@@ -25,24 +25,33 @@ export const maxDuration = 60;
 const MAX_TEXT_CHARS = 150_000;
 const MAX_FEATURES = 500;
 
-// `assays` is modelled as an array of {element, value} pairs rather than
-// a map: structured-output schemas require additionalProperties: false
-// on every object, which rules out dynamic element keys. Converted back
-// to the app's `{ Au: 4.2 }` map shape in normalise() below.
+const nullableNumber = { anyOf: [{ type: 'number' }, { type: 'null' }] };
+
+// `assays` is modelled as an array of {element, value, detectionLimit}
+// triples rather than a map: structured-output schemas require
+// additionalProperties: false on every object, which rules out dynamic
+// element keys. Converted back to the app's `{ Au: 4.2 }` / sibling
+// `detectionLimits` map shape in normalise() below.
+//
+// A below-detection result ("Au <0.01 g/t") is real, disclosed lab data
+// — not "no grade" — so it gets its own field (value: null,
+// detectionLimit: 0.01) instead of being dropped. An earlier version of
+// this prompt told the model to just omit the pair for below-detection
+// results, which silently lost exactly the kind of result a JORC
+// disclosure most needs to state plainly.
 const assaysSchema = {
   type: 'array',
   items: {
     type: 'object',
     additionalProperties: false,
-    required: ['element', 'value'],
+    required: ['element', 'value', 'detectionLimit'],
     properties: {
       element: { type: 'string', description: 'Element symbol as printed, e.g. Au, Ag, Cu' },
-      value: { type: 'number', description: 'Numeric grade exactly as printed. Omit the pair entirely if the value is below detection or not numeric.' },
+      value: { ...nullableNumber, description: 'Numeric grade exactly as printed, or null if the result was below detection or not numeric.' },
+      detectionLimit: { ...nullableNumber, description: 'If the document reports this result as below detection (e.g. "<0.01"), the numeric limit (0.01). Otherwise null.' },
     },
   },
 };
-
-const nullableNumber = { anyOf: [{ type: 'number' }, { type: 'null' }] };
 
 const EXTRACTION_SCHEMA = {
   type: 'object',
@@ -134,7 +143,7 @@ const SYSTEM_PROMPT = `You are a geologist extracting structured data from miner
 Rules:
 - Extract ONLY what the document explicitly states. Never invent, estimate, or fill in sample IDs, coordinates, grades, depths, or names that are not present. Empty string / null / empty array are the correct outputs for absent data.
 - Report coordinates VERBATIM as printed. If the document gives easting/northing (metre-scale values like 445000 / 7778000), output those numbers unchanged in lng/lat — do NOT convert them to latitude/longitude yourself; the application handles projection with human confirmation.
-- Grades reported as below detection limit (e.g. "<0.01") are not numeric grades — omit that assay pair.
+- Grades reported as below detection limit (e.g. "<0.01") are real, disclosed results — set value to null and detectionLimit to the numeric limit (0.01). Do not omit the pair.
 - sourceHighlights: quote the exact sentence or table fragment each key extraction came from, so a geologist can verify against the source.
 - confidence: your overall confidence that the extraction is faithful to the document (0-1). Be honest — degraded scans, ambiguous tables, or inferred structure should lower it.`;
 
@@ -144,14 +153,22 @@ const inRange = (lat, lng) =>
   !Number.isNaN(lat) && !Number.isNaN(lng) &&
   lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 
-function assaysToMap(pairs) {
-  const out = {};
-  (pairs || []).forEach(({ element, value }) => {
-    if (typeof value === 'number' && !Number.isNaN(value) && value >= 0 && element) {
-      out[element.trim()] = value;
+// Mirrors the client-side readAssays()/parseAssayCell() contract in
+// project-store.js: a below-detection result becomes a detectionLimits
+// entry, never a dropped element.
+function assaysToMaps(pairs) {
+  const assays = {};
+  const detectionLimits = {};
+  (pairs || []).forEach(({ element, value, detectionLimit }) => {
+    if (!element) return;
+    const el = element.trim();
+    if (typeof value === 'number' && !Number.isNaN(value) && value >= 0) {
+      assays[el] = value;
+    } else if (typeof detectionLimit === 'number' && !Number.isNaN(detectionLimit) && detectionLimit >= 0) {
+      detectionLimits[el] = detectionLimit;
     }
   });
-  return out;
+  return { assays, detectionLimits };
 }
 
 // Applies the same coordinate-safety contract as the CSV parsers: rows
@@ -170,7 +187,12 @@ function normalise(raw) {
       skipped.push({ kind: 'sample', id: s.id || `#${i + 1}`, reason: 'invalid coordinates' });
       return;
     }
-    samples.push({ id: (s.id || '').trim(), lat: s.lat, lng: s.lng, assays: assaysToMap(s.assays), lith: s.lith || '', notes: s.notes || '' });
+    const { assays, detectionLimits } = assaysToMaps(s.assays);
+    samples.push({
+      id: (s.id || '').trim(), lat: s.lat, lng: s.lng, assays,
+      ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
+      lith: s.lith || '', notes: s.notes || '',
+    });
   });
 
   const collars = [];
@@ -192,7 +214,11 @@ function normalise(raw) {
       skipped.push({ kind: 'interval', id: iv.holeId || `#${i + 1}`, reason: 'invalid interval' });
       return;
     }
-    intervals.push({ holeId: iv.holeId.trim(), from: iv.from, to: iv.to, assays: assaysToMap(iv.assays) });
+    const { assays, detectionLimits } = assaysToMaps(iv.assays);
+    intervals.push({
+      holeId: iv.holeId.trim(), from: iv.from, to: iv.to, assays,
+      ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
+    });
   });
 
   let boundary = null;

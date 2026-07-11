@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import {
-  gradeOf, GRADE_COLORS, formatAssay, elementInfo, samplesToCsv, collarsToCsv, downloadText,
+  gradeOf, GRADE_COLORS, formatAssay, assayDisplay, elementInfo, samplesToCsv, collarsToCsv, intervalsToCsv, downloadText,
   TARGET_STATUSES, bestLinkedGrade, QAQC_TYPE_LABELS, SAMPLE_TYPE_LABELS,
 } from './project-store';
 import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
@@ -47,10 +47,12 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
       .flatMap(p => (p.targets || []).map(t => ({ ...t, project: p })))
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)), [store]);
 
-  // 'pending' is a status filter, not just text: matches unassayed chips.
+  // 'pending' is a status filter, not just text: matches samples with no
+  // assay result at all — including detection limits, since a sample that
+  // came back "<0.01" genuinely was assayed and isn't awaiting anything.
   const samples = scoped(q
     ? allSamples.filter(s =>
-        (q === 'pending' && Object.keys(s.assays || {}).length === 0) ||
+        (q === 'pending' && Object.keys(s.assays || {}).length === 0 && Object.keys(s.detectionLimits || {}).length === 0) ||
         s.id.toLowerCase().includes(q) || (s.lith || '').toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q))
     : allSamples);
   const collars = scoped(q ? allCollars.filter(c => c.id.toLowerCase().includes(q)) : allCollars);
@@ -64,6 +66,14 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
     if (tab === 'chips') downloadText('rock_chips.csv', samplesToCsv(scoped(allSamples)));
     if (tab === 'holes') downloadText('drill_collars.csv', collarsToCsv(scoped(allCollars)));
   };
+
+  // The from-to-grade table for whichever holes are in scope — previously
+  // there was no way at all to get assay-interval data back out of the app.
+  const scopedIntervals = () => {
+    const holeIds = new Set(scoped(allCollars).map(c => c.id));
+    return store.projects.flatMap(p => (p.intervals || []).filter(i => holeIds.has(i.holeId)));
+  };
+  const exportIntervals = () => downloadText('drill_assay_intervals.csv', intervalsToCsv(scopedIntervals()));
 
   // Field tasking: the shown targets (the filter doubles as a selection),
   // ordered into a walkable sequence, exported as GPX for a handheld GPS
@@ -82,10 +92,12 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
   };
 
   const sampleValue = (s) => {
-    const v = s.assays?.[activeElement];
-    if (v != null) return formatAssay(activeElement, v);
-    const other = Object.entries(s.assays || {});
-    if (other.length) return other.map(([el, val]) => formatAssay(el, val)).slice(0, 2).join(' · ');
+    const primary = assayDisplay(s, activeElement);
+    if (primary != null) return primary;
+    const otherAssays = Object.entries(s.assays || {}).map(([el, val]) => formatAssay(el, val));
+    const otherDL = Object.entries(s.detectionLimits || {}).map(([el, dl]) => formatAssay(el, dl, { belowDetection: true }));
+    const other = [...otherAssays, ...otherDL];
+    if (other.length) return other.slice(0, 2).join(' · ');
     return 'pending';
   };
 
@@ -288,8 +300,16 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
               + {tab === 'chips' ? 'Add sample' : 'Add collar'}
             </button>
             <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportCurrent}>
-              {MxIcons.download} Export CSV
+              {MxIcons.download} {tab === 'chips' ? 'Export CSV' : 'Collars CSV'}
             </button>
+            {tab === 'holes' && scopedIntervals().length > 0 && (
+              <button
+                type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportIntervals}
+                title="The from-to-grade table — a separate export from the collar list"
+              >
+                {MxIcons.download} Assay intervals CSV
+              </button>
+            )}
           </div>
         )}
         {tab === 'targets' && targets.length > 0 && (
@@ -355,8 +375,9 @@ function ProjectBadge({ project }) {
 // Downhole assay intercepts for one hole — the drill-assay table.
 function IntervalTable({ collar, activeElement, onAddIntervals }) {
   const rows = [...collar.intervals].sort((a, b) => a.from - b.from);
-  // Elements assayed anywhere in this hole, active element first.
-  const elements = [...new Set(rows.flatMap(r => Object.keys(r.assays || {})))]
+  // Elements assayed anywhere in this hole (including below-detection-only
+  // results), active element first.
+  const elements = [...new Set(rows.flatMap(r => [...Object.keys(r.assays || {}), ...Object.keys(r.detectionLimits || {})]))]
     .sort((a, b) => (a === activeElement ? -1 : b === activeElement ? 1 : 0));
 
   if (!rows.length) {
@@ -382,9 +403,7 @@ function IntervalTable({ collar, activeElement, onAddIntervals }) {
           <div key={i} className={`mx-interval-row ${high ? 'mx-interval-hot' : ''}`}>
             <span className="mx-iv-depth">{r.from}–{r.to}</span>
             <span className="mx-iv-width">{(r.to - r.from).toFixed(1)} m</span>
-            {elements.map(el => (
-              <span key={el} className="mx-iv-el">{r.assays?.[el] != null ? formatAssay(el, r.assays[el]) : '—'}</span>
-            ))}
+            {elements.map(el => <span key={el} className="mx-iv-el">{assayDisplay(r, el) ?? '—'}</span>)}
           </div>
         );
       })}

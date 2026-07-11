@@ -2,7 +2,7 @@
 // DOM/string builders and styling lookups with no closure over component
 // state or MapLibre instances. Split out of MineralXWorkspace.jsx purely
 // to keep that file's size down; nothing here changed behavior.
-import { PROJECT_COLORS, formatAssay, evidenceSummary } from './project-store';
+import { PROJECT_COLORS, formatAssay, evidenceSummary, assayDisplay } from './project-store';
 
 export { evidenceSummary }; // re-exported for callers already importing it from here
 
@@ -114,9 +114,12 @@ export function targetPopupHtml(t) {
 }
 
 export function samplePopupHtml(s) {
-  const entries = Object.entries(s.assays || {});
-  const assayLine = entries.length
-    ? `<strong>${entries.map(([el, v]) => formatAssay(el, v)).join(' · ')}</strong>`
+  // Below-detection results ("<0.01 g/t Au") are real, reported results —
+  // showing "awaiting assay" for a sample that's actually all-BDL would
+  // wrongly tell a geologist standing at the pin that nothing came back yet.
+  const elements = [...new Set([...Object.keys(s.assays || {}), ...Object.keys(s.detectionLimits || {})])];
+  const assayLine = elements.length
+    ? `<strong>${elements.map((el) => assayDisplay(s, el)).join(' · ')}</strong>`
     : '<span class="mx-pop-pending">awaiting assay</span>';
   return `
     <div class="mx-pop">

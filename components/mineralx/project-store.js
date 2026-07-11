@@ -145,34 +145,65 @@ export function elementInfo(el) {
   return ELEMENTS[el] || GENERIC_THRESHOLDS;
 }
 
-// Grade of a sample for one element. 'pending' = no assays at all.
+// Grade of a sample for one element. 'pending' = no assay results at all
+// (neither a measured value nor a detection limit for anything). A
+// below-detection result ("<0.01 g/t Au") is a real, low result — it
+// grades as background, not as "not analysed" — because the sample WAS
+// tested and returned a genuine (if unremarkable) answer; conflating
+// that with "awaiting assay" would hide real QAQC-passing data from a
+// manager scanning for what's still outstanding.
 export function gradeOf(sample, element) {
-  const assays = sample?.assays;
-  if (!assays || Object.keys(assays).length === 0) return 'pending';
+  const assays = sample?.assays || {};
+  const dls = sample?.detectionLimits || {};
+  if (Object.keys(assays).length === 0 && Object.keys(dls).length === 0) return 'pending';
   const v = assays[element];
-  if (v == null || Number.isNaN(v)) return 'none'; // assayed, but not for this element
-  const t = elementInfo(element);
-  if (v >= t.high) return 'high';
-  if (v >= t.anom) return 'anom';
-  return 'bg';
+  if (v != null && !Number.isNaN(v)) {
+    const t = elementInfo(element);
+    if (v >= t.high) return 'high';
+    if (v >= t.anom) return 'anom';
+    return 'bg';
+  }
+  if (dls[element] != null) return 'bg'; // below detection: real, low result
+  return 'none'; // assayed for other elements, but not this one
 }
 
 export const GRADE_COLORS = { high: '#C15F3C', anom: '#B08A3E', bg: '#A39C8C', none: '#8A857A', pending: '#F3F1E9' };
 
 // Union of elements present in the data (always includes Au so the
-// selector never renders empty).
+// selector never renders empty). Elements that only ever came back below
+// detection still count — a project that tested for Sb and got "<50 ppm"
+// everywhere should still offer Sb in the "colour by" selector.
 export function elementsInStore(store) {
   const set = new Set(['Au']);
   store.projects.forEach(p => {
-    p.samples.forEach(s => Object.keys(s.assays || {}).forEach(e => set.add(e)));
-    (p.intervals || []).forEach(i => Object.keys(i.assays || {}).forEach(e => set.add(e)));
+    p.samples.forEach(s => {
+      Object.keys(s.assays || {}).forEach(e => set.add(e));
+      Object.keys(s.detectionLimits || {}).forEach(e => set.add(e));
+    });
+    (p.intervals || []).forEach(i => {
+      Object.keys(i.assays || {}).forEach(e => set.add(e));
+      Object.keys(i.detectionLimits || {}).forEach(e => set.add(e));
+    });
   });
   return [...set];
 }
 
-export function formatAssay(el, value) {
+export function formatAssay(el, value, { belowDetection = false } = {}) {
   const t = elementInfo(el);
-  return `${value} ${t.unit ? `${t.unit} ` : ''}${el}`.trim();
+  return `${belowDetection ? '<' : ''}${value} ${t.unit ? `${t.unit} ` : ''}${el}`.trim();
+}
+
+// Display string for one element on a sample/interval: a real measured
+// grade, a below-detection limit ("<0.01 g/t Au"), or null if that
+// element was never analysed for this record at all. Centralises the
+// assays-vs-detectionLimits precedence so every UI surface (sample rows,
+// interval tables, popups) reads it the same way.
+export function assayDisplay(record, el) {
+  const v = record?.assays?.[el];
+  if (v != null && !Number.isNaN(v)) return formatAssay(el, v);
+  const dl = record?.detectionLimits?.[el];
+  if (dl != null) return formatAssay(el, dl, { belowDetection: true });
+  return null;
 }
 
 // ── Demo project: Charters Towers, North Queensland ────────────────────
@@ -497,13 +528,38 @@ function normaliseEnum(raw, validSet) {
   return mapped && validSet.includes(mapped) ? mapped : null;
 }
 
+// Reads one lab-result cell into either a real measured value or a
+// detection limit — never silently nothing when the cell clearly
+// reported something. Real lab certificates (ALS, Bureau Veritas,
+// Intertek…) write a below-detection result as "<0.01" or "< 0.01"; some
+// legacy exports instead use a negative number for the same meaning
+// (e.g. "-0.01" = "<0.01"). Before this, both forms failed
+// validateAssayValue/parseFloat and the element just vanished from the
+// sample — real lab data silently lost, and "never tested" became
+// indistinguishable from "tested, came back clean".
+export function parseAssayCell(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return { value: null, detectionLimit: null };
+  const belowMatch = s.match(/^[<≤]\s*([\d.]+)$/);
+  if (belowMatch) {
+    const dl = parseFloat(belowMatch[1]);
+    return Number.isNaN(dl) ? { value: null, detectionLimit: null } : { value: null, detectionLimit: dl };
+  }
+  const v = parseFloat(s);
+  if (Number.isNaN(v)) return { value: null, detectionLimit: null };
+  if (v < 0) return { value: null, detectionLimit: Math.abs(v) }; // legacy BDL convention
+  return { value: v, detectionLimit: null };
+}
+
 function readAssays(cells, elementCols) {
   const assays = {};
+  const detectionLimits = {};
   elementCols.forEach(({ index, element }) => {
-    const v = parseFloat(cells[index]);
-    if (validateAssayValue(v)) assays[element] = v;
+    const { value, detectionLimit } = parseAssayCell(cells[index]);
+    if (value != null) assays[element] = value;
+    else if (detectionLimit != null) detectionLimits[element] = detectionLimit;
   });
-  return assays;
+  return { assays, detectionLimits };
 }
 
 // Rock chip CSV → samples. Recognised headers (case-insensitive):
@@ -583,10 +639,12 @@ export function parseSampleCsv(text, existing, prefix, crs) {
       if (v) coordSource = v; else fieldWarnings.push(`row ${r + 1}: unrecognised coord_source "${cells[iCoordSrc]}"`);
     }
     const duplicateOf = (iDupOf >= 0 && cells[iDupOf]) ? cells[iDupOf] : null;
+    const { assays, detectionLimits } = readAssays(cells, elementCols);
 
     const sample = {
       id, lat, lng,
-      assays: readAssays(cells, elementCols),
+      assays,
+      ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
       lith: iLith >= 0 ? cells[iLith] || '' : '',
       notes: iNotes >= 0 ? cells[iNotes] || '' : '',
       date: today(),
@@ -668,16 +726,28 @@ export function parseAssayCsv(text, samples) {
   for (let r = 1; r < rows.length; r++) {
     const id = rows[r][iId];
     if (!id) continue;
-    const assays = readAssays(rows[r], elementCols);
-    if (Object.keys(assays).length) results.set(id, assays);
+    const { assays, detectionLimits } = readAssays(rows[r], elementCols);
+    if (Object.keys(assays).length || Object.keys(detectionLimits).length) results.set(id, { assays, detectionLimits });
   }
   let matched = 0;
   const updated = samples.map(s => {
     if (results.has(s.id)) {
       matched++;
-      const assays = { ...(s.assays || {}), ...results.get(s.id) };
+      const incoming = results.get(s.id);
+      const assays = { ...(s.assays || {}), ...incoming.assays };
+      const detectionLimits = { ...(s.detectionLimits || {}), ...incoming.detectionLimits };
+      // A new lab result always supersedes an older one for that element —
+      // a fresh measured value clears any stale detection-limit entry
+      // (and vice versa), so an element never ends up in both maps at once.
+      Object.keys(incoming.assays).forEach(el => { delete detectionLimits[el]; });
+      Object.keys(incoming.detectionLimits).forEach(el => { delete assays[el]; });
       results.delete(s.id);
-      return { ...s, assays };
+      // Spread from a copy of `s` with any old detectionLimits key
+      // stripped first — otherwise, if every element resolved to a real
+      // value this round, the stale (now-empty) key would survive the
+      // conditional spread below and linger in storage forever.
+      const { detectionLimits: _stale, ...rest } = s;
+      return { ...rest, assays, ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) };
     }
     return s;
   });
@@ -704,26 +774,56 @@ export function parseIntervalCsv(text) {
       rowErrors.push(`row ${r + 1}: invalid interval`);
       continue;
     }
-    out.push({ holeId: cells[iHole], from, to, assays: readAssays(cells, elementCols) });
+    const { assays, detectionLimits } = readAssays(cells, elementCols);
+    out.push({ holeId: cells[iHole], from, to, assays, ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) });
   }
   if (!out.length) return { intervals: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No valid interval rows found.' };
   return { intervals: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
+}
+
+// One CSV cell for an element on a sample/interval: the real value if
+// measured, "<0.01"-style if only a detection limit was recorded, or a
+// blank if that element was never analysed at all — so exporting and
+// re-importing is lossless instead of silently dropping BDL results.
+function assayCsvCell(record, el) {
+  const v = record.assays?.[el];
+  if (v != null) return v;
+  const dl = record.detectionLimits?.[el];
+  return dl != null ? `<${dl}` : '';
 }
 
 // sample_type/qaqc_type/duplicate_of/coord_source round-trip through
 // export/import — a report or handover CSV needs this provenance to be
 // usable by a Competent Person, not just the grades.
 export function samplesToCsv(samples) {
-  const elements = [...new Set(samples.flatMap(s => Object.keys(s.assays || {})))];
+  const elements = [...new Set(samples.flatMap(s => [...Object.keys(s.assays || {}), ...Object.keys(s.detectionLimits || {})]))];
   const header = ['sample_id', 'lat', 'lng', ...elements.map(e => e.toLowerCase()), 'lithology', 'notes', 'sample_type', 'qaqc_type', 'duplicate_of', 'coord_source', 'date'];
   return [
     header.join(','),
     ...samples.map(s => [
       s.id, s.lat, s.lng,
-      ...elements.map(e => s.assays?.[e] ?? ''),
+      ...elements.map(e => assayCsvCell(s, e)),
       s.lith || '', (s.notes || '').replace(/,/g, ';'),
       s.sampleType || 'rock_chip', s.qaqcType || 'none', s.duplicateOf || '', s.coordSource || 'unknown',
       s.date || '',
+    ].join(',')),
+  ].join('\n');
+}
+
+// The downhole assay-interval table — the from-to-grade record a
+// Competent Person or a modeling consultant actually needs — was
+// previously not exportable at all; only the collar list (id/location/
+// orientation) had a CSV export. A drill program's real results being
+// unable to leave the app once entered is a data-preservation gap, not
+// a cosmetic one. Same detection-limit-aware cell format as samplesToCsv.
+export function intervalsToCsv(intervals) {
+  const elements = [...new Set(intervals.flatMap(i => [...Object.keys(i.assays || {}), ...Object.keys(i.detectionLimits || {})]))];
+  const header = ['hole_id', 'from', 'to', 'width_m', ...elements.map(e => e.toLowerCase())];
+  return [
+    header.join(','),
+    ...intervals.map(i => [
+      i.holeId, i.from, i.to, (i.to - i.from).toFixed(2),
+      ...elements.map(e => assayCsvCell(i, e)),
     ].join(',')),
   ].join('\n');
 }

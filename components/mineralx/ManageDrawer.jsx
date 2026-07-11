@@ -3,8 +3,8 @@ import { useRef, useState } from 'react';
 import { MxIcons } from './MineralXIcons';
 import {
   nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv,
-  samplesToCsv, collarsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
-  compressImage, today, ELEMENT_SYMBOLS, elementInfo, isProjectedCoord, crsLabel,
+  samplesToCsv, collarsToCsv, intervalsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  compressImage, today, ELEMENT_SYMBOLS, elementInfo, isProjectedCoord, crsLabel, parseAssayCell,
   SAMPLE_TYPES, SAMPLE_TYPE_LABELS, QAQC_TYPES, QAQC_TYPE_LABELS, COORD_SOURCES, COORD_SOURCE_LABELS,
 } from './project-store';
 import ZonePicker from './ZonePicker';
@@ -174,14 +174,17 @@ function RockChipManager({ project, api, onClose }) {
       return;
     }
     const assays = {};
+    const detectionLimits = {};
     assayRows.forEach(({ element, value }) => {
-      const v = parseFloat(value);
-      if (!Number.isNaN(v)) assays[element] = v;
+      const { value: v, detectionLimit: dl } = parseAssayCell(value);
+      if (v != null) assays[element] = v;
+      else if (dl != null) detectionLimits[element] = dl;
     });
     api.addSamples(project.id, [{
       id: form.id.trim() || autoId,
       lat, lng,
       assays,
+      ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
       lith: form.lith.trim(),
       notes: form.notes.trim(),
       photo: photo || undefined,
@@ -449,8 +452,17 @@ function DrillHoleManager({ project, api, onClose }) {
 
       <div className="mx-manage-actions">
         <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={() => downloadText('drill_collars.csv', collarsToCsv(project.collars))}>
-          {MxIcons.download} Export CSV
+          {MxIcons.download} Collars CSV
         </button>
+        {(project.intervals || []).length > 0 && (
+          <button
+            type="button" className="mx-btn-secondary mx-btn-sm"
+            onClick={() => downloadText('drill_assay_intervals.csv', intervalsToCsv(project.intervals))}
+            title="The from-to-grade table — previously not exportable at all"
+          >
+            {MxIcons.download} Assay intervals CSV
+          </button>
+        )}
         <span className="mx-manage-count">{project.collars.length} holes · {(project.intervals || []).length} intervals</span>
       </div>
     </div>
@@ -528,7 +540,7 @@ function AssayInputs({ rows, setRows }) {
   const usedElements = rows.map(r => r.element);
   return (
     <div className="mx-field">
-      <label className="mx-field-label">Assays — leave blank if awaiting results</label>
+      <label className="mx-field-label">Assays — leave blank if awaiting results, or type &lt;0.01 for below detection</label>
       {rows.map((row, i) => (
         <div key={i} className="mx-assay-row">
           <select

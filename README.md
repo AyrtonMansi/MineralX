@@ -107,6 +107,21 @@ Notable behaviours:
   are recognised) and default conservatively (`rock_chip` / `none` /
   `unknown`) for data that predates these fields — nothing is asserted
   about existing samples that isn't true.
+- **Detection limits** — a lab result reported as below detection
+  ("<0.01", or the legacy negative-number convention some exports use)
+  is recorded as a real, disclosed result — `<0.01 g/t Au` — not silently
+  dropped and not confused with "never assayed." It grades as background
+  (a genuine, if unremarkable, answer) rather than "pending", shows
+  correctly in sample rows, map popups and the drill-hole interval table,
+  and round-trips through CSV export/import losslessly. Applies to rock
+  chips, assay-linking CSVs and downhole assay intervals alike.
+- **Assay-interval export** — the downhole from-to-grade table (not just
+  the collar list) now exports as its own CSV, alongside the collar
+  export in both the Data drawer and the Drill Hole manager — the actual
+  drill results a Competent Person or modeling consultant needs, which
+  previously could be imported but never gotten back out. AI extraction
+  (below) recognises below-detection results the same way, so a pasted
+  lab certificate doesn't lose them either.
 - **AI extraction** — the Add-data panel can send pasted report text to
   `/api/extract`, which uses the Claude API to read samples, collars and
   intervals out of unstructured text for review before import. This

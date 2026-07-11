@@ -37,6 +37,11 @@ import {
   SAMPLE_TYPES,
   QAQC_TYPES,
   COORD_SOURCES,
+  parseAssayCell,
+  parseAssayCsv,
+  assayDisplay,
+  elementsInStore,
+  intervalsToCsv,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -423,4 +428,112 @@ test('samplesToCsv: round-trips sample_type/qaqc_type/duplicate_of/coord_source'
   assert.equal(reparsed.samples[0].qaqcType, 'duplicate');
   assert.equal(reparsed.samples[0].duplicateOf, 'CT-RC-0000');
   assert.equal(reparsed.samples[0].coordSource, 'dgps');
+});
+
+// ── Detection limits ────────────────────────────────────────────────────
+// Real lab certificates report below-detection results as "<0.01" or a
+// negative-number convention — before this, both silently vanished
+// (parseFloat("<0.01") is NaN, and the old validateAssayValue-only gate
+// rejected negatives outright). That's real lab data lost, not just an
+// edge case: every below-detection cell in a real assay CSV hit this.
+
+test('parseAssayCell: a plain positive number is a real measured value', () => {
+  assert.deepEqual(parseAssayCell('4.2'), { value: 4.2, detectionLimit: null });
+  assert.deepEqual(parseAssayCell(' 0 '), { value: 0, detectionLimit: null });
+});
+
+test('parseAssayCell: "<X" and "< X" are read as a detection limit, not dropped', () => {
+  assert.deepEqual(parseAssayCell('<0.01'), { value: null, detectionLimit: 0.01 });
+  assert.deepEqual(parseAssayCell('< 0.5'), { value: null, detectionLimit: 0.5 });
+  assert.deepEqual(parseAssayCell('≤0.01'), { value: null, detectionLimit: 0.01 });
+});
+
+test('parseAssayCell: a negative number is the legacy below-detection convention', () => {
+  assert.deepEqual(parseAssayCell('-0.01'), { value: null, detectionLimit: 0.01 });
+});
+
+test('parseAssayCell: blank or unparseable cells stay absent, not a phantom zero limit', () => {
+  assert.deepEqual(parseAssayCell(''), { value: null, detectionLimit: null });
+  assert.deepEqual(parseAssayCell(undefined), { value: null, detectionLimit: null });
+  assert.deepEqual(parseAssayCell('n/a'), { value: null, detectionLimit: null });
+});
+
+test('parseSampleCsv: a below-detection cell keeps the row (and its other assays), recorded as a detection limit', () => {
+  const csv = 'sample_id,lat,lng,au,ag\nCT-RC-0001,-20.07,146.26,<0.01,12\n';
+  const r = parseSampleCsv(csv, [], 'CT-RC-');
+  assert.equal(r.error, null);
+  assert.equal(r.samples.length, 1);
+  assert.equal(r.samples[0].assays.Au, undefined); // not a measured value
+  assert.equal(r.samples[0].assays.Ag, 12); // sibling column unaffected
+  assert.equal(r.samples[0].detectionLimits.Au, 0.01);
+});
+
+test('parseIntervalCsv: below-detection intervals are recorded, not dropped', () => {
+  const csv = 'hole_id,from,to,au\nCT-DD-001,10,12,<0.005\n';
+  const r = parseIntervalCsv(csv);
+  assert.equal(r.error, null);
+  assert.equal(r.intervals.length, 1);
+  assert.equal(r.intervals[0].assays.Au, undefined);
+  assert.equal(r.intervals[0].detectionLimits.Au, 0.005);
+});
+
+test('gradeOf: a below-detection-only element grades as background, not "none" or "pending"', () => {
+  const sample = { assays: {}, detectionLimits: { Au: 0.01 } };
+  assert.equal(gradeOf(sample, 'Au'), 'bg');
+  // Still 'none' for a genuinely untested element on that same sample.
+  assert.equal(gradeOf(sample, 'Cu'), 'none');
+});
+
+test('gradeOf: a sample with no result of any kind is still pending', () => {
+  assert.equal(gradeOf({ assays: {} }, 'Au'), 'pending');
+  assert.equal(gradeOf({ assays: {}, detectionLimits: {} }, 'Au'), 'pending');
+});
+
+test('assayDisplay: prefers a real value, falls back to "<limit", else null', () => {
+  assert.equal(assayDisplay({ assays: { Au: 4.2 } }, 'Au'), '4.2 g/t Au');
+  assert.equal(assayDisplay({ assays: {}, detectionLimits: { Au: 0.01 } }, 'Au'), '<0.01 g/t Au');
+  assert.equal(assayDisplay({ assays: {}, detectionLimits: {} }, 'Au'), null);
+});
+
+test('elementsInStore: an element that only ever came back below detection still appears', () => {
+  const store = { projects: [{ samples: [{ assays: {}, detectionLimits: { Sb: 50 } }], intervals: [] }] };
+  assert.ok(elementsInStore(store).includes('Sb'));
+});
+
+test('samplesToCsv / parseSampleCsv: a below-detection value round-trips losslessly', () => {
+  const samples = [{ id: 'CT-RC-0001', lat: -20.07, lng: 146.26, assays: {}, detectionLimits: { Au: 0.01 }, lith: '', notes: '', date: '2026-07-01' }];
+  const csv = samplesToCsv(samples);
+  assert.match(csv.split('\n')[1], /<0\.01/);
+  const reparsed = parseSampleCsv(csv, [], 'CT-RC-');
+  assert.equal(reparsed.samples[0].assays.Au, undefined);
+  assert.equal(reparsed.samples[0].detectionLimits.Au, 0.01);
+});
+
+test('intervalsToCsv: exports the from-to-grade table (previously not exportable at all), detection-limit aware', () => {
+  const intervals = [
+    { holeId: 'CT-DD-001', from: 10, to: 12.5, assays: { Au: 3.1 } },
+    { holeId: 'CT-DD-001', from: 12.5, to: 14, assays: {}, detectionLimits: { Au: 0.01 } },
+  ];
+  const csv = intervalsToCsv(intervals);
+  const lines = csv.split('\n');
+  assert.equal(lines[0], 'hole_id,from,to,width_m,au');
+  assert.equal(lines[1], 'CT-DD-001,10,12.5,2.50,3.1');
+  assert.equal(lines[2], 'CT-DD-001,12.5,14,1.50,<0.01');
+});
+
+test('parseAssayCsv: a fresh measured value supersedes a stale detection limit for the same element', () => {
+  const samples = [{ id: 'CT-RC-0001', assays: {}, detectionLimits: { Au: 0.01 } }];
+  const csv = 'sample_id,au\nCT-RC-0001,2.4\n'; // a re-assay came back with a real grade
+  const r = parseAssayCsv(csv, samples);
+  assert.equal(r.matched, 1);
+  assert.equal(r.updated[0].assays.Au, 2.4);
+  assert.equal(r.updated[0].detectionLimits, undefined); // stale limit cleared, not left dangling
+});
+
+test('parseAssayCsv: a new detection limit clears any stale measured value for that element', () => {
+  const samples = [{ id: 'CT-RC-0001', assays: { Au: 4.2 } }];
+  const csv = 'sample_id,au\nCT-RC-0001,<0.01\n';
+  const r = parseAssayCsv(csv, samples);
+  assert.equal(r.updated[0].assays.Au, undefined);
+  assert.equal(r.updated[0].detectionLimits.Au, 0.01);
 });
