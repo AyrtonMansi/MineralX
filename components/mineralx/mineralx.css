@@ -546,7 +546,10 @@
 .mx-manage-sections { padding: 14px 18px 18px; }
 .mx-manage-hint { font-size: 11.5px; color: #8A857A; line-height: 1.5; margin: 0 0 12px; }
 .mx-manage-count { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #9A9488; }
-.mx-manage-actions { display: flex; gap: 8px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(221,214,199,0.7); }
+.mx-manage-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(221,214,199,0.7);
+}
 
 /* Tabs */
 .mx-manage-tabs {
@@ -862,8 +865,9 @@
 .mx-element-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .mx-element-chip { font-family: 'IBM Plex Mono', monospace; min-width: 40px; }
 
-/* Data drawer footer holds two buttons */
-.mx-data-footer { display: flex; gap: 8px; }
+/* Data drawer footer — now up to four buttons (add, collars, intervals,
+   surveys exports), so it needs to wrap rather than overflow off-screen. */
+.mx-data-footer { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* Terrain sub-layer group subheading (non-interactive) */
 .mx-tree-subheading {
@@ -900,6 +904,7 @@
   border-radius: 9px; overflow: hidden;
   background: rgba(255,255,255,0.4);
 }
+.mx-survey-table { margin-top: 8px; }
 .mx-interval-head, .mx-interval-row {
   display: flex; align-items: center;
   padding: 6px 11px;

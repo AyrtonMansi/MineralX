@@ -22,6 +22,7 @@ import {
   migrateV2,
   migrateV3,
   migrateV4,
+  migrateV5,
   createDemoStore,
   targetKey,
   targetPrefix,
@@ -42,6 +43,8 @@ import {
   assayDisplay,
   elementsInStore,
   intervalsToCsv,
+  parseSurveyCsv,
+  surveysToCsv,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -354,9 +357,8 @@ test('migrateV4: gives every sample conservative provenance/QAQC defaults', () =
   assert.equal(v5.projects[0].samples[1].sampleType, 'soil');
 });
 
-test('createDemoStore: is v5 and every demo sample carries the provenance fields', () => {
+test('createDemoStore: every demo sample carries the provenance fields', () => {
   const store = createDemoStore();
-  assert.equal(store.version, 5);
   store.projects.forEach(p => p.samples.forEach(s => {
     assert.equal(isValidSampleType(s.sampleType), true);
     assert.equal(isValidQaqcType(s.qaqcType), true);
@@ -536,4 +538,67 @@ test('parseAssayCsv: a new detection limit clears any stale measured value for t
   const r = parseAssayCsv(csv, samples);
   assert.equal(r.updated[0].assays.Au, undefined);
   assert.equal(r.updated[0].detectionLimits.Au, 0.01);
+});
+
+// ── Downhole survey shots ────────────────────────────────────────────────
+// A collar's own azimuth/dip is only the planned/collar orientation — a
+// real diamond/RC hole deviates with depth. Surveys are stored flat (like
+// intervals), keyed by holeId, not nested inside the collar.
+
+test('migrateV5: every project gains an empty surveys list, existing ones preserved', () => {
+  const v5 = { version: 5, projects: [{ id: 'p1', samples: [], collars: [], intervals: [] }, { id: 'p2', samples: [], collars: [], intervals: [], surveys: [{ holeId: 'H1', depth: 10, azimuth: 90, dip: -60 }] }] };
+  const v6 = migrateV5(v5);
+  assert.equal(v6.version, 6);
+  assert.deepEqual(v6.projects[0].surveys, []);
+  assert.equal(v6.projects[1].surveys.length, 1); // pre-existing data untouched
+});
+
+test('createDemoStore: every project has a surveys array (empty — no invented downhole data)', () => {
+  const store = createDemoStore();
+  assert.equal(store.version, 6);
+  store.projects.forEach(p => assert.ok(Array.isArray(p.surveys)));
+});
+
+test('parseSurveyCsv: reads hole_id/depth/azimuth/dip, wraps azimuth into 0-360', () => {
+  const csv = 'hole_id,depth,azimuth,dip\nCT-DD-001,50,92.5,-58\nCT-DD-001,100,-10,-61\n';
+  const r = parseSurveyCsv(csv);
+  assert.equal(r.error, null);
+  assert.equal(r.surveys.length, 2);
+  assert.deepEqual(r.surveys[0], { holeId: 'CT-DD-001', depth: 50, azimuth: 92.5, dip: -58 });
+  assert.equal(r.surveys[1].azimuth, 350); // -10 wrapped to 350
+});
+
+test('parseSurveyCsv: rejects an out-of-range dip per row, without failing the whole file', () => {
+  const csv = 'hole_id,depth,azimuth,dip\nCT-DD-001,50,90,-60\nCT-DD-001,100,90,-140\n'; // -140 is not a valid inclination
+  const r = parseSurveyCsv(csv);
+  assert.equal(r.error, null);
+  assert.equal(r.surveys.length, 1);
+  assert.match(r.warnings, /Skipped 1 row/);
+});
+
+test('parseSurveyCsv: a negative depth is rejected, a missing hole_id/depth/azimuth/dip column set is a fatal error', () => {
+  const badDepth = parseSurveyCsv('hole_id,depth,azimuth,dip\nCT-DD-001,-5,90,-60\n');
+  assert.equal(badDepth.surveys.length, 0);
+  assert.match(badDepth.error, /No importable rows|No valid survey rows/);
+
+  const missingCols = parseSurveyCsv('hole_id,depth\nCT-DD-001,50\n');
+  assert.match(missingCols.error, /needs hole_id, depth, azimuth and dip/);
+});
+
+test('surveysToCsv: sorts by hole then depth and round-trips through parseSurveyCsv', () => {
+  const surveys = [
+    { holeId: 'CT-DD-002', depth: 20, azimuth: 88, dip: -55 },
+    { holeId: 'CT-DD-001', depth: 100, azimuth: 91, dip: -59 },
+    { holeId: 'CT-DD-001', depth: 50, azimuth: 90, dip: -60 },
+  ];
+  const csv = surveysToCsv(surveys);
+  const lines = csv.split('\n');
+  assert.equal(lines[0], 'hole_id,depth,azimuth,dip');
+  // CT-DD-001 shots sorted by depth (50 before 100), then CT-DD-002.
+  assert.equal(lines[1], 'CT-DD-001,50,90,-60');
+  assert.equal(lines[2], 'CT-DD-001,100,91,-59');
+  assert.equal(lines[3], 'CT-DD-002,20,88,-55');
+
+  const reparsed = parseSurveyCsv(csv);
+  assert.equal(reparsed.surveys.length, 3);
 });

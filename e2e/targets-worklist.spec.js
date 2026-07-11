@@ -77,7 +77,7 @@ test('dismissing a target removes it and remembers the spot so it will not resur
   // The rejection is durable: its location is recorded in dismissedTargets,
   // which is what the re-run filter consults to keep it from coming back.
   const dismissedCount = await page.evaluate(() => {
-    const store = JSON.parse(localStorage.getItem('mx-store-v5'));
+    const store = JSON.parse(localStorage.getItem('mx-store-v6'));
     return store.projects.reduce((n, p) => n + (p.dismissedTargets || []).length, 0);
   });
   expect(dismissedCount).toBe(1);

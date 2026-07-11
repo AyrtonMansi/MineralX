@@ -70,10 +70,12 @@ being asked.
    and explicitly declined for now. Keep `saveStore()`'s boolean return, the
    save-failed banner, and the export-staleness nudge working. Do not add a
    database, auth, or any billable infrastructure unprompted. The store is
-   versioned (`STORE_KEY` = `mx-store-v5`) with a forward migration chain
-   (`migrateV2`→`migrateV3`→`migrateV4`); a new persisted field needs a
-   version bump and a migration, both unit-tested, or existing users' data
-   silently breaks.
+   versioned (`STORE_KEY` = `mx-store-v6`) with a forward migration chain
+   (`migrateV2`→`migrateV3`→`migrateV4`→`migrateV5`); a new persisted field
+   needs a version bump and a migration, both unit-tested, or existing
+   users' data silently breaks. Downhole surveys (`project.surveys`) are
+   flat arrays keyed by `holeId`, mirroring `project.intervals` — never
+   nested inside the collar object.
 3. **`/mineralx` is noindex-only** (`app/robots.ts` disallow). It stays
    publicly reachable — no feature flag, no auth gate, unless asked.
 4. **The analysis caching guarantee:** the terrain analysis fetches

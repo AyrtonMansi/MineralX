@@ -70,7 +70,8 @@ export function reprojectEastingNorthing(easting, northing, crs) {
   return { lat, lng };
 }
 
-export const STORE_KEY = 'mx-store-v5';
+export const STORE_KEY = 'mx-store-v6';
+const V5_KEY = 'mx-store-v5';
 const V4_KEY = 'mx-store-v4';
 const V3_KEY = 'mx-store-v3';
 const V2_KEY = 'mx-store-v2';
@@ -210,7 +211,7 @@ export function assayDisplay(record, el) {
 // Sited in QLD so the GeoResGlobe public layers have data underneath.
 export function createDemoStore() {
   return {
-    version: 5,
+    version: 6,
     activeProjectId: 'proj-demo',
     projects: [{
       id: 'proj-demo',
@@ -255,6 +256,12 @@ export function createDemoStore() {
         { holeId: 'CT-DD-001', from: 118, to: 121, assays: { Au: 5.1, Ag: 22 } },
         { holeId: 'CT-DD-002', from: 96, to: 102, assays: { Au: 1.2 } },
       ],
+      // No downhole survey shots recorded for the demo holes — inventing a
+      // plausible-looking deviation trace would be exactly the kind of
+      // fabricated geology this app refuses to ship (rule 6). An empty
+      // list is the honest starting point; real programs import their own
+      // gyro/EMS survey file.
+      surveys: [],
       files: [
         { name: 'ct_chips_jun.csv', category: 'Rock chips', meta: '6 samples', date: '2026-06-14' },
         { name: 'ALS_A22910.pdf', category: 'Lab cert', meta: 'linked to 5 chips', date: '2026-06-20' },
@@ -312,21 +319,49 @@ export function migrateV4(v4) {
   };
 }
 
+// v5 -> v6 adds downhole survey shots: a project gains `surveys` (flat,
+// like `intervals` — {holeId, depth, azimuth, dip} rows keyed by hole,
+// not nested inside each collar). A collar's own azimuth/dip was always
+// just the planned/collar orientation; it was never enough to describe a
+// hole's actual path, since real diamond/RC holes deviate with depth. An
+// empty list is the honest default — no deviation data is invented for
+// existing holes that were never surveyed downhole.
+export function migrateV5(v5) {
+  return {
+    ...v5,
+    version: 6,
+    projects: v5.projects.map(p => ({
+      ...p,
+      surveys: p.surveys || [],
+    })),
+  };
+}
+
 export function loadStore() {
   if (typeof window === 'undefined') return createDemoStore();
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.version === 5 && Array.isArray(parsed.projects)) return parsed;
+      if (parsed?.version === 6 && Array.isArray(parsed.projects)) return parsed;
     }
     // Older schemas migrate forward through the chain, then persist under
     // the current key so the migration only runs once.
+    const v5 = window.localStorage.getItem(V5_KEY);
+    if (v5) {
+      const parsed = JSON.parse(v5);
+      if (parsed?.version === 5 && Array.isArray(parsed.projects)) {
+        const migrated = migrateV5(parsed);
+        window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
+        window.localStorage.removeItem(V5_KEY);
+        return migrated;
+      }
+    }
     const v4 = window.localStorage.getItem(V4_KEY);
     if (v4) {
       const parsed = JSON.parse(v4);
       if (parsed?.version === 4 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV4(parsed);
+        const migrated = migrateV5(migrateV4(parsed));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V4_KEY);
         return migrated;
@@ -336,7 +371,7 @@ export function loadStore() {
     if (v3) {
       const parsed = JSON.parse(v3);
       if (parsed?.version === 3 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV4(migrateV3(parsed));
+        const migrated = migrateV5(migrateV4(migrateV3(parsed)));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V3_KEY);
         return migrated;
@@ -346,7 +381,7 @@ export function loadStore() {
     if (v2) {
       const parsed = JSON.parse(v2);
       if (parsed?.version === 2 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV4(migrateV3(migrateV2(parsed)));
+        const migrated = migrateV5(migrateV4(migrateV3(migrateV2(parsed))));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V2_KEY);
         return migrated;
@@ -781,6 +816,47 @@ export function parseIntervalCsv(text) {
   return { intervals: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
 }
 
+// Downhole survey CSV: hole_id, depth, azimuth, dip. A collar's own
+// azimuth/dip is just the planned/collar orientation — a real hole
+// deviates with depth, and a gyro/EMS/single-shot survey tool records
+// that deviation as a series of depth-indexed readings. Stored flat
+// (like intervals), keyed by hole_id, not nested inside the collar.
+//
+// Same per-row error-collection contract as the other CSV parsers: a bad
+// row is skipped and reported, not fatal to the whole file. Azimuth is
+// wrapped into 0–360 rather than rejected (a tool reading 365° or -10° is
+// a units slip, not invalid data) since the actual heading is still
+// unambiguous; dip is only range-checked (-90..90, vertical to horizontal)
+// since a value outside that range cannot be a real inclination reading.
+export function parseSurveyCsv(text) {
+  const rows = splitCsv(text);
+  if (rows.length < 2) return { surveys: [], error: 'CSV needs a header row and at least one data row.' };
+  const col = headerIndex(rows[0]);
+  const iHole = col('hole_id', 'id', 'hole');
+  const iDepth = col('depth', 'depth_m');
+  const iAzi = col('azimuth', 'azi');
+  const iDip = col('dip');
+  if (iHole < 0 || iDepth < 0 || iAzi < 0 || iDip < 0) {
+    return { surveys: [], error: 'Survey CSV needs hole_id, depth, azimuth and dip columns.' };
+  }
+  const out = [];
+  const rowErrors = [];
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    const depth = parseFloat(cells[iDepth]);
+    let azimuth = parseFloat(cells[iAzi]);
+    const dip = parseFloat(cells[iDip]);
+    if (!cells[iHole] || Number.isNaN(depth) || depth < 0 || Number.isNaN(azimuth) || Number.isNaN(dip) || dip < -90 || dip > 90) {
+      rowErrors.push(`row ${r + 1}: invalid survey shot`);
+      continue;
+    }
+    azimuth = ((azimuth % 360) + 360) % 360;
+    out.push({ holeId: cells[iHole], depth, azimuth, dip });
+  }
+  if (!out.length) return { surveys: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No valid survey rows found.' };
+  return { surveys: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
+}
+
 // One CSV cell for an element on a sample/interval: the real value if
 // measured, "<0.01"-style if only a detection limit was recorded, or a
 // blank if that element was never analysed at all — so exporting and
@@ -825,6 +901,16 @@ export function intervalsToCsv(intervals) {
       i.holeId, i.from, i.to, (i.to - i.from).toFixed(2),
       ...elements.map(e => assayCsvCell(i, e)),
     ].join(',')),
+  ].join('\n');
+}
+
+// The downhole survey record — previously no way at all to capture or
+// export a hole's actual deviation, only its planned collar orientation.
+export function surveysToCsv(surveys) {
+  const sorted = [...surveys].sort((a, b) => a.holeId.localeCompare(b.holeId) || a.depth - b.depth);
+  return [
+    'hole_id,depth,azimuth,dip',
+    ...sorted.map(s => [s.holeId, s.depth, s.azimuth, s.dip].join(',')),
   ].join('\n');
 }
 

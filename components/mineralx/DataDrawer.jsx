@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import {
-  gradeOf, GRADE_COLORS, formatAssay, assayDisplay, elementInfo, samplesToCsv, collarsToCsv, intervalsToCsv, downloadText,
+  gradeOf, GRADE_COLORS, formatAssay, assayDisplay, elementInfo, samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, downloadText,
   TARGET_STATUSES, bestLinkedGrade, QAQC_TYPE_LABELS, SAMPLE_TYPE_LABELS,
 } from './project-store';
 import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
@@ -38,7 +38,11 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
   const allSamples = useMemo(() =>
     store.projects.flatMap(p => p.samples.map(s => ({ ...s, project: p }))), [store]);
   const allCollars = useMemo(() =>
-    store.projects.flatMap(p => p.collars.map(c => ({ ...c, project: p, intervals: (p.intervals || []).filter(i => i.holeId === c.id) }))), [store]);
+    store.projects.flatMap(p => p.collars.map(c => ({
+      ...c, project: p,
+      intervals: (p.intervals || []).filter(i => i.holeId === c.id),
+      surveys: (p.surveys || []).filter(s => s.holeId === c.id),
+    }))), [store]);
   const allFiles = useMemo(() =>
     store.projects.flatMap(p => p.files.map(f => ({ ...f, project: p }))), [store]);
   // Highest-scoring targets first — the worklist is a ranked queue.
@@ -74,6 +78,13 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
     return store.projects.flatMap(p => (p.intervals || []).filter(i => holeIds.has(i.holeId)));
   };
   const exportIntervals = () => downloadText('drill_assay_intervals.csv', intervalsToCsv(scopedIntervals()));
+
+  // The downhole survey record for whichever holes are in scope.
+  const scopedSurveys = () => {
+    const holeIds = new Set(scoped(allCollars).map(c => c.id));
+    return store.projects.flatMap(p => (p.surveys || []).filter(s => holeIds.has(s.holeId)));
+  };
+  const exportSurveys = () => downloadText('drill_downhole_surveys.csv', surveysToCsv(scopedSurveys()));
 
   // Field tasking: the shown targets (the filter doubles as a selection),
   // ordered into a walkable sequence, exported as GPX for a handheld GPS
@@ -203,6 +214,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                           {c.depth != null ? `${c.depth} m` : 'depth n/a'}
                           {c.azimuth != null ? ` · ${c.azimuth}°/${c.dip ?? '?'}°` : ''}
                           {c.intervals.length ? ` · ${c.intervals.length} assay${c.intervals.length === 1 ? '' : 's'}` : ' · no assays'}
+                          {c.surveys.length ? ` · ${c.surveys.length} survey shot${c.surveys.length === 1 ? '' : 's'}` : ''}
                         </div>
                       </div>
                       <span className="mx-data-value">{best != null ? `best ${formatAssay(activeElement, best)}` : ''}</span>
@@ -215,6 +227,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                       >{MxIcons.trash}</button>
                     </div>
                     {open && <IntervalTable collar={c} activeElement={activeElement} onAddIntervals={() => onAdd('holes')} />}
+                    {open && <SurveyTable collar={c} />}
                   </div>
                 );
               })}
@@ -308,6 +321,14 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                 title="The from-to-grade table — a separate export from the collar list"
               >
                 {MxIcons.download} Assay intervals CSV
+              </button>
+            )}
+            {tab === 'holes' && scopedSurveys().length > 0 && (
+              <button
+                type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportSurveys}
+                title="Depth-indexed deviation shots — the hole's actual path, not just the collar's planned orientation"
+              >
+                {MxIcons.download} Surveys CSV
               </button>
             )}
           </div>
@@ -407,6 +428,32 @@ function IntervalTable({ collar, activeElement, onAddIntervals }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Downhole survey shots for one hole — the actual deviation path, as
+// distinct from the collar's own planned azimuth/dip. Only rendered when
+// the hole has survey data at all; a collar with none doesn't need an
+// empty-state nudge the way intervals do (surveys are a specialist import,
+// not every program runs a downhole survey tool on every hole).
+function SurveyTable({ collar }) {
+  if (!collar.surveys.length) return null;
+  const rows = [...collar.surveys].sort((a, b) => a.depth - b.depth);
+  return (
+    <div className="mx-interval-table mx-survey-table">
+      <div className="mx-interval-head">
+        <span className="mx-iv-depth">Depth (m)</span>
+        <span className="mx-iv-el">Azimuth</span>
+        <span className="mx-iv-el">Dip</span>
+      </div>
+      {rows.map((s, i) => (
+        <div key={i} className="mx-interval-row">
+          <span className="mx-iv-depth">{s.depth}</span>
+          <span className="mx-iv-el">{s.azimuth.toFixed(1)}°</span>
+          <span className="mx-iv-el">{s.dip.toFixed(1)}°</span>
+        </div>
+      ))}
     </div>
   );
 }

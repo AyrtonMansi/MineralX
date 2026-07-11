@@ -6,7 +6,7 @@ import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
-  samplesToCsv, collarsToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   pushUndo, undo, redo, undoAvailable, redoAvailable,
   nextId, targetKey, targetPrefix, targetHitRate, crsLabel,
 } from './project-store';
@@ -185,6 +185,14 @@ export default function MineralXWorkspace() {
       updateProject(pid, p => ({ ...p, intervals: [...(p.intervals || []), ...intervals] }));
       if (fileName) addFile(pid, fileName, 'Drill assays', `${intervals.length} intervals`);
     },
+    // Downhole survey shots — a hole's actual deviation, distinct from the
+    // collar's own planned azimuth/dip. Flat and keyed by holeId, same
+    // storage shape as intervals.
+    addSurveys: (pid, surveys, fileName) => {
+      pushUndo(store);
+      updateProject(pid, p => ({ ...p, surveys: [...(p.surveys || []), ...surveys] }));
+      if (fileName) addFile(pid, fileName, 'Downhole surveys', `${surveys.length} survey shots`);
+    },
     setBoundary: (pid, name, coords, fileName) => {
       pushUndo(store);
       updateProject(pid, p => ({ ...p, boundary: { name, coords } }));
@@ -209,6 +217,7 @@ export default function MineralXWorkspace() {
         ...p,
         collars: p.collars.filter(c => c.id !== id),
         intervals: (p.intervals || []).filter(i => i.holeId !== id),
+        surveys: (p.surveys || []).filter(s => s.holeId !== id),
       }));
     },
     // Promote a terrain-analysis candidate into a persistent, tracked
@@ -316,7 +325,7 @@ export default function MineralXWorkspace() {
           color: PROJECT_COLORS[prev.projects.length % PROJECT_COLORS.length],
           idPrefix: `${prefixBase}-RC-`,
           createdAt: today(),
-          boundary, samples: [], collars: [], intervals: [], files: [],
+          boundary, samples: [], collars: [], intervals: [], surveys: [], files: [],
         }],
       }));
       if (boundary) {
@@ -329,6 +338,12 @@ export default function MineralXWorkspace() {
       const stem = project.name.replace(/\s+/g, '_');
       downloadText(`${stem}_rock_chips.csv`, samplesToCsv(project.samples));
       downloadText(`${stem}_collars.csv`, collarsToCsv(project.collars));
+      if (project.intervals?.length) {
+        downloadText(`${stem}_assay_intervals.csv`, intervalsToCsv(project.intervals));
+      }
+      if (project.surveys?.length) {
+        downloadText(`${stem}_downhole_surveys.csv`, surveysToCsv(project.surveys));
+      }
       // The target worklist is part of the program — a report/handover
       // export that dropped it would lose the exploration decisions.
       if (project.targets?.length) {

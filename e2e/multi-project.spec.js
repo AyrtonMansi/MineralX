@@ -7,7 +7,7 @@ import { mockBasemap, waitForMapLoaded } from './helpers.js';
 // a WA one are an undifferentiated pile.
 
 const TWO_PROJECT_STORE = {
-  version: 5,
+  version: 6,
   activeProjectId: 'p-qld',
   projects: [
     {
@@ -17,7 +17,7 @@ const TWO_PROJECT_STORE = {
         { id: 'CT-RC-0001', lat: -20.07, lng: 146.26, assays: { Au: 4.2 }, lith: 'Quartz vein', notes: '', date: '2026-06-01' },
         { id: 'CT-RC-0002', lat: -20.08, lng: 146.27, assays: { Au: 0.3 }, lith: 'Siltstone', notes: '', date: '2026-06-01' },
       ],
-      collars: [], intervals: [], targets: [], dismissedTargets: [], files: [],
+      collars: [], intervals: [], surveys: [], targets: [], dismissedTargets: [], files: [],
     },
     {
       id: 'p-wa', name: 'Kalgoorlie JV', color: '#6E7A5E', idPrefix: 'KAL-RC-', createdAt: '2026-06-02',
@@ -25,7 +25,7 @@ const TWO_PROJECT_STORE = {
       samples: [
         { id: 'KAL-RC-0001', lat: -30.75, lng: 121.47, assays: { Au: 8.1 }, lith: 'Banded iron', notes: '', date: '2026-06-02' },
       ],
-      collars: [], intervals: [], targets: [], dismissedTargets: [], files: [],
+      collars: [], intervals: [], surveys: [], targets: [], dismissedTargets: [], files: [],
     },
   ],
 };
@@ -34,7 +34,7 @@ test.beforeEach(async ({ page }) => {
   await mockBasemap(page);
   await page.goto('/mineralx');
   await waitForMapLoaded(page);
-  await page.evaluate((store) => localStorage.setItem('mx-store-v5', JSON.stringify(store)), TWO_PROJECT_STORE);
+  await page.evaluate((store) => localStorage.setItem('mx-store-v6', JSON.stringify(store)), TWO_PROJECT_STORE);
   await page.reload();
   await waitForMapLoaded(page);
 });

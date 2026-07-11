@@ -122,6 +122,16 @@ Notable behaviours:
   previously could be imported but never gotten back out. AI extraction
   (below) recognises below-detection results the same way, so a pasted
   lab certificate doesn't lose them either.
+- **Downhole surveys** — a collar's own azimuth/dip is only the planned
+  orientation; a real hole deviates with depth. Gyro/EMS/single-shot
+  survey shots (`hole_id, depth, azimuth, dip`) import as their own CSV in
+  the Drill Hole manager, are stored flat (`project.surveys`, keyed by
+  `holeId`, mirroring how assay intervals sit alongside collars rather
+  than nested inside them), and show as a depth-ordered table in the Data
+  drawer's collar expansion. Deleting a collar deletes its orphaned
+  surveys too. Exports alongside collars/intervals from both the Drill
+  Hole manager and the Data drawer, and is included in "Export all program
+  data".
 - **AI extraction** — the Add-data panel can send pasted report text to
   `/api/extract`, which uses the Claude API to read samples, collars and
   intervals out of unstructured text for review before import. This
