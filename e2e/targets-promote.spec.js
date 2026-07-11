@@ -83,3 +83,62 @@ test('promoting the same candidate twice does not create a duplicate', async ({ 
   await page.keyboard.press('Control+Shift+z');
   await expect(page.locator('.mx-target-marker')).toHaveCount(1);
 });
+
+// Regression for a real data-corruption bug: candidate-marker popups are
+// cached DOM nodes (setMarkerGroup only builds them once, on the off->on
+// transition, so toggling stays free). Their "Add to targets" button used
+// to close directly over onPromoteTarget, captured at the moment THAT
+// popup was built. Promoting candidate A changes the store and gives every
+// still-open popup a new `api` — but a SECOND popup opened after A was
+// promoted, without ever being rebuilt, kept calling the stale pre-A
+// handler: nextId() computed against a target list missing A produced a
+// duplicate id, and pushUndo() snapshotted the pre-A store, so one Ctrl+Z
+// deleted both targets at once instead of just the second. Fixed by
+// routing the callbacks through refs so every popup always calls the
+// current handler regardless of when its marker was created.
+test('promoting two different candidates in one session gives each a distinct id and undoes independently', async ({ page }) => {
+  test.slow();
+  // A larger viewport spreads the demo's candidates out enough that two
+  // land clear of the Layers panel/topbar/dock at once and reliably open
+  // an on-screen, clickable popup.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await runAnalysisAndShowTargets(page);
+
+  const indices = await page.evaluate(() => {
+    const scored = [];
+    document.querySelectorAll('.mx-analysis-target').forEach((el, i) => {
+      const r = el.getBoundingClientRect();
+      const clear = r.left > 380 && r.right < window.innerWidth - 20 && r.top > 90 && r.bottom < window.innerHeight - 150;
+      if (clear) scored.push({ i, x: r.left });
+    });
+    return scored.sort((a, b) => a.x - b.x).slice(0, 2).map((s) => s.i);
+  });
+  expect(indices.length).toBe(2);
+
+  // Click two distinct candidates directly (JS click bypasses pointer-
+  // interception flakiness from overlapping sample markers) and promote
+  // each from its own popup.
+  for (const idx of indices) {
+    await page.evaluate((i) => document.querySelectorAll('.mx-analysis-target')[i].click(), idx);
+    const btn = page.locator('.mx-pop-promote-btn');
+    await btn.waitFor({ state: 'visible', timeout: 5000 });
+    await btn.click();
+    await page.waitForTimeout(300);
+  }
+
+  await expect(page.locator('.mx-target-marker')).toHaveCount(2);
+  const ids = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('mx-store-v4'));
+    return s.projects.flatMap((p) => (p.targets || []).map((t) => t.id));
+  });
+  expect(new Set(ids).size).toBe(2); // no duplicate ids
+
+  // One undo removes exactly the second promotion, not both.
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.mx-target-marker')).toHaveCount(1);
+  const idsAfterUndo = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('mx-store-v4'));
+    return s.projects.flatMap((p) => (p.targets || []).map((t) => t.id));
+  });
+  expect(idsAfterUndo).toEqual([ids[0]]);
+});

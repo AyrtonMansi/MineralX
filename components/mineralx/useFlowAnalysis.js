@@ -32,6 +32,23 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
   const flowCache = useRef(null); // { grid, flow, targets, occurrencesByCommodity } for the last analysed viewport
   const flowLayerRefs = useRef({}); // sub-layer key -> { sourceId, layerId } (raster) or Marker[] (points) currently on the map
 
+  // Candidate markers are cached and never rebuilt while a marker group
+  // stays on (setMarkerGroup only calls buildMarkers() once, on the
+  // off->on transition — that's the point, it's what makes toggling free).
+  // A marker's popup button therefore can NOT close over onPromoteTarget/
+  // onDismissCandidate directly: promoting one candidate changes the store,
+  // which gives every OTHER already-open candidate a new `api` and a new
+  // onPromoteTarget identity, but their popups — built earlier — would
+  // still call the stale one. That stale call computes nextId() and
+  // pushUndo() against the pre-promotion store, producing a duplicate
+  // target id and an undo that wipes both promotions at once. Refs make
+  // every popup, however long it's been mounted, always call the latest
+  // handler.
+  const onPromoteTargetRef = useRef(onPromoteTarget);
+  onPromoteTargetRef.current = onPromoteTarget;
+  const onDismissCandidateRef = useRef(onDismissCandidate);
+  onDismissCandidateRef.current = onDismissCandidate;
+
   // Adds/removes each sub-layer's MapLibre layer/markers from cached
   // results — never fetches or recomputes. Called on every toggle/opacity
   // change. Raster overlays (drainage/heatmap) live in `refs` as
@@ -103,7 +120,7 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
       dismiss.className = 'mx-pop-dismiss-btn';
       dismiss.textContent = 'Not a target';
       btn.onclick = () => {
-        onPromoteTarget?.(t);
+        onPromoteTargetRef.current?.(t);
         btn.textContent = 'Added to worklist ✓';
         btn.disabled = true;
         dismiss.style.display = 'none';
@@ -111,7 +128,7 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
       // Rejecting a candidate here remembers the spot so a re-run won't
       // resurface it — the negative decision is as durable as the positive.
       dismiss.onclick = () => {
-        onDismissCandidate?.(t);
+        onDismissCandidateRef.current?.(t);
         dismiss.textContent = 'Dismissed ✓';
         dismiss.disabled = true;
         btn.style.display = 'none';
@@ -161,7 +178,10 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
       const el = buildMarkerEl({ width: '12px', height: '12px', borderRadius: '50%', background: '#5E6E7A', border: '2px solid #FAF9F4' }, `${m.name} · ${m.mineType}`);
       return new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map);
     }));
-  }, [flowSubOn, flowOpacity, mapInstance, mgl, onPromoteTarget, onDismissCandidate]);
+    // onPromoteTarget/onDismissCandidate deliberately excluded: they're read
+    // via ref (see above) precisely so this callback's identity — and thus
+    // whether marker groups get rebuilt — doesn't depend on them.
+  }, [flowSubOn, flowOpacity, mapInstance, mgl]);
 
   useEffect(() => { syncFlowLayers(); }, [syncFlowLayers]);
 
