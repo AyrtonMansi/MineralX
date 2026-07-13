@@ -128,7 +128,7 @@ test('promoting two different candidates in one session gives each a distinct id
 
   await expect(page.locator('.mx-target-marker')).toHaveCount(2);
   const ids = await page.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem('mx-store-v6'));
+    const s = JSON.parse(localStorage.getItem('mx-store-v7'));
     return s.projects.flatMap((p) => (p.targets || []).map((t) => t.id));
   });
   expect(new Set(ids).size).toBe(2); // no duplicate ids
@@ -137,7 +137,7 @@ test('promoting two different candidates in one session gives each a distinct id
   await page.keyboard.press('Control+z');
   await expect(page.locator('.mx-target-marker')).toHaveCount(1);
   const idsAfterUndo = await page.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem('mx-store-v6'));
+    const s = JSON.parse(localStorage.getItem('mx-store-v7'));
     return s.projects.flatMap((p) => (p.targets || []).map((t) => t.id));
   });
   expect(idsAfterUndo).toEqual([ids[0]]);

@@ -88,7 +88,7 @@ test('deleting a collar removes its survey shots too', async ({ page }) => {
   await row.locator('.mx-data-delete').click();
   await page.waitForTimeout(400);
 
-  const store = await page.evaluate(() => JSON.parse(localStorage.getItem('mx-store-v6')));
+  const store = await page.evaluate(() => JSON.parse(localStorage.getItem('mx-store-v7')));
   const surveys = store.projects.flatMap((p) => p.surveys || []);
   expect(surveys.some((s) => s.holeId === 'CT-DD-002')).toBe(false);
 });

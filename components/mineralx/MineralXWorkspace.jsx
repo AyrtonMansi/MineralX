@@ -6,7 +6,7 @@ import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
-  samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, geologyToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   pushUndo, undo, redo, undoAvailable, redoAvailable,
   nextId, targetKey, targetPrefix, targetHitRate, crsLabel,
 } from './project-store';
@@ -193,6 +193,14 @@ export default function MineralXWorkspace() {
       updateProject(pid, p => ({ ...p, surveys: [...(p.surveys || []), ...surveys] }));
       if (fileName) addFile(pid, fileName, 'Downhole surveys', `${surveys.length} survey shots`);
     },
+    // Geological logging — lithology/alteration/structure by from-to, the
+    // geologist's own observation of core/chips in hand. Distinct from
+    // intervals (lab assays for a from-to); same flat storage shape.
+    addGeology: (pid, geology, fileName) => {
+      pushUndo(store);
+      updateProject(pid, p => ({ ...p, geology: [...(p.geology || []), ...geology] }));
+      if (fileName) addFile(pid, fileName, 'Geological logging', `${geology.length} logged interval${geology.length === 1 ? '' : 's'}`);
+    },
     setBoundary: (pid, name, coords, fileName) => {
       pushUndo(store);
       updateProject(pid, p => ({ ...p, boundary: { name, coords } }));
@@ -218,6 +226,7 @@ export default function MineralXWorkspace() {
         collars: p.collars.filter(c => c.id !== id),
         intervals: (p.intervals || []).filter(i => i.holeId !== id),
         surveys: (p.surveys || []).filter(s => s.holeId !== id),
+        geology: (p.geology || []).filter(g => g.holeId !== id),
       }));
     },
     // Promote a terrain-analysis candidate into a persistent, tracked
@@ -325,7 +334,7 @@ export default function MineralXWorkspace() {
           color: PROJECT_COLORS[prev.projects.length % PROJECT_COLORS.length],
           idPrefix: `${prefixBase}-RC-`,
           createdAt: today(),
-          boundary, samples: [], collars: [], intervals: [], surveys: [], files: [],
+          boundary, samples: [], collars: [], intervals: [], surveys: [], geology: [], files: [],
         }],
       }));
       if (boundary) {
@@ -343,6 +352,9 @@ export default function MineralXWorkspace() {
       }
       if (project.surveys?.length) {
         downloadText(`${stem}_downhole_surveys.csv`, surveysToCsv(project.surveys));
+      }
+      if (project.geology?.length) {
+        downloadText(`${stem}_geological_log.csv`, geologyToCsv(project.geology));
       }
       // The target worklist is part of the program — a report/handover
       // export that dropped it would lose the exploration decisions.

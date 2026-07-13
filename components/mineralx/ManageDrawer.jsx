@@ -2,8 +2,8 @@
 import { useRef, useState } from 'react';
 import { MxIcons } from './MineralXIcons';
 import {
-  nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv, parseSurveyCsv,
-  samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  nextId, parseSampleCsv, parseCollarCsv, parseIntervalCsv, parseSurveyCsv, parseGeologyCsv,
+  samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, geologyToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   compressImage, today, ELEMENT_SYMBOLS, elementInfo, isProjectedCoord, crsLabel, parseAssayCell,
   SAMPLE_TYPES, SAMPLE_TYPE_LABELS, QAQC_TYPES, QAQC_TYPE_LABELS, COORD_SOURCES, COORD_SOURCE_LABELS,
 } from './project-store';
@@ -327,6 +327,7 @@ function DrillHoleManager({ project, api, onClose }) {
   const collarInput = useRef(null);
   const intervalInput = useRef(null);
   const surveyInput = useRef(null);
+  const geologyInput = useRef(null);
   const holePrefix = project.idPrefix.replace('-RC-', '-DD-');
   const autoId = nextId(project.collars, holePrefix);
 
@@ -409,6 +410,22 @@ function DrillHoleManager({ project, api, onClose }) {
     reader.readAsText(file);
   };
 
+  const importGeology = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { geology, error: err, warnings } = parseGeologyCsv(String(reader.result));
+      if (err) { setImportMsg({ error: true, text: err }); return; }
+      const known = new Set(project.collars.map(c => c.id));
+      const matched = geology.filter(g => known.has(g.holeId));
+      const skipped = geology.length - matched.length;
+      if (!matched.length) { setImportMsg({ error: true, text: 'No hole IDs in this file matched the project.' }); return; }
+      api.addGeology(project.id, matched, file.name);
+      setImportMsg({ error: false, text: `Imported ${matched.length} logged interval${matched.length === 1 ? '' : 's'}.${skipped ? ` ${skipped} skipped (unknown hole ID).` : ''}${warnings ? ` ${warnings}` : ''}` });
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="mx-manage-sections">
       <div className="mx-manage-tabs">
@@ -416,6 +433,7 @@ function DrillHoleManager({ project, api, onClose }) {
         <button type="button" className={`mx-manage-tab ${tab === 'import' ? 'active' : ''}`} onClick={() => setTab('import')}>Import collars</button>
         <button type="button" className={`mx-manage-tab ${tab === 'intervals' ? 'active' : ''}`} onClick={() => setTab('intervals')}>Intervals</button>
         <button type="button" className={`mx-manage-tab ${tab === 'surveys' ? 'active' : ''}`} onClick={() => setTab('surveys')}>Surveys</button>
+        <button type="button" className={`mx-manage-tab ${tab === 'geology' ? 'active' : ''}`} onClick={() => setTab('geology')}>Geology</button>
       </div>
 
       {tab === 'collar' && (
@@ -485,6 +503,23 @@ function DrillHoleManager({ project, api, onClose }) {
         </div>
       )}
 
+      {tab === 'geology' && (
+        <div className="mx-manage-form">
+          <div className="mx-drop-area mx-drop-area-sm" onClick={() => geologyInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); importGeology(e.dataTransfer.files?.[0]); }}>
+            <div className="mx-drop-icon">&#8593;</div>
+            <div className="mx-drop-text">Drop geological log CSV</div>
+            <div className="mx-drop-hint">hole_id, from, to, lithology, alteration, structure, notes — links to collars by ID</div>
+            <input ref={geologyInput} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { importGeology(e.target.files?.[0]); e.target.value = ''; }} />
+          </div>
+          <div className="mx-manage-hint">
+            The assay-interval table only carries lab grades for a
+            from-to. Import a core/chip logging sheet here to record what
+            was actually observed — lithology, alteration, structure.
+          </div>
+          {importMsg && <div className={`mx-import-msg ${importMsg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{importMsg.text}</div>}
+        </div>
+      )}
+
       <div className="mx-manage-actions">
         <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={() => downloadText('drill_collars.csv', collarsToCsv(project.collars))}>
           {MxIcons.download} Collars CSV
@@ -507,7 +542,16 @@ function DrillHoleManager({ project, api, onClose }) {
             {MxIcons.download} Surveys CSV
           </button>
         )}
-        <span className="mx-manage-count">{project.collars.length} holes · {(project.intervals || []).length} intervals · {(project.surveys || []).length} surveys</span>
+        {(project.geology || []).length > 0 && (
+          <button
+            type="button" className="mx-btn-secondary mx-btn-sm"
+            onClick={() => downloadText('drill_geological_log.csv', geologyToCsv(project.geology))}
+            title="Lithology/alteration/structure by from-to, separate from the assay-grade table"
+          >
+            {MxIcons.download} Geology CSV
+          </button>
+        )}
+        <span className="mx-manage-count">{project.collars.length} holes · {(project.intervals || []).length} intervals · {(project.surveys || []).length} surveys · {(project.geology || []).length} logged</span>
       </div>
     </div>
   );

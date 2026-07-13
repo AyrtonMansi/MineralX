@@ -70,7 +70,8 @@ export function reprojectEastingNorthing(easting, northing, crs) {
   return { lat, lng };
 }
 
-export const STORE_KEY = 'mx-store-v6';
+export const STORE_KEY = 'mx-store-v7';
+const V6_KEY = 'mx-store-v6';
 const V5_KEY = 'mx-store-v5';
 const V4_KEY = 'mx-store-v4';
 const V3_KEY = 'mx-store-v3';
@@ -211,7 +212,7 @@ export function assayDisplay(record, el) {
 // Sited in QLD so the GeoResGlobe public layers have data underneath.
 export function createDemoStore() {
   return {
-    version: 6,
+    version: 7,
     activeProjectId: 'proj-demo',
     projects: [{
       id: 'proj-demo',
@@ -262,6 +263,11 @@ export function createDemoStore() {
       // list is the honest starting point; real programs import their own
       // gyro/EMS survey file.
       surveys: [],
+      // No geological logging recorded for the demo holes either, for the
+      // same reason as the empty surveys list — a lithology/alteration/
+      // structure log is the geologist's own observation of core/chips in
+      // hand; inventing one would be fabricated geology (rule 6).
+      geology: [],
       files: [
         { name: 'ct_chips_jun.csv', category: 'Rock chips', meta: '6 samples', date: '2026-06-14' },
         { name: 'ALS_A22910.pdf', category: 'Lab cert', meta: 'linked to 5 chips', date: '2026-06-20' },
@@ -337,21 +343,50 @@ export function migrateV5(v5) {
   };
 }
 
+// v6 -> v7 adds geological logging: a project gains `geology` (flat, like
+// `intervals` and `surveys` — {holeId, from, to, lithology, alteration,
+// structure, notes} rows keyed by hole). This is the geologist's own
+// observation of core/chips in hand — lithology, alteration, structure —
+// distinct from the assay-interval table, which only records lab grades
+// for a from-to. A JORC Table 1 Section 1 disclosure needs both: what was
+// seen, and what it assayed. An empty list is the honest default — no
+// logging is invented for holes that were never logged in this tool.
+export function migrateV6(v6) {
+  return {
+    ...v6,
+    version: 7,
+    projects: v6.projects.map(p => ({
+      ...p,
+      geology: p.geology || [],
+    })),
+  };
+}
+
 export function loadStore() {
   if (typeof window === 'undefined') return createDemoStore();
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.version === 6 && Array.isArray(parsed.projects)) return parsed;
+      if (parsed?.version === 7 && Array.isArray(parsed.projects)) return parsed;
     }
     // Older schemas migrate forward through the chain, then persist under
     // the current key so the migration only runs once.
+    const v6 = window.localStorage.getItem(V6_KEY);
+    if (v6) {
+      const parsed = JSON.parse(v6);
+      if (parsed?.version === 6 && Array.isArray(parsed.projects)) {
+        const migrated = migrateV6(parsed);
+        window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
+        window.localStorage.removeItem(V6_KEY);
+        return migrated;
+      }
+    }
     const v5 = window.localStorage.getItem(V5_KEY);
     if (v5) {
       const parsed = JSON.parse(v5);
       if (parsed?.version === 5 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV5(parsed);
+        const migrated = migrateV6(migrateV5(parsed));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V5_KEY);
         return migrated;
@@ -361,7 +396,7 @@ export function loadStore() {
     if (v4) {
       const parsed = JSON.parse(v4);
       if (parsed?.version === 4 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV5(migrateV4(parsed));
+        const migrated = migrateV6(migrateV5(migrateV4(parsed)));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V4_KEY);
         return migrated;
@@ -371,7 +406,7 @@ export function loadStore() {
     if (v3) {
       const parsed = JSON.parse(v3);
       if (parsed?.version === 3 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV5(migrateV4(migrateV3(parsed)));
+        const migrated = migrateV6(migrateV5(migrateV4(migrateV3(parsed))));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V3_KEY);
         return migrated;
@@ -381,7 +416,7 @@ export function loadStore() {
     if (v2) {
       const parsed = JSON.parse(v2);
       if (parsed?.version === 2 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV5(migrateV4(migrateV3(migrateV2(parsed))));
+        const migrated = migrateV6(migrateV5(migrateV4(migrateV3(migrateV2(parsed)))));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V2_KEY);
         return migrated;
@@ -857,6 +892,50 @@ export function parseSurveyCsv(text) {
   return { surveys: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
 }
 
+// Geological logging CSV: hole_id, from, to, lithology, alteration,
+// structure, notes. This is the geologist's own from-to observation of
+// core/chips in hand — distinct from the assay-interval table, which only
+// carries lab grades for a from-to. Same flat-array-keyed-by-hole shape
+// and same per-row error-collection contract as intervals/surveys: a bad
+// row (missing hole, non-numeric or inverted from/to) is skipped and
+// reported, not fatal to the whole file. Only hole_id/from/to are
+// required — lithology/alteration/structure/notes are free text and any
+// subset may be blank (a geologist logging structure only, with lithology
+// logged separately, is a normal real-world split).
+export function parseGeologyCsv(text) {
+  const rows = splitCsv(text);
+  if (rows.length < 2) return { geology: [], error: 'CSV needs a header row and at least one data row.' };
+  const col = headerIndex(rows[0]);
+  const iHole = col('hole_id', 'id', 'hole');
+  const iFrom = col('from', 'from_m');
+  const iTo = col('to', 'to_m');
+  const iLith = col('lithology', 'lith');
+  const iAlt = col('alteration', 'alt');
+  const iStruct = col('structure', 'struct');
+  const iNotes = col('notes', 'comment', 'comments');
+  if (iHole < 0 || iFrom < 0 || iTo < 0) return { geology: [], error: 'Geology CSV needs hole_id, from and to columns.' };
+  const out = [];
+  const rowErrors = [];
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    const from = parseFloat(cells[iFrom]);
+    const to = parseFloat(cells[iTo]);
+    if (!cells[iHole] || Number.isNaN(from) || Number.isNaN(to) || from > to) {
+      rowErrors.push(`row ${r + 1}: invalid geology interval`);
+      continue;
+    }
+    out.push({
+      holeId: cells[iHole], from, to,
+      lithology: iLith >= 0 ? cells[iLith] || '' : '',
+      alteration: iAlt >= 0 ? cells[iAlt] || '' : '',
+      structure: iStruct >= 0 ? cells[iStruct] || '' : '',
+      notes: iNotes >= 0 ? cells[iNotes] || '' : '',
+    });
+  }
+  if (!out.length) return { geology: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No valid geology rows found.' };
+  return { geology: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
+}
+
 // One CSV cell for an element on a sample/interval: the real value if
 // measured, "<0.01"-style if only a detection limit was recorded, or a
 // blank if that element was never analysed at all — so exporting and
@@ -911,6 +990,21 @@ export function surveysToCsv(surveys) {
   return [
     'hole_id,depth,azimuth,dip',
     ...sorted.map(s => [s.holeId, s.depth, s.azimuth, s.dip].join(',')),
+  ].join('\n');
+}
+
+// The geological log — lithology/alteration/structure by from-to — same
+// gap as intervals/surveys had before their own exports: previously no
+// way to get logging data back out once entered. Free-text fields use the
+// same comma-to-semicolon escaping as samplesToCsv's notes column, since
+// this is a plain-comma CSV writer, not a quoting one.
+export function geologyToCsv(geology) {
+  const esc = (v) => (v || '').replace(/,/g, ';');
+  return [
+    'hole_id,from,to,lithology,alteration,structure,notes',
+    ...[...geology].sort((a, b) => a.holeId.localeCompare(b.holeId) || a.from - b.from).map(g => [
+      g.holeId, g.from, g.to, esc(g.lithology), esc(g.alteration), esc(g.structure), esc(g.notes),
+    ].join(',')),
   ].join('\n');
 }
 

@@ -905,6 +905,9 @@
   background: rgba(255,255,255,0.4);
 }
 .mx-survey-table { margin-top: 8px; }
+.mx-geology-table .mx-iv-el { text-align: left; }
+.mx-geology-table.mx-interval-table .mx-interval-head,
+.mx-geology-table.mx-interval-table .mx-interval-row { gap: 10px; }
 .mx-interval-head, .mx-interval-row {
   display: flex; align-items: center;
   padding: 6px 11px;

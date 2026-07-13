@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import {
-  gradeOf, GRADE_COLORS, formatAssay, assayDisplay, elementInfo, samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, downloadText,
+  gradeOf, GRADE_COLORS, formatAssay, assayDisplay, elementInfo, samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, geologyToCsv, downloadText,
   TARGET_STATUSES, bestLinkedGrade, QAQC_TYPE_LABELS, SAMPLE_TYPE_LABELS,
 } from './project-store';
 import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
@@ -42,6 +42,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
       ...c, project: p,
       intervals: (p.intervals || []).filter(i => i.holeId === c.id),
       surveys: (p.surveys || []).filter(s => s.holeId === c.id),
+      geology: (p.geology || []).filter(g => g.holeId === c.id),
     }))), [store]);
   const allFiles = useMemo(() =>
     store.projects.flatMap(p => p.files.map(f => ({ ...f, project: p }))), [store]);
@@ -85,6 +86,13 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
     return store.projects.flatMap(p => (p.surveys || []).filter(s => holeIds.has(s.holeId)));
   };
   const exportSurveys = () => downloadText('drill_downhole_surveys.csv', surveysToCsv(scopedSurveys()));
+
+  // The geological log for whichever holes are in scope.
+  const scopedGeology = () => {
+    const holeIds = new Set(scoped(allCollars).map(c => c.id));
+    return store.projects.flatMap(p => (p.geology || []).filter(g => holeIds.has(g.holeId)));
+  };
+  const exportGeology = () => downloadText('drill_geological_log.csv', geologyToCsv(scopedGeology()));
 
   // Field tasking: the shown targets (the filter doubles as a selection),
   // ordered into a walkable sequence, exported as GPX for a handheld GPS
@@ -215,6 +223,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                           {c.azimuth != null ? ` · ${c.azimuth}°/${c.dip ?? '?'}°` : ''}
                           {c.intervals.length ? ` · ${c.intervals.length} assay${c.intervals.length === 1 ? '' : 's'}` : ' · no assays'}
                           {c.surveys.length ? ` · ${c.surveys.length} survey shot${c.surveys.length === 1 ? '' : 's'}` : ''}
+                          {c.geology.length ? ` · ${c.geology.length} logged` : ''}
                         </div>
                       </div>
                       <span className="mx-data-value">{best != null ? `best ${formatAssay(activeElement, best)}` : ''}</span>
@@ -228,6 +237,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                     </div>
                     {open && <IntervalTable collar={c} activeElement={activeElement} onAddIntervals={() => onAdd('holes')} />}
                     {open && <SurveyTable collar={c} />}
+                    {open && <GeologyTable collar={c} />}
                   </div>
                 );
               })}
@@ -329,6 +339,14 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                 title="Depth-indexed deviation shots — the hole's actual path, not just the collar's planned orientation"
               >
                 {MxIcons.download} Surveys CSV
+              </button>
+            )}
+            {tab === 'holes' && scopedGeology().length > 0 && (
+              <button
+                type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportGeology}
+                title="Lithology/alteration/structure by from-to — the geologist's own log, separate from the assay-grade table"
+              >
+                {MxIcons.download} Geology CSV
               </button>
             )}
           </div>
@@ -452,6 +470,33 @@ function SurveyTable({ collar }) {
           <span className="mx-iv-depth">{s.depth}</span>
           <span className="mx-iv-el">{s.azimuth.toFixed(1)}°</span>
           <span className="mx-iv-el">{s.dip.toFixed(1)}°</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The geological log for one hole — lithology/alteration/structure by
+// from-to, the geologist's own observation of core/chips in hand. Same
+// "only render when data exists" rule as SurveyTable: not every hole gets
+// logged in this tool, and an empty table isn't useful signal.
+function GeologyTable({ collar }) {
+  if (!collar.geology.length) return null;
+  const rows = [...collar.geology].sort((a, b) => a.from - b.from);
+  return (
+    <div className="mx-interval-table mx-survey-table mx-geology-table">
+      <div className="mx-interval-head">
+        <span className="mx-iv-depth">From–to</span>
+        <span className="mx-iv-el">Lithology</span>
+        <span className="mx-iv-el">Alteration</span>
+        <span className="mx-iv-el">Structure</span>
+      </div>
+      {rows.map((g, i) => (
+        <div key={i} className="mx-interval-row">
+          <span className="mx-iv-depth">{g.from}–{g.to}</span>
+          <span className="mx-iv-el">{g.lithology || '—'}</span>
+          <span className="mx-iv-el">{g.alteration || '—'}</span>
+          <span className="mx-iv-el">{g.structure || '—'}</span>
         </div>
       ))}
     </div>

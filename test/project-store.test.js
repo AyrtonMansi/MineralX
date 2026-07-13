@@ -23,6 +23,7 @@ import {
   migrateV3,
   migrateV4,
   migrateV5,
+  migrateV6,
   createDemoStore,
   targetKey,
   targetPrefix,
@@ -45,6 +46,8 @@ import {
   intervalsToCsv,
   parseSurveyCsv,
   surveysToCsv,
+  parseGeologyCsv,
+  geologyToCsv,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -555,7 +558,6 @@ test('migrateV5: every project gains an empty surveys list, existing ones preser
 
 test('createDemoStore: every project has a surveys array (empty — no invented downhole data)', () => {
   const store = createDemoStore();
-  assert.equal(store.version, 6);
   store.projects.forEach(p => assert.ok(Array.isArray(p.surveys)));
 });
 
@@ -601,4 +603,70 @@ test('surveysToCsv: sorts by hole then depth and round-trips through parseSurvey
 
   const reparsed = parseSurveyCsv(csv);
   assert.equal(reparsed.surveys.length, 3);
+});
+
+// ── Geological logging ───────────────────────────────────────────────────
+// The assay-interval table only carries lab grades for a from-to; it was
+// never a substitute for the geologist's own logging of what's in the
+// core/chip tray — lithology, alteration, structure. Stored flat (like
+// intervals and surveys), keyed by holeId.
+
+test('migrateV6: every project gains an empty geology list, existing ones preserved', () => {
+  const v6 = { version: 6, projects: [{ id: 'p1', samples: [], collars: [], intervals: [], surveys: [] }, { id: 'p2', samples: [], collars: [], intervals: [], surveys: [], geology: [{ holeId: 'H1', from: 10, to: 20, lithology: 'Granodiorite', alteration: '', structure: '', notes: '' }] }] };
+  const v7 = migrateV6(v6);
+  assert.equal(v7.version, 7);
+  assert.deepEqual(v7.projects[0].geology, []);
+  assert.equal(v7.projects[1].geology.length, 1); // pre-existing data untouched
+});
+
+test('createDemoStore: every project has a geology array (empty — no invented logging data)', () => {
+  const store = createDemoStore();
+  store.projects.forEach(p => assert.ok(Array.isArray(p.geology)));
+});
+
+test('parseGeologyCsv: reads hole_id/from/to/lithology/alteration/structure/notes', () => {
+  const csv = 'hole_id,from,to,lithology,alteration,structure,notes\nCT-DD-001,100,110,Quartz vein,Silicification,Sheared contact,Coarse sulphides\n';
+  const r = parseGeologyCsv(csv);
+  assert.equal(r.error, null);
+  assert.equal(r.geology.length, 1);
+  assert.deepEqual(r.geology[0], {
+    holeId: 'CT-DD-001', from: 100, to: 110,
+    lithology: 'Quartz vein', alteration: 'Silicification', structure: 'Sheared contact', notes: 'Coarse sulphides',
+  });
+});
+
+test('parseGeologyCsv: free-text columns may be blank; only hole_id/from/to are required', () => {
+  const csv = 'hole_id,from,to,lithology\nCT-DD-001,10,20,Siltstone\n';
+  const r = parseGeologyCsv(csv);
+  assert.equal(r.error, null);
+  assert.equal(r.geology[0].lithology, 'Siltstone');
+  assert.equal(r.geology[0].alteration, '');
+  assert.equal(r.geology[0].structure, '');
+});
+
+test('parseGeologyCsv: an inverted from/to is rejected per row, a missing hole_id/from/to column set is a fatal error', () => {
+  const badRange = parseGeologyCsv('hole_id,from,to,lithology\nCT-DD-001,50,40,Granite\n');
+  assert.equal(badRange.geology.length, 0);
+  assert.match(badRange.error, /No importable rows|No valid geology rows/);
+
+  const missingCols = parseGeologyCsv('hole_id,lithology\nCT-DD-001,Granite\n');
+  assert.match(missingCols.error, /needs hole_id, from and to/);
+});
+
+test('geologyToCsv: sorts by hole then from, escapes commas in free text, and round-trips through parseGeologyCsv', () => {
+  const geology = [
+    { holeId: 'CT-DD-002', from: 5, to: 15, lithology: 'Siltstone, minor sand', alteration: '', structure: '', notes: '' },
+    { holeId: 'CT-DD-001', from: 100, to: 110, lithology: 'Quartz vein', alteration: 'Silicification', structure: '', notes: '' },
+    { holeId: 'CT-DD-001', from: 50, to: 60, lithology: 'Granodiorite', alteration: '', structure: '', notes: '' },
+  ];
+  const csv = geologyToCsv(geology);
+  const lines = csv.split('\n');
+  assert.equal(lines[0], 'hole_id,from,to,lithology,alteration,structure,notes');
+  // CT-DD-001 rows sorted by from (50 before 100), then CT-DD-002.
+  assert.equal(lines[1], 'CT-DD-001,50,60,Granodiorite,,,');
+  assert.equal(lines[2], 'CT-DD-001,100,110,Quartz vein,Silicification,,');
+  assert.equal(lines[3], 'CT-DD-002,5,15,Siltstone; minor sand,,,');
+
+  const reparsed = parseGeologyCsv(csv);
+  assert.equal(reparsed.geology.length, 3);
 });

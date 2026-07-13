@@ -132,6 +132,17 @@ Notable behaviours:
   surveys too. Exports alongside collars/intervals from both the Drill
   Hole manager and the Data drawer, and is included in "Export all program
   data".
+- **Geological logging** — the assay-interval table only ever carried lab
+  grades for a from-to; it was never a substitute for the geologist's own
+  observation of core/chips in hand. Logged intervals
+  (`hole_id, from, to, lithology, alteration, structure, notes`) import as
+  their own CSV in the Drill Hole manager's Geology tab, are stored flat
+  (`project.geology`, keyed by `holeId`, the same shape as intervals and
+  surveys), and show as a from-to table in the Data drawer's collar
+  expansion alongside the assay and survey tables. Deleting a collar
+  deletes its logged intervals too. Exports alongside collars/intervals/
+  surveys from both the Drill Hole manager and the Data drawer, and is
+  included in "Export all program data".
 - **AI extraction** — the Add-data panel can send pasted report text to
   `/api/extract`, which uses the Claude API to read samples, collars and
   intervals out of unstructured text for review before import. This
