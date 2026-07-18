@@ -6,10 +6,20 @@
 // instance/module refs (mutable containers already owned by the parent,
 // shared by reference — not copied) plus the current project data.
 //
+// Sub-layer on/off + opacity live in the PARENT's unified `layerOn`/
+// `layerOpacity` state (layer-registry.js), not owned here — this hook
+// used to keep its own separate `flowSubOn`/`flowOpacity` state, one of
+// the four incompatible toggle-state shapes the Layers panel restructure
+// replaced with a single one shared by every layer type. This hook builds
+// its own small lookup (`buildLayerIndex` with no projects — it never
+// needs project rows) purely to resolve each sub-layer's registry default
+// via `effectiveOn`/`layerOpacityOf`, recomputed only when the set of
+// known commodities changes.
+//
 // `flowLayerRefs` is returned so the parent's render-crash recovery
 // effect can still clear it directly (`flowLayerRefs.current = {}`),
 // exactly as it did when this lived inline.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { gradeOf, targetKey } from './project-store';
 import {
   fetchElevationGrid, runAnalysis, fetchMineralOccurrences, fetchHistoricMines,
@@ -18,16 +28,15 @@ import {
 import {
   imageCoordsFromBounds, buildMarkerEl, commodityColor, targetStyle, targetLabel,
 } from './map-render-helpers';
+import { buildLayerIndex, effectiveOn, layerOpacityOf } from './layer-registry';
 
-export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget, onDismissCandidate }) {
+export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget, onDismissCandidate, layerOn, layerOpacity }) {
   const [flowState, setFlowState] = useState({
     status: 'idle', targets: 0, commodities: [], occurrencesError: false,
     historicMinesCount: 0, historicMinesError: false,
   });
-  // All sub-layers start off — the first eye-toggle click is what
-  // triggers the (only) fetch+compute for the current viewport.
-  const [flowSubOn, setFlowSubOn] = useState({ drainage: false, targets: false, heatmap: false, correlated: false });
-  const [flowOpacity, setFlowOpacity] = useState({ drainage: 0.65, heatmap: 0.5 });
+
+  const flowLayerIndex = useMemo(() => buildLayerIndex({ projects: [] }, flowState.commodities), [flowState.commodities]);
 
   const flowCache = useRef(null); // { grid, flow, targets, occurrencesByCommodity } for the last analysed viewport
   const flowLayerRefs = useRef({}); // sub-layer key -> { sourceId, layerId } (raster) or Marker[] (points) currently on the map
@@ -146,21 +155,21 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
     }
     const { grid, flow, targets, occurrencesByCommodity, historicMines } = cache;
 
-    setRasterLayer('drainage', !!flowSubOn.drainage, flowOpacity.drainage ?? 0.65, () => renderDrainageOverlay(flow, grid.w, grid.h), grid.bounds);
-    setRasterLayer('heatmap', !!flowSubOn.heatmap, flowOpacity.heatmap ?? 0.5, () => renderConcentrationHeatmap(flow, grid.w, grid.h), grid.bounds);
+    setRasterLayer('drainage', effectiveOn(layerOn, flowLayerIndex, 'drainage'), layerOpacityOf(layerOpacity, flowLayerIndex, 'drainage'), () => renderDrainageOverlay(flow, grid.w, grid.h), grid.bounds);
+    setRasterLayer('heatmap', effectiveOn(layerOn, flowLayerIndex, 'heatmap'), layerOpacityOf(layerOpacity, flowLayerIndex, 'heatmap'), () => renderConcentrationHeatmap(flow, grid.w, grid.h), grid.bounds);
 
     // Candidates render as hollow rings, not solid dots, so they read at a
     // glance as the model's *suggestions* — unmistakably different from the
     // geologist's own solid sample dots and the white collar squares. Once
     // promoted they become solid status-coloured diamonds.
-    setMarkerGroup('targets', !!flowSubOn.targets, () => targets.map((t) => {
+    setMarkerGroup('targets', effectiveOn(layerOn, flowLayerIndex, 'targets'), () => targets.map((t) => {
       const s = targetStyle(t);
       const el = buildMarkerEl({ width: `${s.radius * 2}px`, height: `${s.radius * 2}px`, borderRadius: '50%', background: 'transparent', border: `3px solid ${s.fillColor}`, boxShadow: '0 0 0 1.5px rgba(250,249,244,0.55), 0 1px 4px rgba(0,0,0,0.4)' }, targetLabel(t));
       el.classList.add('mx-analysis-target');
       return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).setPopup(promotePopup(t)).addTo(map);
     }));
 
-    setMarkerGroup('correlated', !!flowSubOn.correlated, () => targets.filter((t) => t.sample && t.occurrence).map((t) => {
+    setMarkerGroup('correlated', effectiveOn(layerOn, flowLayerIndex, 'correlated'), () => targets.filter((t) => t.sample && t.occurrence).map((t) => {
       const el = buildMarkerEl({ width: '26px', height: '26px', borderRadius: '50%', background: 'transparent', border: '2px dashed #FAF9F4' }, 'Highest confidence: known Gold occurrence + your own sample both drain here');
       el.classList.add('mx-analysis-target');
       return new maplibregl.Marker({ element: el }).setLngLat([t.lng, t.lat]).setPopup(promotePopup(t)).addTo(map);
@@ -168,20 +177,20 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
 
     Object.entries(occurrencesByCommodity || {}).forEach(([commodity, points], idx) => {
       const key = `occ:${commodity}`;
-      setMarkerGroup(key, !!flowSubOn[key], () => points.map((o) => {
+      setMarkerGroup(key, effectiveOn(layerOn, flowLayerIndex, key), () => points.map((o) => {
         const el = buildMarkerEl({ width: '12px', height: '12px', borderRadius: '50%', background: commodityColor(commodity, idx), border: '2px solid #FAF9F4' }, `${o.name} · ${commodity}`);
         return new maplibregl.Marker({ element: el }).setLngLat([o.lng, o.lat]).addTo(map);
       }));
     });
 
-    setMarkerGroup('historicMines', !!flowSubOn.historicMines, () => (historicMines || []).map((m) => {
+    setMarkerGroup('historicMines', effectiveOn(layerOn, flowLayerIndex, 'historicMines'), () => (historicMines || []).map((m) => {
       const el = buildMarkerEl({ width: '12px', height: '12px', borderRadius: '50%', background: '#5E6E7A', border: '2px solid #FAF9F4' }, `${m.name} · ${m.mineType}`);
       return new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat]).addTo(map);
     }));
     // onPromoteTarget/onDismissCandidate deliberately excluded: they're read
     // via ref (see above) precisely so this callback's identity — and thus
     // whether marker groups get rebuilt — doesn't depend on them.
-  }, [flowSubOn, flowOpacity, mapInstance, mgl]);
+  }, [layerOn, layerOpacity, flowLayerIndex, mapInstance, mgl]);
 
   useEffect(() => { syncFlowLayers(); }, [syncFlowLayers]);
 
@@ -230,19 +239,19 @@ export function useFlowAnalysis({ mapInstance, mgl, store, activeElement, onProm
     }
   }, [store, activeElement, syncFlowLayers, mapInstance]);
 
-  const toggleFlowSub = useCallback((key) => {
-    setFlowSubOn((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
-
   // First time any sub-layer is switched on with nothing cached yet,
-  // trigger the (only) fetch+compute. Later toggles just re-render.
+  // trigger the (only) fetch+compute. Later toggles just re-render. Only
+  // these four ids have toggle UI before a fetch has ever happened
+  // (occurrences/historic-mines rows only render once flowState.status
+  // isn't 'idle', i.e. after a fetch already occurred), so checking just
+  // these four exactly preserves the original trigger condition even
+  // though `layerOn` is now a single flat map shared with every other
+  // layer type — an unrelated project/WMS toggle must never cause this to
+  // fire (CLAUDE.md hard rule 4: a toggle never triggers a fetch).
   useEffect(() => {
-    const anyOn = Object.values(flowSubOn).some(Boolean);
+    const anyOn = ['drainage', 'heatmap', 'targets', 'correlated'].some((k) => Boolean(layerOn[k]));
     if (anyOn && !flowCache.current && flowState.status !== 'running') runFlowAnalysis();
-  }, [flowSubOn, flowState.status, runFlowAnalysis]);
+  }, [layerOn, flowState.status, runFlowAnalysis]);
 
-  return {
-    flowState, flowSubOn, flowOpacity, setFlowOpacity,
-    toggleFlowSub, runFlowAnalysis, flowLayerRefs,
-  };
+  return { flowState, runFlowAnalysis, flowLayerRefs };
 }

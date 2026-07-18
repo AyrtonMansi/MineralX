@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { PUBLIC_DATA_CATALOG, BASEMAP_TILES, THEME_LABELS, THEME_ORDER } from './layer-data';
 import {
+  WMS_LAYERS_BY_THEME, buildLayerIndex, isLayerOn, effectiveOn, layerOpacityOf,
+} from './layer-registry';
+import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
@@ -29,11 +32,17 @@ export default function MineralXWorkspace() {
   // server and client markup match (avoids hydration mismatches).
   const [store, setStore] = useState(createDemoStore);
   const [hydrated, setHydrated] = useState(false);
-  // Layer UI state: visibility defaults on for project layers, off for public.
-  const [hidden, setHidden] = useState({});          // nodeId -> true when hidden
-  const [expanded, setExpanded] = useState({});      // nodeId -> bool (defaults below)
-  const [publicOn, setPublicOn] = useState({});      // public layerId -> bool
-  const [publicOpacity, setPublicOpacity] = useState({}); // layerId -> 0..1
+  // Layer UI state: one shape for every layer type (project markers/
+  // boundary, WMS public layers, Target Analysis's own sub-layers),
+  // replacing what used to be three separately-shaped, two-different-
+  // polarity state objects (`hidden` was inverted: absence meant visible).
+  // `layerOn`/`layerOpacity` use normal polarity everywhere — read via
+  // `isLayerOn`/`effectiveOn`/`layerOpacityOf` (layer-registry.js), which
+  // fall back to each layer's own registry-declared default so no call
+  // site has to remember which convention applies to which id.
+  const [layerOn, setLayerOn] = useState({});         // nodeId -> bool
+  const [layerOpacity, setLayerOpacity] = useState({}); // nodeId -> 0..1
+  const [layerExpanded, setLayerExpanded] = useState({}); // nodeId -> bool (defaults below)
   const [wmsErrors, setWmsErrors] = useState({});    // layerId -> true when tiles fail
 
   const [activePanel, setActivePanel] = useState('home');
@@ -384,9 +393,26 @@ export default function MineralXWorkspace() {
   }, [api, activeProject]);
 
   const {
-    flowState, flowSubOn, flowOpacity, setFlowOpacity,
-    toggleFlowSub, runFlowAnalysis, flowLayerRefs,
-  } = useFlowAnalysis({ mapInstance, mgl, store, activeElement, onPromoteTarget, onDismissCandidate });
+    flowState, runFlowAnalysis, flowLayerRefs,
+  } = useFlowAnalysis({
+    mapInstance, mgl, store, activeElement, onPromoteTarget, onDismissCandidate,
+    layerOn, layerOpacity,
+  });
+
+  // One id -> descriptor lookup covering every layer currently in play
+  // (static WMS/flow rows + this store's projects + whatever commodities
+  // Target Analysis has found in the current viewport) — the single index
+  // every layer-aware effect/toggle below reads through.
+  const layerIndex = useMemo(() => buildLayerIndex(store, flowState.commodities), [store, flowState.commodities]);
+
+  // One toggle for every layer type: flips the row's own on/off state
+  // (falling back through the registry's default, same as isLayerOn reads
+  // it) — replaces toggleHidden, the inline publicOn toggle lambda, and
+  // useFlowAnalysis's own toggleFlowSub, which each did this identically
+  // but against three differently-shaped state objects.
+  const toggleLayerOn = useCallback((id) => {
+    setLayerOn(prev => ({ ...prev, [id]: !isLayerOn(prev, layerIndex, id) }));
+  }, [layerIndex]);
 
   // Undo/redo: keyboard (Ctrl/Cmd+Z, +Shift for redo) and topbar buttons.
   // The guard skips editable targets so native text-field undo keeps
@@ -640,15 +666,18 @@ export default function MineralXWorkspace() {
   }, [store, mapReady, activeElement]);
 
   // ── Apply visibility toggles ────────────────────────────────────────
+  // `effectiveOn` walks the registry's parent chain (child AND every
+  // ancestor), replacing the hand-coded two-level
+  // `!projectHidden && !hidden[nodeId]` special case that only ever
+  // covered this one project-hide scenario.
   useEffect(() => {
     if (!mapReady) return;
     const map = mapInstance.current;
     store.projects.forEach(p => {
-      const projectHidden = hidden[`proj:${p.id}`];
       [['chips', `chips:${p.id}`], ['holes', `holes:${p.id}`], ['targets', `targets:${p.id}`]].forEach(([suffix, nodeId]) => {
         const ids = groupMembers.current.get(`${p.id}:${suffix}`);
         if (!ids) return;
-        const show = !projectHidden && !hidden[nodeId];
+        const show = effectiveOn(layerOn, layerIndex, nodeId);
         ids.forEach(id => {
           const marker = markers.current.get(id);
           if (!marker) return;
@@ -658,13 +687,13 @@ export default function MineralXWorkspace() {
       });
       const bnd = boundaryLayers.current.get(p.id);
       if (bnd) {
-        const show = !projectHidden && !hidden[`bnd:${p.id}`];
+        const show = effectiveOn(layerOn, layerIndex, `bnd:${p.id}`);
         const vis = show ? 'visible' : 'none';
         map.setLayoutProperty(bnd.fillLayerId, 'visibility', vis);
         map.setLayoutProperty(bnd.lineLayerId, 'visibility', vis);
       }
     });
-  }, [hidden, store, mapReady]);
+  }, [layerOn, layerIndex, store, mapReady]);
 
   // ── Public WMS layers ───────────────────────────────────────────────
   useEffect(() => {
@@ -696,7 +725,8 @@ export default function MineralXWorkspace() {
     map.on('error', onSourceError);
 
     PUBLIC_DATA_CATALOG.forEach(group => group.layers.forEach(layer => {
-      const on = Boolean(publicOn[layer.id]);
+      const on = effectiveOn(layerOn, layerIndex, layer.id);
+      const opacity = layerOpacityOf(layerOpacity, layerIndex, layer.id);
       const sourceId = `wms-src-${layer.id}`;
       const layerRenderId = `wms-layer-${layer.id}`;
       const existing = wmsLayers.current.has(layer.id);
@@ -705,7 +735,7 @@ export default function MineralXWorkspace() {
       // user toggles the layer off (which clears it), so off→on is the retry.
       if (on && !existing && !wmsErrors[layer.id]) {
         map.addSource(sourceId, { type: 'raster', tiles: [wmsTileUrl(layer)], tileSize: 256, attribution: layer.attribution });
-        map.addLayer({ id: layerRenderId, type: 'raster', source: sourceId, paint: { 'raster-opacity': publicOpacity[layer.id] ?? 0.7 } });
+        map.addLayer({ id: layerRenderId, type: 'raster', source: sourceId, paint: { 'raster-opacity': opacity } });
         wmsLayers.current.add(layer.id);
       } else if (!on) {
         if (map.getLayer(layerRenderId)) map.removeLayer(layerRenderId);
@@ -713,12 +743,12 @@ export default function MineralXWorkspace() {
         wmsLayers.current.delete(layer.id);
         if (wmsErrors[layer.id]) setWmsErrors(prev => { const next = { ...prev }; delete next[layer.id]; return next; });
       } else if (on && existing) {
-        map.setPaintProperty(layerRenderId, 'raster-opacity', publicOpacity[layer.id] ?? 0.7);
+        map.setPaintProperty(layerRenderId, 'raster-opacity', opacity);
       }
     }));
 
     return () => { map.off('error', onSourceError); };
-  }, [publicOn, publicOpacity, mapReady, wmsErrors]);
+  }, [layerOn, layerOpacity, layerIndex, mapReady, wmsErrors]);
 
   // ── Basemap ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -749,7 +779,7 @@ export default function MineralXWorkspace() {
     return out.slice(0, 8);
   }, [query, store, activeElement]);
 
-  const isExpanded = (id, dflt) => expanded[id] ?? dflt;
+  const isExpanded = (id, dflt) => layerExpanded[id] ?? dflt;
 
   return (
     <div className="mx-workspace">
@@ -921,14 +951,13 @@ export default function MineralXWorkspace() {
         {activePanel === 'layers' && (
           <LayersPanel
             store={store}
-            hidden={hidden}
-            setHidden={setHidden}
+            layerIndex={layerIndex}
+            layerOn={layerOn}
+            toggleLayerOn={toggleLayerOn}
+            layerOpacity={layerOpacity}
+            setLayerOpacity={setLayerOpacity}
             isExpanded={isExpanded}
-            setExpanded={setExpanded}
-            publicOn={publicOn}
-            setPublicOn={setPublicOn}
-            publicOpacity={publicOpacity}
-            setPublicOpacity={setPublicOpacity}
+            setExpanded={setLayerExpanded}
             wmsErrors={wmsErrors}
             basemap={basemap}
             setBasemap={setBasemap}
@@ -936,10 +965,6 @@ export default function MineralXWorkspace() {
             setActiveElement={setActiveElement}
             availableElements={availableElements}
             flowState={flowState}
-            flowSubOn={flowSubOn}
-            flowOpacity={flowOpacity}
-            setFlowOpacity={setFlowOpacity}
-            onToggleFlowSub={toggleFlowSub}
             onRerunFlow={runFlowAnalysis}
             onManage={setManageTarget}
             onClose={() => setActivePanel(null)}
@@ -1230,9 +1255,9 @@ function UploadPanel({ onClose, project, api }) {
 }
 
 // ── Layers panel ───────────────────────────────────────────────────────
-function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, publicOn, setPublicOn, publicOpacity, setPublicOpacity, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, flowSubOn, flowOpacity, setFlowOpacity, onToggleFlowSub, onRerunFlow, onManage, onClose }) {
-  const toggleHidden = (id) => setHidden(prev => ({ ...prev, [id]: !prev[id] }));
+function LayersPanel({ store, layerIndex, layerOn, toggleLayerOn, layerOpacity, setLayerOpacity, isExpanded, setExpanded, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, onRerunFlow, onManage, onClose }) {
   const toggleExpanded = (id, dflt) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? dflt) }));
+  const setOpacity = (id, v) => setLayerOpacity(prev => ({ ...prev, [id]: v }));
 
   return (
     <div className="mx-glass-panel mx-anim-rise">
@@ -1245,8 +1270,9 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
           <ProjectTree
             key={p.id}
             project={p}
-            hidden={hidden}
-            toggleHidden={toggleHidden}
+            layerOn={layerOn}
+            layerIndex={layerIndex}
+            toggleLayerOn={toggleLayerOn}
             expanded={isExpanded(`proj:${p.id}`, true)}
             toggleExpanded={() => toggleExpanded(`proj:${p.id}`, true)}
             onManage={onManage}
@@ -1266,7 +1292,7 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
         {isExpanded('pub', false) && (
           <>
             {THEME_ORDER.map(theme => {
-              const layers = PUBLIC_DATA_CATALOG.flatMap(g => g.layers).filter(l => l.theme === theme);
+              const layers = WMS_LAYERS_BY_THEME.get(theme) || [];
               if (!layers.length) return null;
               return (
                 <div key={theme}>
@@ -1275,21 +1301,24 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
                     <div className="mx-tree-swatch" style={{ background: '#95A5A6', transform: 'rotate(45deg)', width: 8, height: 8 }} />
                     <span className="mx-tree-subheading">{THEME_LABELS[theme]}</span>
                   </div>
-                  {layers.map(layer => (
-                    <div key={layer.id}>
-                      <FlowSubRow
-                        depth={1}
-                        label={layer.name}
-                        swatch={{ background: '#95A5A6', borderRadius: '50%', width: 7, height: 7 }}
-                        on={publicOn[layer.id]}
-                        onToggle={() => setPublicOn(prev => ({ ...prev, [layer.id]: !prev[layer.id] }))}
-                        opacity={publicOn[layer.id] ? (publicOpacity[layer.id] ?? 0.7) : undefined}
-                        onOpacity={(v) => setPublicOpacity(prev => ({ ...prev, [layer.id]: v }))}
-                        error={wmsErrors[layer.id] && publicOn[layer.id]}
-                        title={layer.attribution}
-                      />
-                    </div>
-                  ))}
+                  {layers.map(layer => {
+                    const on = isLayerOn(layerOn, layerIndex, layer.id);
+                    return (
+                      <div key={layer.id}>
+                        <FlowSubRow
+                          depth={1}
+                          label={layer.label}
+                          swatch={{ background: '#95A5A6', borderRadius: '50%', width: 7, height: 7 }}
+                          on={on}
+                          onToggle={() => toggleLayerOn(layer.id)}
+                          opacity={on ? layerOpacityOf(layerOpacity, layerIndex, layer.id) : undefined}
+                          onOpacity={(v) => setOpacity(layer.id, v)}
+                          error={wmsErrors[layer.id] && on}
+                          title={layer.wms.attribution}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -1315,7 +1344,7 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
                 depth={1}
                 label={commodity}
                 swatch={{ background: commodity === 'Gold' ? '#B08A3E' : PROJECT_COLORS[(idx + 1) % PROJECT_COLORS.length], borderRadius: '50%', width: 7, height: 7 }}
-                on={flowSubOn[`occ:${commodity}`]} onToggle={() => onToggleFlowSub(`occ:${commodity}`)}
+                on={isLayerOn(layerOn, layerIndex, `occ:${commodity}`)} onToggle={() => toggleLayerOn(`occ:${commodity}`)}
               />
             ))}
             {flowState.status === 'idle' && (
@@ -1345,7 +1374,7 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
                 depth={1}
                 label={`Historic mine sites`}
                 swatch={{ background: '#5E6E7A', borderRadius: '50%', width: 7, height: 7 }}
-                on={flowSubOn.historicMines} onToggle={() => onToggleFlowSub('historicMines')}
+                on={isLayerOn(layerOn, layerIndex, 'historicMines')} onToggle={() => toggleLayerOn('historicMines')}
               />
             )}
             {flowState.status === 'idle' && (
@@ -1386,25 +1415,25 @@ function LayersPanel({ store, hidden, setHidden, isExpanded, setExpanded, public
                 <FlowSubRow
                   depth={1}
                   label="Drainage channels" swatch={{ background: '#3E6C8C', borderRadius: '50%', width: 8, height: 8 }}
-                  on={flowSubOn.drainage} onToggle={() => onToggleFlowSub('drainage')}
-                  opacity={flowOpacity.drainage} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, drainage: v }))}
+                  on={isLayerOn(layerOn, layerIndex, 'drainage')} onToggle={() => toggleLayerOn('drainage')}
+                  opacity={layerOpacityOf(layerOpacity, layerIndex, 'drainage')} onOpacity={(v) => setOpacity('drainage', v)}
                 />
                 <FlowSubRow
                   depth={1}
                   label="Water concentration heatmap" swatch={{ background: 'linear-gradient(90deg,#F3F1E9,#B08A3E,#C15F3C)', borderRadius: '50%', width: 8, height: 8 }}
-                  on={flowSubOn.heatmap} onToggle={() => onToggleFlowSub('heatmap')}
-                  opacity={flowOpacity.heatmap} onOpacity={(v) => setFlowOpacity(prev => ({ ...prev, heatmap: v }))}
+                  on={isLayerOn(layerOn, layerIndex, 'heatmap')} onToggle={() => toggleLayerOn('heatmap')}
+                  opacity={layerOpacityOf(layerOpacity, layerIndex, 'heatmap')} onOpacity={(v) => setOpacity('heatmap', v)}
                 />
               </>
             )}
 
             <FlowSubRow
               label="Metal Concentration Zones" swatch={{ background: 'transparent', border: '2px solid #8A6A3E', borderRadius: '50%', width: 8, height: 8 }}
-              on={flowSubOn.targets} onToggle={() => onToggleFlowSub('targets')}
+              on={isLayerOn(layerOn, layerIndex, 'targets')} onToggle={() => toggleLayerOn('targets')}
             />
             <FlowSubRow
               label="Correlated Targets" swatch={{ background: '#C15F3C', border: `2px solid ${PROJECT_COLORS[4]}`, width: 9, height: 9, borderRadius: '50%' }}
-              on={flowSubOn.correlated} onToggle={() => onToggleFlowSub('correlated')}
+              on={isLayerOn(layerOn, layerIndex, 'correlated')} onToggle={() => toggleLayerOn('correlated')}
             />
 
             <div className="mx-flow-note">
@@ -1503,13 +1532,22 @@ function FlowSubRow({ label, swatch, on, onToggle, opacity, onOpacity, depth = 0
   );
 }
 
-function ProjectTree({ project, hidden, toggleHidden, expanded, toggleExpanded, onManage }) {
+function ProjectTree({ project, layerOn, layerIndex, toggleLayerOn, expanded, toggleExpanded, onManage }) {
   const p = project;
+  const projNodeId = `proj:${p.id}`;
+  // Targets row fixes a previously dead/half-wired feature: the visibility
+  // effect already checked `targets:${pid}` (so promoted targets DID
+  // respect a hide toggle if one existed) but this row was never rendered,
+  // so there was no way to actually hide them. Managed via the Targets
+  // worklist tab, not this dialog's manage(+) button — omitted here since
+  // it's a different kind of thing from chips/holes/boundary.
   const rows = [
     { nodeId: `chips:${p.id}`, name: 'Rock chips', count: p.samples.length, manage: 'chips', swatch: { background: '#C15F3C', borderRadius: '50%', width: 10, height: 10 } },
     { nodeId: `holes:${p.id}`, name: 'Drill holes', count: p.collars.length, manage: 'holes', swatch: { background: '#F3F1E9', border: '2px solid #211E1A', width: 10, height: 10 } },
     { nodeId: `bnd:${p.id}`, name: p.boundary ? p.boundary.name : 'Boundary', count: null, manage: 'boundary', swatch: { border: '1.5px dashed #8A857A', borderRadius: 2, width: 11, height: 11 } },
+    { nodeId: `targets:${p.id}`, name: 'Targets', count: (p.targets || []).length, manage: null, swatch: { background: 'transparent', border: '2px solid #B08A3E', transform: 'rotate(45deg)', width: 9, height: 9 } },
   ];
+  const projOn = isLayerOn(layerOn, layerIndex, projNodeId);
   return (
     <>
       <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
@@ -1517,29 +1555,35 @@ function ProjectTree({ project, hidden, toggleHidden, expanded, toggleExpanded, 
           {expanded ? MxIcons.chevronDown : MxIcons.chevronRight}
         </button>
         <div className="mx-tree-swatch" style={{ background: p.color, transform: 'rotate(45deg)', width: 11, height: 11 }} />
-        <span className={`mx-tree-name mx-tree-name-bold ${hidden[`proj:${p.id}`] ? 'mx-tree-name-off' : ''}`}>{p.name}</span>
+        <span className={`mx-tree-name mx-tree-name-bold ${projOn ? '' : 'mx-tree-name-off'}`}>{p.name}</span>
         {p.demo && <span className="mx-demo-tag">demo</span>}
-        <button type="button" className={`mx-tree-eye ${hidden[`proj:${p.id}`] ? '' : 'on'}`} onClick={() => toggleHidden(`proj:${p.id}`)} title={hidden[`proj:${p.id}`] ? 'Show' : 'Hide'}>
+        <button type="button" className={`mx-tree-eye ${projOn ? 'on' : ''}`} onClick={() => toggleLayerOn(projNodeId)} title={projOn ? 'Hide' : 'Show'}>
           <div className="mx-eye-dot" />
         </button>
         <button type="button" className="mx-tree-manage" onClick={() => onManage({ type: 'project', projectId: p.id })} title="Project settings">
           {MxIcons.plus}
         </button>
       </div>
-      {expanded && rows.map(r => (
-        <div key={r.nodeId} className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-          <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-          <div className="mx-tree-swatch" style={r.swatch} />
-          <span className={`mx-tree-name ${hidden[r.nodeId] || hidden[`proj:${p.id}`] ? 'mx-tree-name-off' : ''}`}>{r.name}</span>
-          {r.count != null && r.count > 0 && <span className="mx-tree-count">{r.count}</span>}
-          <button type="button" className={`mx-tree-eye ${hidden[r.nodeId] ? '' : 'on'}`} onClick={() => toggleHidden(r.nodeId)} title={hidden[r.nodeId] ? 'Show' : 'Hide'}>
-            <div className="mx-eye-dot" />
-          </button>
-          <button type="button" className="mx-tree-manage" onClick={() => onManage({ type: r.manage, projectId: p.id })} title="Manage">
-            {MxIcons.plus}
-          </button>
-        </div>
-      ))}
+      {expanded && rows.map(r => {
+        const rowOn = isLayerOn(layerOn, layerIndex, r.nodeId);
+        const rowEffectiveOn = effectiveOn(layerOn, layerIndex, r.nodeId);
+        return (
+          <div key={r.nodeId} className="mx-tree-row" style={{ paddingLeft: '30px' }}>
+            <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
+            <div className="mx-tree-swatch" style={r.swatch} />
+            <span className={`mx-tree-name ${rowEffectiveOn ? '' : 'mx-tree-name-off'}`}>{r.name}</span>
+            {r.count != null && r.count > 0 && <span className="mx-tree-count">{r.count}</span>}
+            <button type="button" className={`mx-tree-eye ${rowOn ? 'on' : ''}`} onClick={() => toggleLayerOn(r.nodeId)} title={rowOn ? 'Hide' : 'Show'}>
+              <div className="mx-eye-dot" />
+            </button>
+            {r.manage && (
+              <button type="button" className="mx-tree-manage" onClick={() => onManage({ type: r.manage, projectId: p.id })} title="Manage">
+                {MxIcons.plus}
+              </button>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 }
