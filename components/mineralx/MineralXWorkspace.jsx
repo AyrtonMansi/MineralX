@@ -1332,7 +1332,7 @@ function LayersPanel({ store, layerIndex, layerOn, toggleLayerOn, layerOpacity, 
                 <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
                 <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
                 <span className="mx-tree-subheading">Mineral Occurrences</span>
-                {flowState.occurrencesError && <span className="mx-tree-error" title="Occurrence service unavailable for this view">unavailable</span>}
+                {flowState.occurrencesError && <ErrorBadge title="Occurrence service unavailable for this view" />}
                 {!flowState.occurrencesError && flowState.commodities.length === 0 && flowState.status === 'ready' && (
                   <span className="mx-tree-attribution">none in view</span>
                 )}
@@ -1363,7 +1363,7 @@ function LayersPanel({ store, layerIndex, layerOn, toggleLayerOn, layerOpacity, 
                 <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
                 <div className="mx-tree-swatch" style={{ background: '#5E6E7A', transform: 'rotate(45deg)', width: 8, height: 8 }} />
                 <span className="mx-tree-subheading">Historic Mines</span>
-                {flowState.historicMinesError && <span className="mx-tree-error" title="Historic mines service unavailable for this view">unavailable</span>}
+                {flowState.historicMinesError && <ErrorBadge title="Historic mines service unavailable for this view" />}
                 {!flowState.historicMinesError && flowState.historicMinesCount === 0 && flowState.status === 'ready' && (
                   <span className="mx-tree-attribution">none in view</span>
                 )}
@@ -1398,7 +1398,7 @@ function LayersPanel({ store, layerIndex, layerOn, toggleLayerOn, layerOpacity, 
           <span className="mx-tree-name mx-tree-name-bold">Target Analysis</span>
           {flowState.status === 'running' && <span className="mx-tree-attribution">computing…</span>}
           {flowState.status === 'ready' && <span className="mx-tree-count">{flowState.targets} targets</span>}
-          {flowState.status === 'error' && <span className="mx-tree-error" title="Elevation tiles unreachable — try again">failed</span>}
+          {flowState.status === 'error' && <ErrorBadge text="failed" title="Elevation tiles unreachable — try again" />}
         </div>
         {isExpanded('flow', true) && (
           <>
@@ -1503,6 +1503,15 @@ function LayersPanel({ store, layerIndex, layerOn, toggleLayerOn, layerOpacity, 
   );
 }
 
+// The "unavailable"/"failed" status badge — one shared element instead of
+// four hand-rolled `<span className="mx-tree-error">` blocks (WMS rows via
+// FlowSubRow's `error` prop, plus three inline ones for Occurrences/
+// Historic-Mines/Target-Analysis-group errors) that previously duplicated
+// the same markup with slightly different copy.
+function ErrorBadge({ text = 'unavailable', title }) {
+  return <span className="mx-tree-error" title={title}>{text}</span>;
+}
+
 // One toggleable terrain sub-layer row: eye + optional opacity slider,
 // same visual language as the WMS public-layer rows above.
 function FlowSubRow({ label, swatch, on, onToggle, opacity, onOpacity, depth = 0, error, title }) {
@@ -1512,7 +1521,7 @@ function FlowSubRow({ label, swatch, on, onToggle, opacity, onOpacity, depth = 0
         <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
         <div className="mx-tree-swatch" style={swatch} />
         <span className={`mx-tree-name ${on ? '' : 'mx-tree-name-off'}`} title={title}>{label}</span>
-        {error && <span className="mx-tree-error" title="Service not responding — check the layer or your connection">unavailable</span>}
+        {error && <ErrorBadge title="Service not responding — check the layer or your connection" />}
         <button type="button" className={`mx-tree-eye ${on ? 'on' : ''}`} onClick={onToggle} title={on ? 'Hide' : 'Show'}>
           <div className="mx-eye-dot" />
         </button>
