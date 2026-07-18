@@ -5,6 +5,7 @@ import { PUBLIC_DATA_CATALOG, BASEMAP_TILES, THEME_LABELS, THEME_ORDER } from '.
 import {
   WMS_LAYERS_BY_THEME, buildLayerIndex, isLayerOn, effectiveOn, layerOpacityOf,
 } from './layer-registry';
+import { loadLayerUiState, saveLayerUiState } from './layer-ui-store';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
@@ -95,9 +96,22 @@ export default function MineralXWorkspace() {
 
   useEffect(() => {
     setStore(loadStore());
+    const savedLayerUi = loadLayerUiState();
+    setLayerOn(savedLayerUi.layerOn);
+    setLayerOpacity(savedLayerUi.layerOpacity);
+    setLayerExpanded(savedLayerUi.layerExpanded);
     setHydrated(true);
     setLastExportAt(Date.now()); // staleness clock starts from app open, not epoch 0
   }, []);
+
+  // Layer-tree UI state persists under its own key (layer-ui-store.js),
+  // separate from the project-data store above — see that file for why.
+  // Guarded by `hydrated` the same way, so the pre-load empty state never
+  // overwrites what was actually saved.
+  useEffect(() => {
+    if (!hydrated) return;
+    saveLayerUiState({ layerOn, layerOpacity, layerExpanded });
+  }, [layerOn, layerOpacity, layerExpanded, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;

@@ -58,3 +58,27 @@ test('toggling any sub-layer after the first analysis run never triggers another
   expect(occurrenceHits()).toBe(1); // unchanged — served from cache
   expect(mineHits()).toBe(1);
 });
+
+// New guarantee added when layer-tree UI state got real localStorage
+// persistence (mx-layers-v1, layer-ui-store.js) — previously toggling a
+// layer off and reloading silently reset it back to visible, despite
+// CLAUDE.md's hard rule 5 already documenting persistence as settled
+// behavior. Uses a project row (no network dependency at all) rather than
+// a WMS layer, since toggling a real WMS layer on would depend on the
+// live GeoResGlobe service this sandbox can't reach.
+test('hiding a layer and reloading keeps it hidden — layer-tree state now survives a reload', async ({ page }) => {
+  await mockBasemap(page);
+  await page.goto('/mineralx');
+  await waitForMapLoaded(page);
+
+  await page.locator('.mx-dock-btn[title="Layers"]').click();
+  const chipsRow = page.locator('.mx-tree-row', { hasText: 'Rock chips' });
+  await expect(chipsRow.locator('.mx-tree-eye')).toHaveClass(/on/);
+  await chipsRow.locator('.mx-tree-eye').click();
+  await expect(chipsRow.locator('.mx-tree-eye')).not.toHaveClass(/on/);
+
+  await page.reload();
+  await waitForMapLoaded(page);
+  await page.locator('.mx-dock-btn[title="Layers"]').click();
+  await expect(page.locator('.mx-tree-row', { hasText: 'Rock chips' }).locator('.mx-tree-eye')).not.toHaveClass(/on/);
+});
