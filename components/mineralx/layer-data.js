@@ -30,10 +30,16 @@ export const THEME_LABELS = {
 };
 export const THEME_ORDER = ['geology', 'geophysics', 'geochemistry', 'groundwater', 'permits', 'boreholes'];
 
+// A single wrapper object (rather than a flat array) so
+// scripts/verify-endpoints.mjs's `for (const group of PUBLIC_DATA_CATALOG)
+// for (const layer of group.layers)` loop needs no change if a second
+// service ever gets added here. Its own `id`/`group` fields (a vestigial
+// leftover from an earlier "everything nests under one named group" design
+// that nothing ever actually consumed — the Layers panel groups WMS layers
+// by `theme`, not by this wrapper) were removed once layer-registry.js
+// confirmed neither the panel nor the verify script read them.
 export const PUBLIC_DATA_CATALOG = [
   {
-    id: 'pub-geores',
-    group: 'GeoResGlobe',
     layers: [
       {
         id: 'qld-geology-detailed',

@@ -83,12 +83,19 @@ being asked.
    elevation tiles + occurrences + historic mines **once per viewport run**;
    every layer toggle afterwards only adds/removes already-computed layers.
    Toggles must never trigger a network request. The e2e suite asserts this.
-5. **Layer-tree node ids are persistence keys.** `'pub'`, `'flow'`,
+5. **Layer-tree node ids are persistence keys.** Every layer descriptor
+   lives in `layer-registry.js` (`STATIC_LAYERS`, `projectLayerDescriptors`,
+   `occurrenceLayerDescriptors`) and its `id` — `'pub'`, `'flow'`,
    `occ:${commodity}`, `historicMines`, `chips:${pid}`, `holes:${pid}`,
-   `targets:${pid}`, etc. live in users' localStorage expand/toggle state.
-   Renaming a *label* is fine; renaming an *id* silently resets user state —
-   don't, without a migration. Same for target statuses and the `-TG-` id
-   prefix: they're written into stored targets.
+   `targets:${pid}`, every WMS layer id in `layer-data.js`, etc. — is the
+   real localStorage key under `mx-layers-v1` (`layer-ui-store.js`) for that
+   row's expand/toggle/opacity state. Renaming a *label* is fine; renaming
+   an *id* silently resets user state — don't, without thinking through the
+   consequences the way `mx-store-v7`'s migration chain does for project
+   data (this key intentionally has no migration chain of its own — see
+   `layer-ui-store.js`'s header comment for why that's the right call here).
+   Same for target statuses and the `-TG-` id prefix: they're written into
+   stored targets.
 6. **No invented geology.** No made-up resources, reserves, ounces, grades,
    partners or staff anywhere — site copy or workspace demo data (see the
    header of `lib/content.ts`). This extends to `/api/extract`: when
