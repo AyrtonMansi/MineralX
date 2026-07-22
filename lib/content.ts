@@ -165,7 +165,7 @@ export const footer = {
       title: "Company",
       links: [
         { label: "Overview", href: "#overview" },
-        { label: "What We Do", href: "#focus" },
+        { label: "About", href: "#focus" },
       ],
     },
     {
