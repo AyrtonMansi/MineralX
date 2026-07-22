@@ -1,24 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useScroll, useSpring } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import { company, nav } from "@/lib/content";
 import { CloseIcon, MenuIcon } from "./icons";
+
+// Distance (px) over which the header fades from fully visible to gone.
+const FADE_DISTANCE = 160;
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [faded, setFaded] = useState(false);
 
   // Slim, subtle scroll-progress indicator.
-  const { scrollYProgress } = useScroll();
+  const { scrollY, scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, {
     stiffness: 120,
     damping: 30,
     mass: 0.3,
   });
 
+  // The header itself fades out as the page scrolls down, rather than
+  // staying pinned — reappears once the user scrolls back near the top.
+  const headerOpacity = useSpring(
+    useTransform(scrollY, [0, FADE_DISTANCE], [1, 0]),
+    { stiffness: 120, damping: 30, mass: 0.3 },
+  );
+
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 24);
+      setFaded(window.scrollY > FADE_DISTANCE - 8);
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -33,12 +53,13 @@ export function Navbar() {
 
   return (
     <>
-      <header
+      <motion.header
+        style={{ opacity: headerOpacity }}
         className={`fixed inset-x-0 top-0 z-50 transition-colors duration-500 ${
           scrolled
             ? "border-b border-line bg-black/80 backdrop-blur-md"
             : "border-b border-transparent bg-gradient-to-b from-black/70 to-transparent"
-        }`}
+        } ${faded && !open ? "pointer-events-none" : ""}`}
       >
         <nav className="container-site flex h-16 items-center justify-between md:h-20">
           <a
@@ -86,7 +107,7 @@ export function Navbar() {
           style={{ scaleX: progress }}
           aria-hidden="true"
         />
-      </header>
+      </motion.header>
 
       {/* Mobile menu — rendered outside the header so the blurred header's
           backdrop-filter doesn't trap this fixed overlay inside its box. */}

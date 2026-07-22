@@ -35,7 +35,6 @@ export const company = {
 export const nav = [
   { label: "Overview", href: "#overview" },
   { label: "What We Do", href: "#focus" },
-  { label: "Approach", href: "#approach" },
   { label: "Investors", href: "#investors" },
   { label: "Contact", href: "#contact" },
 ];
@@ -121,41 +120,6 @@ export const commodities = {
   ],
 };
 
-export const sectionBreak = {
-  /**
-   * Full-bleed image for the cinematic band. Reuses the hero asset with a
-   * different crop + near-monochrome treatment so it reads as a second frame.
-   * Replace with a dedicated drone shot when available.
-   */
-  image: "/hero.webp" as string | null,
-  caption: "MineralX Resources",
-  statement: "Building enduring value from real assets, responsibly.",
-};
-
-export const approach = {
-  eyebrow: "Our Approach",
-  heading: "How we build value.",
-  intro: "A disciplined, value-led approach applied across everything we do.",
-  items: [
-    {
-      title: "Capital discipline",
-      body: "Measured allocation of capital toward the opportunities with the strongest potential to create value.",
-    },
-    {
-      title: "Asset quality",
-      body: "A focus on quality ground and meaningful opportunities over breadth for its own sake.",
-    },
-    {
-      title: "Operational focus",
-      body: "Hands-on advancement of projects, from discovery through development and into production.",
-    },
-    {
-      title: "Responsible operations",
-      body: "High standards of safety, environmental care and engagement with the communities where we operate.",
-    },
-  ],
-};
-
 export const investors = {
   eyebrow: "Investors & Partnerships",
   heading: "Partnering to build value.",
@@ -202,7 +166,6 @@ export const footer = {
       links: [
         { label: "Overview", href: "#overview" },
         { label: "What We Do", href: "#focus" },
-        { label: "Approach", href: "#approach" },
       ],
     },
     {
