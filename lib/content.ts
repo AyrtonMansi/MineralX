@@ -34,7 +34,7 @@ export const company = {
 
 export const nav = [
   { label: "Overview", href: "#overview" },
-  { label: "What We Do", href: "#focus" },
+  { label: "About", href: "#focus" },
   { label: "Investors", href: "#investors" },
   { label: "Contact", href: "#contact" },
 ];

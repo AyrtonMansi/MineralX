@@ -81,13 +81,6 @@ export function Navbar() {
                 <span className="absolute -bottom-1.5 left-0 h-px w-full origin-left scale-x-0 bg-white/70 transition-transform duration-300 ease-out group-hover:scale-x-100" />
               </a>
             ))}
-            <span className="h-4 w-px bg-line-strong" aria-hidden="true" />
-            <a
-              href="#contact"
-              className="text-[12px] font-medium uppercase tracking-wide text-white transition-opacity hover:opacity-70"
-            >
-              Enquire
-            </a>
           </div>
 
           <button
