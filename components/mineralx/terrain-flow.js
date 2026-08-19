@@ -16,7 +16,7 @@
 // This is a deterministic terrain heuristic, not a resource estimate —
 // targets are for field-checking with a detector, nothing more.
 
-import { GRADE_COLORS, PROJECT_COLORS } from './project-store';
+import { GRADE_COLORS, PROJECT_COLORS } from './project-store.js';
 
 const TILE_URL = (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
 const TILE = 256;
