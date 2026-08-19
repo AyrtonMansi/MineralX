@@ -70,7 +70,8 @@ export function reprojectEastingNorthing(easting, northing, crs) {
   return { lat, lng };
 }
 
-export const STORE_KEY = 'mx-store-v7';
+export const STORE_KEY = 'mx-store-v8';
+const V7_KEY = 'mx-store-v7';
 const V6_KEY = 'mx-store-v6';
 const V5_KEY = 'mx-store-v5';
 const V4_KEY = 'mx-store-v4';
@@ -212,7 +213,7 @@ export function assayDisplay(record, el) {
 // Sited in QLD so the GeoResGlobe public layers have data underneath.
 export function createDemoStore() {
   return {
-    version: 7,
+    version: 8,
     activeProjectId: 'proj-demo',
     projects: [{
       id: 'proj-demo',
@@ -248,9 +249,9 @@ export function createDemoStore() {
         { id: 'CT-RC-0447', lat: -20.0741, lng: 146.2442, assays: {}, lith: 'Quartz-sericite schist', notes: 'Dispatched to ALS 28 Jun', date: '2026-06-28', sampleType: 'rock_chip', qaqcType: 'none', coordSource: 'unknown' },
       ],
       collars: [
-        { id: 'CT-DD-001', lat: -20.0648, lng: 146.2545, azimuth: 90, dip: -60, depth: 250, date: '2026-05-02' },
-        { id: 'CT-DD-002', lat: -20.0699, lng: 146.2588, azimuth: 90, dip: -55, depth: 300, date: '2026-05-18' },
-        { id: 'CT-DD-003', lat: -20.0752, lng: 146.2610, azimuth: 270, dip: -60, depth: 220, date: '2026-06-03' },
+        { id: 'CT-DD-001', lat: -20.0648, lng: 146.2545, azimuth: 90, dip: -60, depth: 250, date: '2026-05-02', notes: '' },
+        { id: 'CT-DD-002', lat: -20.0699, lng: 146.2588, azimuth: 90, dip: -55, depth: 300, date: '2026-05-18', notes: '' },
+        { id: 'CT-DD-003', lat: -20.0752, lng: 146.2610, azimuth: 270, dip: -60, depth: 220, date: '2026-06-03', notes: 'Rig moved off in wet weather, resume 2026-06-10' },
       ],
       intervals: [
         { holeId: 'CT-DD-001', from: 112, to: 118, assays: { Au: 2.4, Ag: 9 } },
@@ -362,21 +363,48 @@ export function migrateV6(v6) {
   };
 }
 
+// v7 -> v8 adds collar notes: a driller's-log-style free-text field on
+// each collar (rig moved off, hole abandoned, resume date), matching the
+// notes field samples and geology intervals already had. Existing collars
+// get an empty string, the same honest "nothing recorded" default every
+// other optional field in this migration chain uses — never a guessed or
+// invented note.
+export function migrateV7(v7) {
+  return {
+    ...v7,
+    version: 8,
+    projects: v7.projects.map(p => ({
+      ...p,
+      collars: (p.collars || []).map(c => ({ notes: '', ...c })),
+    })),
+  };
+}
+
 export function loadStore() {
   if (typeof window === 'undefined') return createDemoStore();
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.version === 7 && Array.isArray(parsed.projects)) return parsed;
+      if (parsed?.version === 8 && Array.isArray(parsed.projects)) return parsed;
     }
     // Older schemas migrate forward through the chain, then persist under
     // the current key so the migration only runs once.
+    const v7 = window.localStorage.getItem(V7_KEY);
+    if (v7) {
+      const parsed = JSON.parse(v7);
+      if (parsed?.version === 7 && Array.isArray(parsed.projects)) {
+        const migrated = migrateV7(parsed);
+        window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
+        window.localStorage.removeItem(V7_KEY);
+        return migrated;
+      }
+    }
     const v6 = window.localStorage.getItem(V6_KEY);
     if (v6) {
       const parsed = JSON.parse(v6);
       if (parsed?.version === 6 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV6(parsed);
+        const migrated = migrateV7(migrateV6(parsed));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V6_KEY);
         return migrated;
@@ -386,7 +414,7 @@ export function loadStore() {
     if (v5) {
       const parsed = JSON.parse(v5);
       if (parsed?.version === 5 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV6(migrateV5(parsed));
+        const migrated = migrateV7(migrateV6(migrateV5(parsed)));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V5_KEY);
         return migrated;
@@ -396,7 +424,7 @@ export function loadStore() {
     if (v4) {
       const parsed = JSON.parse(v4);
       if (parsed?.version === 4 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV6(migrateV5(migrateV4(parsed)));
+        const migrated = migrateV7(migrateV6(migrateV5(migrateV4(parsed))));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V4_KEY);
         return migrated;
@@ -406,7 +434,7 @@ export function loadStore() {
     if (v3) {
       const parsed = JSON.parse(v3);
       if (parsed?.version === 3 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV6(migrateV5(migrateV4(migrateV3(parsed))));
+        const migrated = migrateV7(migrateV6(migrateV5(migrateV4(migrateV3(parsed)))));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V3_KEY);
         return migrated;
@@ -416,7 +444,7 @@ export function loadStore() {
     if (v2) {
       const parsed = JSON.parse(v2);
       if (parsed?.version === 2 && Array.isArray(parsed.projects)) {
-        const migrated = migrateV6(migrateV5(migrateV4(migrateV3(migrateV2(parsed)))));
+        const migrated = migrateV7(migrateV6(migrateV5(migrateV4(migrateV3(migrateV2(parsed))))));
         window.localStorage.setItem(STORE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(V2_KEY);
         return migrated;
@@ -745,6 +773,7 @@ export function parseCollarCsv(text, existing, prefix, crs) {
   const iAzi = col('azimuth', 'azi');
   const iDip = col('dip');
   const iDepth = col('depth', 'eoh', 'planned_depth');
+  const iNotes = col('notes', 'comment', 'comments');
   if (iLat < 0 || iLng < 0) return { collars: [], error: 'CSV needs lat/northing and lng/easting columns.' };
 
   const out = [];
@@ -773,7 +802,10 @@ export function parseCollarCsv(text, existing, prefix, crs) {
 
     const num = (i) => { const v = i >= 0 ? parseFloat(cells[i]) : NaN; return Number.isNaN(v) ? null : v; };
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
-    const collar = { id, lat, lng, azimuth: num(iAzi), dip: num(iDip), depth: num(iDepth), date: today() };
+    const collar = {
+      id, lat, lng, azimuth: num(iAzi), dip: num(iDip), depth: num(iDepth), date: today(),
+      notes: iNotes >= 0 ? cells[iNotes] || '' : '',
+    };
     out.push(collar);
     pool = [...pool, collar];
   }
@@ -1010,8 +1042,11 @@ export function geologyToCsv(geology) {
 
 export function collarsToCsv(collars) {
   return [
-    'hole_id,lat,lng,azimuth,dip,depth,date',
-    ...collars.map(c => [c.id, c.lat, c.lng, c.azimuth ?? '', c.dip ?? '', c.depth ?? '', c.date || ''].join(',')),
+    'hole_id,lat,lng,azimuth,dip,depth,notes,date',
+    ...collars.map(c => [
+      c.id, c.lat, c.lng, c.azimuth ?? '', c.dip ?? '', c.depth ?? '',
+      (c.notes || '').replace(/,/g, ';'), c.date || '',
+    ].join(',')),
   ].join('\n');
 }
 

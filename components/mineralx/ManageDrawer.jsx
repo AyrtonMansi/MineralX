@@ -23,8 +23,8 @@ export default function ManageDrawer({ target, store, api, onClose }) {
 
   const titles = {
     project: project?.name,
-    chips: 'Rock chips',
-    holes: 'Drill holes',
+    chips: target.editId || 'Rock chips',
+    holes: target.editId || 'Drill holes',
     boundary: project?.boundary?.name || 'Boundary',
     newProject: 'New project',
   };
@@ -34,7 +34,10 @@ export default function ManageDrawer({ target, store, api, onClose }) {
       <div className="mx-manage-drawer mx-anim-rise">
         <div className="mx-manage-header">
           <div>
-            <div className="mx-eyebrow">{TYPE_LABELS[target.type]}{project && target.type !== 'project' ? ` · ${project.name.toUpperCase()}` : ''}</div>
+            <div className="mx-eyebrow">
+              {target.editId ? 'EDIT RECORD' : TYPE_LABELS[target.type]}
+              {project && target.type !== 'project' ? ` · ${project.name.toUpperCase()}` : ''}
+            </div>
             <h2 className="mx-manage-title">{titles[target.type]}</h2>
           </div>
           <button type="button" className="mx-close-btn" onClick={onClose}>&times;</button>
@@ -42,8 +45,8 @@ export default function ManageDrawer({ target, store, api, onClose }) {
         <div className="mx-manage-body">
           {target.type === 'newProject' && <NewProjectManager api={api} onClose={onClose} />}
           {target.type === 'project' && <ProjectManager project={project} api={api} onClose={onClose} />}
-          {target.type === 'chips' && <RockChipManager project={project} api={api} onClose={onClose} />}
-          {target.type === 'holes' && <DrillHoleManager project={project} api={api} onClose={onClose} />}
+          {target.type === 'chips' && <RockChipManager project={project} api={api} onClose={onClose} editId={target.editId} />}
+          {target.type === 'holes' && <DrillHoleManager project={project} api={api} onClose={onClose} editId={target.editId} />}
           {target.type === 'boundary' && <BoundaryManager project={project} api={api} />}
         </div>
       </div>
@@ -140,14 +143,27 @@ function ProjectManager({ project, api, onClose }) {
 }
 
 // ── Rock chip manager ──────────────────────────────────────────────────
-function RockChipManager({ project, api, onClose }) {
+function RockChipManager({ project, api, onClose, editId }) {
+  // Correcting an existing sample (a typo'd lithology, a re-picked
+  // coordinate, an assay entered wrong) reuses this same form rather than
+  // being a separate screen — the only differences are: pre-filled from
+  // the record, the id locked (see api.updateSample's comment for why),
+  // no Import CSV tab (importing doesn't make sense while editing one
+  // row), and the submit path writes a patch instead of appending a new
+  // sample.
+  const editSample = editId ? project.samples.find(s => s.id === editId) : null;
   const [tab, setTab] = useState('add');
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => (editSample ? {
+    id: editSample.id, lith: editSample.lith || '', lng: String(editSample.lng), lat: String(editSample.lat),
+    notes: editSample.notes || '', sampleType: editSample.sampleType || 'rock_chip',
+    qaqcType: editSample.qaqcType || 'none', duplicateOf: editSample.duplicateOf || '',
+    coordSource: editSample.coordSource || 'unknown',
+  } : {
     id: '', lith: '', lng: '', lat: '', notes: '',
     sampleType: 'rock_chip', qaqcType: 'none', duplicateOf: '', coordSource: 'unknown',
-  });
-  const [assayRows, setAssayRows] = useState([{ element: 'Au', value: '' }]);
-  const [photo, setPhoto] = useState(null);
+  }));
+  const [assayRows, setAssayRows] = useState(() => assayCellsToRows(editSample?.assays, editSample?.detectionLimits));
+  const [photo, setPhoto] = useState(editSample?.photo || null);
   const [error, setError] = useState(null);
   const [importMsg, setImportMsg] = useState(null);
   const [pendingProjection, setPendingProjection] = useState(null);
@@ -158,7 +174,7 @@ function RockChipManager({ project, api, onClose }) {
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
-  const addSample = () => {
+  const saveSample = () => {
     const lat = parseFloat(form.lat);
     const lng = parseFloat(form.lng);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
@@ -180,20 +196,23 @@ function RockChipManager({ project, api, onClose }) {
       if (v != null) assays[element] = v;
       else if (dl != null) detectionLimits[element] = dl;
     });
-    api.addSamples(project.id, [{
-      id: form.id.trim() || autoId,
+    const patch = {
       lat, lng,
       assays,
-      ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
+      detectionLimits: Object.keys(detectionLimits).length ? detectionLimits : undefined,
       lith: form.lith.trim(),
       notes: form.notes.trim(),
       photo: photo || undefined,
-      date: today(),
       sampleType: form.sampleType,
       qaqcType: form.qaqcType,
       coordSource: form.coordSource,
-      ...(isDuplicateType ? { duplicateOf: form.duplicateOf.trim() } : {}),
-    }]);
+      duplicateOf: isDuplicateType ? form.duplicateOf.trim() : undefined,
+    };
+    if (editSample) {
+      api.updateSample(project.id, editSample.id, patch);
+    } else {
+      api.addSamples(project.id, [{ id: form.id.trim() || autoId, date: today(), ...patch }]);
+    }
     onClose();
   };
 
@@ -230,14 +249,16 @@ function RockChipManager({ project, api, onClose }) {
 
   return (
     <div className="mx-manage-sections">
-      <div className="mx-manage-tabs">
-        <button type="button" className={`mx-manage-tab ${tab === 'add' ? 'active' : ''}`} onClick={() => setTab('add')}>Add sample</button>
-        <button type="button" className={`mx-manage-tab ${tab === 'import' ? 'active' : ''}`} onClick={() => setTab('import')}>Import CSV</button>
-      </div>
+      {!editSample && (
+        <div className="mx-manage-tabs">
+          <button type="button" className={`mx-manage-tab ${tab === 'add' ? 'active' : ''}`} onClick={() => setTab('add')}>Add sample</button>
+          <button type="button" className={`mx-manage-tab ${tab === 'import' ? 'active' : ''}`} onClick={() => setTab('import')}>Import CSV</button>
+        </div>
+      )}
 
       {tab === 'add' && (
         <div className="mx-manage-form">
-          <ManageField label="Sample ID" value={form.id} onChange={setField('id')} placeholder={`Auto: ${autoId}`} />
+          <ManageField label="Sample ID" value={form.id} onChange={setField('id')} readOnly={!!editSample} placeholder={`Auto: ${autoId}`} />
           <div className="mx-manage-row-2">
             <ManageSelect
               label="Sample type" value={form.sampleType} onChange={setField('sampleType')}
@@ -277,11 +298,11 @@ function RockChipManager({ project, api, onClose }) {
             <input ref={photoInput} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => { attachPhoto(e.target.files?.[0]); e.target.value = ''; }} />
           </button>
           {error && <div className="mx-import-msg mx-import-err">{error}</div>}
-          <button type="button" className="mx-btn-primary mx-btn-full" onClick={addSample}>Add sample</button>
+          <button type="button" className="mx-btn-primary mx-btn-full" onClick={saveSample}>{editSample ? 'Save changes' : 'Add sample'}</button>
         </div>
       )}
 
-      {tab === 'import' && (
+      {!editSample && tab === 'import' && (
         <div className="mx-manage-form">
           {pendingProjection ? (
             <ZonePicker
@@ -318,9 +339,19 @@ function RockChipManager({ project, api, onClose }) {
 }
 
 // ── Drill hole manager ─────────────────────────────────────────────────
-function DrillHoleManager({ project, api, onClose }) {
+function DrillHoleManager({ project, api, onClose, editId }) {
+  // Same edit-in-place approach as RockChipManager — see api.updateCollar's
+  // comment for why the id stays locked (intervals/surveys/geology are
+  // keyed by holeId, not nested inside the collar).
+  const editCollar = editId ? project.collars.find(c => c.id === editId) : null;
   const [tab, setTab] = useState('collar');
-  const [form, setForm] = useState({ id: '', lng: '', lat: '', azimuth: '', dip: '', depth: '' });
+  const [form, setForm] = useState(() => (editCollar ? {
+    id: editCollar.id, lng: String(editCollar.lng), lat: String(editCollar.lat),
+    azimuth: editCollar.azimuth != null ? String(editCollar.azimuth) : '',
+    dip: editCollar.dip != null ? String(editCollar.dip) : '',
+    depth: editCollar.depth != null ? String(editCollar.depth) : '',
+    notes: editCollar.notes || '',
+  } : { id: '', lng: '', lat: '', azimuth: '', dip: '', depth: '', notes: '' }));
   const [error, setError] = useState(null);
   const [importMsg, setImportMsg] = useState(null);
   const [pendingProjection, setPendingProjection] = useState(null);
@@ -333,7 +364,7 @@ function DrillHoleManager({ project, api, onClose }) {
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
-  const addCollar = () => {
+  const saveCollar = () => {
     const lat = parseFloat(form.lat);
     const lng = parseFloat(form.lng);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
@@ -345,12 +376,12 @@ function DrillHoleManager({ project, api, onClose }) {
       return;
     }
     const num = (v) => { const n = parseFloat(v); return Number.isNaN(n) ? null : n; };
-    api.addCollars(project.id, [{
-      id: form.id.trim() || autoId,
-      lat, lng,
-      azimuth: num(form.azimuth), dip: num(form.dip), depth: num(form.depth),
-      date: today(),
-    }]);
+    const patch = { lat, lng, azimuth: num(form.azimuth), dip: num(form.dip), depth: num(form.depth), notes: form.notes.trim() };
+    if (editCollar) {
+      api.updateCollar(project.id, editCollar.id, patch);
+    } else {
+      api.addCollars(project.id, [{ id: form.id.trim() || autoId, date: today(), ...patch }]);
+    }
     onClose();
   };
 
@@ -429,8 +460,10 @@ function DrillHoleManager({ project, api, onClose }) {
   return (
     <div className="mx-manage-sections">
       <div className="mx-manage-tabs">
-        <button type="button" className={`mx-manage-tab ${tab === 'collar' ? 'active' : ''}`} onClick={() => setTab('collar')}>Add collar</button>
-        <button type="button" className={`mx-manage-tab ${tab === 'import' ? 'active' : ''}`} onClick={() => setTab('import')}>Import collars</button>
+        <button type="button" className={`mx-manage-tab ${tab === 'collar' ? 'active' : ''}`} onClick={() => setTab('collar')}>{editCollar ? 'Edit collar' : 'Add collar'}</button>
+        {!editCollar && (
+          <button type="button" className={`mx-manage-tab ${tab === 'import' ? 'active' : ''}`} onClick={() => setTab('import')}>Import collars</button>
+        )}
         <button type="button" className={`mx-manage-tab ${tab === 'intervals' ? 'active' : ''}`} onClick={() => setTab('intervals')}>Intervals</button>
         <button type="button" className={`mx-manage-tab ${tab === 'surveys' ? 'active' : ''}`} onClick={() => setTab('surveys')}>Surveys</button>
         <button type="button" className={`mx-manage-tab ${tab === 'geology' ? 'active' : ''}`} onClick={() => setTab('geology')}>Geology</button>
@@ -438,7 +471,7 @@ function DrillHoleManager({ project, api, onClose }) {
 
       {tab === 'collar' && (
         <div className="mx-manage-form">
-          <ManageField label="Hole ID" value={form.id} onChange={setField('id')} placeholder={`Auto: ${autoId}`} />
+          <ManageField label="Hole ID" value={form.id} onChange={setField('id')} readOnly={!!editCollar} placeholder={`Auto: ${autoId}`} />
           <div className="mx-manage-row-2">
             <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="146.2545" />
             <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.0648" />
@@ -448,12 +481,13 @@ function DrillHoleManager({ project, api, onClose }) {
             <ManageField label="Dip (°)" value={form.dip} onChange={setField('dip')} placeholder="-60" />
           </div>
           <ManageField label="Planned depth (m)" value={form.depth} onChange={setField('depth')} placeholder="300" />
+          <ManageField label="Notes" value={form.notes} onChange={setField('notes')} placeholder="Rig moved off due to rain, resume next visit" multiline />
           {error && <div className="mx-import-msg mx-import-err">{error}</div>}
-          <button type="button" className="mx-btn-primary mx-btn-full" onClick={addCollar}>Add collar</button>
+          <button type="button" className="mx-btn-primary mx-btn-full" onClick={saveCollar}>{editCollar ? 'Save changes' : 'Add collar'}</button>
         </div>
       )}
 
-      {tab === 'import' && (
+      {!editCollar && tab === 'import' && (
         <div className="mx-manage-form">
           {pendingProjection ? (
             <ZonePicker
@@ -620,6 +654,20 @@ function BoundaryManager({ project, api }) {
       </div>
     </div>
   );
+}
+
+// Reconstructs AssayInputs' editable row shape from a stored sample/
+// interval's `assays`/`detectionLimits` maps — the inverse of the
+// parseAssayCell() call that built them, so re-opening an edit form shows
+// exactly what's on record (a below-detection value round-trips back to
+// its "<0.01" text form, not a blank field).
+function assayCellsToRows(assays, detectionLimits) {
+  const elements = [...new Set([...Object.keys(assays || {}), ...Object.keys(detectionLimits || {})])];
+  if (!elements.length) return [{ element: 'Au', value: '' }];
+  return elements.map(element => ({
+    element,
+    value: assays?.[element] != null ? String(assays[element]) : `<${detectionLimits[element]}`,
+  }));
 }
 
 // ── Assay entry: element + value rows, add/remove ──────────────────────

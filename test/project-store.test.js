@@ -24,6 +24,7 @@ import {
   migrateV4,
   migrateV5,
   migrateV6,
+  migrateV7,
   createDemoStore,
   targetKey,
   targetPrefix,
@@ -48,6 +49,8 @@ import {
   surveysToCsv,
   parseGeologyCsv,
   geologyToCsv,
+  parseCollarCsv,
+  collarsToCsv,
 } from '../components/mineralx/project-store.js';
 
 test('isProjectedCoord: decimal degrees are not flagged', () => {
@@ -435,6 +438,45 @@ test('samplesToCsv: round-trips sample_type/qaqc_type/duplicate_of/coord_source'
   assert.equal(reparsed.samples[0].coordSource, 'dgps');
 });
 
+// ── Collar CSV ────────────────────────────────────────────────────────
+// No prior coverage existed for parseCollarCsv/collarsToCsv at all —
+// added alongside the new `notes` field (matching the field-note pattern
+// already established for samples/geology) rather than leaving it as the
+// one CSV path with zero round-trip test, per CLAUDE.md's testing rule
+// that anything touching CSV parsing needs a unit test.
+
+test('collarsToCsv / parseCollarCsv: round-trips a collar including notes, with a comma stripped like sample notes', () => {
+  const collars = [
+    { id: 'CT-DD-004', lat: -20.07, lng: 146.26, azimuth: 90, dip: -60, depth: 300, date: '2026-07-01', notes: 'Rig moved off, resume next visit' },
+  ];
+  const csv = collarsToCsv(collars);
+  const [header, row] = csv.split('\n');
+  assert.match(header, /hole_id,lat,lng,azimuth,dip,depth,notes,date/);
+  // Same convention as samplesToCsv: a literal comma in free text is
+  // stripped (this app doesn't quote CSV fields), not left to corrupt
+  // the column count.
+  assert.equal(row.includes('Rig moved off, resume'), false);
+  assert.ok(row.includes('Rig moved off; resume next visit'));
+
+  const reparsed = parseCollarCsv(csv, [], 'CT-DD-');
+  assert.equal(reparsed.collars[0].id, 'CT-DD-004');
+  assert.equal(reparsed.collars[0].notes, 'Rig moved off; resume next visit');
+  assert.equal(reparsed.collars[0].depth, 300);
+});
+
+test('parseCollarCsv: notes column is optional — collars without one get an empty string, not undefined', () => {
+  const csv = 'hole_id,lat,lng\nCT-DD-005,-20.07,146.26';
+  const { collars } = parseCollarCsv(csv, [], 'CT-DD-');
+  assert.equal(collars[0].notes, '');
+});
+
+test('parseCollarCsv: refuses to silently misplace an MGA coordinate as decimal degrees', () => {
+  const csv = 'hole_id,lat,lng\nCT-DD-006,7778000,445000';
+  const result = parseCollarCsv(csv, [], 'CT-DD-');
+  assert.equal(result.needsProjection, true);
+  assert.equal(result.collars.length, 0);
+});
+
 // ── Detection limits ────────────────────────────────────────────────────
 // Real lab certificates report below-detection results as "<0.01" or a
 // negative-number convention — before this, both silently vanished
@@ -622,6 +664,25 @@ test('migrateV6: every project gains an empty geology list, existing ones preser
 test('createDemoStore: every project has a geology array (empty — no invented logging data)', () => {
   const store = createDemoStore();
   store.projects.forEach(p => assert.ok(Array.isArray(p.geology)));
+});
+
+test('migrateV7: every collar gains an empty notes string, existing ones preserved', () => {
+  const v7 = {
+    version: 7,
+    projects: [
+      { id: 'p1', samples: [], collars: [{ id: 'H1', lat: -20, lng: 146, azimuth: 90, dip: -60, depth: 100 }], intervals: [], surveys: [], geology: [] },
+      { id: 'p2', samples: [], collars: [{ id: 'H2', lat: -20, lng: 146, notes: 'Rig moved off' }], intervals: [], surveys: [], geology: [] },
+    ],
+  };
+  const v8 = migrateV7(v7);
+  assert.equal(v8.version, 8);
+  assert.equal(v8.projects[0].collars[0].notes, ''); // no note existed, not invented
+  assert.equal(v8.projects[1].collars[0].notes, 'Rig moved off'); // pre-existing data untouched
+});
+
+test('createDemoStore: every collar has a notes string (possibly empty — no invented field notes)', () => {
+  const store = createDemoStore();
+  store.projects.forEach(p => p.collars.forEach(c => assert.equal(typeof c.notes, 'string')));
 });
 
 test('parseGeologyCsv: reads hole_id/from/to/lithology/alteration/structure/notes', () => {

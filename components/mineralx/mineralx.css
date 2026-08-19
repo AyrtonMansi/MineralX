@@ -816,6 +816,7 @@
 }
 .mx-data-sub { font-size: 11px; color: #8A857A; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mx-data-value { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6B655B; flex-shrink: 0; }
+.mx-data-edit,
 .mx-data-delete {
   width: 24px; height: 24px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
@@ -823,7 +824,9 @@
   color: #B7B1A3; flex-shrink: 0; padding: 0;
   opacity: 0; transition: all 0.12s;
 }
+.mx-data-row:hover .mx-data-edit,
 .mx-data-row:hover .mx-data-delete { opacity: 1; }
+.mx-data-edit:hover { color: #3E6C8C; background: rgba(62,108,140,0.08); }
 .mx-data-delete:hover { color: #8B3A3A; background: rgba(139,58,58,0.08); }
 .mx-data-footer { padding: 12px 18px; border-top: 1px solid rgba(221,214,199,0.7); flex-shrink: 0; }
 .mx-empty-hint { font-size: 12px; color: #8A857A; padding: 18px 10px; text-align: center; line-height: 1.5; }
@@ -1009,7 +1012,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 
   /* Touch: hover states don't exist — keep row actions visible,
      and give small toggles a finger-sized hit area. */
-  .mx-data-delete { opacity: 1; }
+  .mx-data-edit, .mx-data-delete { opacity: 1; }
   .mx-tree-eye { width: 18px; height: 18px; }
   .mx-tree-manage { width: 30px; height: 30px; }
   .mx-tree-row { padding-top: 8px; padding-bottom: 8px; }

@@ -90,7 +90,7 @@ test('deleting a collar removes its logged intervals too', async ({ page }) => {
   await row.locator('.mx-data-delete').click();
   await page.waitForTimeout(400);
 
-  const store = await page.evaluate(() => JSON.parse(localStorage.getItem('mx-store-v7')));
+  const store = await page.evaluate(() => JSON.parse(localStorage.getItem('mx-store-v8')));
   const geology = store.projects.flatMap((p) => p.geology || []);
   expect(geology.some((g) => g.holeId === 'CT-DD-002')).toBe(false);
 });

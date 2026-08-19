@@ -14,7 +14,7 @@ const QAQC_BADGE = { standard: 'STD', blank: 'BLANK', duplicate: 'DUP', triplica
 
 // The home of all project data: a clean list per dataset, not a GIS
 // attribute table. Row click → zoom to the feature and open its popup.
-export default function DataDrawer({ store, api, tab, setTab, activeElement, initialFilter, onAdd, onClose }) {
+export default function DataDrawer({ store, api, tab, setTab, activeElement, initialFilter, onAdd, onEdit, onClose }) {
   const [filter, setFilter] = useState(initialFilter || '');
   const [expanded, setExpanded] = useState(null); // hole id whose assay table is open
   const [expandedTarget, setExpandedTarget] = useState(null); // target id whose linked-samples list is open
@@ -188,6 +188,10 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                     </div>
                     <span className="mx-data-value">{sampleValue(s)}</span>
                     <button
+                      type="button" className="mx-data-edit" title="Edit sample"
+                      onClick={(e) => { e.stopPropagation(); onEdit('chips', s.project.id, s.id); }}
+                    >{MxIcons.edit}</button>
+                    <button
                       type="button" className="mx-data-delete" title="Delete sample"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -224,9 +228,14 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                           {c.intervals.length ? ` · ${c.intervals.length} assay${c.intervals.length === 1 ? '' : 's'}` : ' · no assays'}
                           {c.surveys.length ? ` · ${c.surveys.length} survey shot${c.surveys.length === 1 ? '' : 's'}` : ''}
                           {c.geology.length ? ` · ${c.geology.length} logged` : ''}
+                          {c.notes ? ` · ${c.notes}` : ''}
                         </div>
                       </div>
                       <span className="mx-data-value">{best != null ? `best ${formatAssay(activeElement, best)}` : ''}</span>
+                      <button
+                        type="button" className="mx-data-edit" title="Edit collar"
+                        onClick={(e) => { e.stopPropagation(); onEdit('holes', c.project.id, c.id); }}
+                      >{MxIcons.edit}</button>
                       <button
                         type="button" className="mx-data-delete" title="Delete hole"
                         onClick={(e) => {

@@ -1,11 +1,22 @@
-// The single source of truth for "what layers exist, how are they grouped,
-// and what can be done to them" — replacing four incompatible ad hoc
-// systems that grew up independently (project markers, the GeoResGlobe WMS
-// catalog, Target Analysis's computed sub-layers, and the never-rendered
-// per-project targets row). Pure data + pure helper functions only: no
-// React, no MapLibre calls, mirroring the existing split between
+// The single source of truth for "what layers exist and how are they
+// grouped" — replacing four incompatible ad hoc systems that grew up
+// independently (project markers, the GeoResGlobe WMS catalog, Target
+// Analysis's computed sub-layers, and the never-rendered per-project
+// targets row). Pure data + pure helper functions only: no React, no
+// MapLibre calls, mirroring the existing split between
 // project-store.js/terrain-flow.js (pure logic) and the components that
 // apply their output to the map.
+//
+// Every descriptor also carries `engine`/`toggle`/`supportsOpacity`/
+// `errorCapable`/`vectorQuery` fields describing what COULD be done with a
+// layer — but today only `id`/`label`/`parent`/`defaultOn`/`defaultOpacity`
+// (plus `theme`/`wms` for WMS rows, and `manage` for project rows) are
+// actually read by any consumer; the rest is declared, honest metadata for
+// a future MapLibre-apply dispatcher (deliberately not built yet — see
+// MineralXWorkspace.jsx's ErrorBadge comment) rather than something
+// currently enforced. Don't assume setting `supportsOpacity: false` on a
+// new descriptor gates a slider anywhere — it doesn't yet; the panel
+// decides that itself, independently, in MineralXWorkspace.jsx.
 //
 // A layer descriptor's `id` is the stable, load-bearing key: it is what a
 // future localStorage persistence layer keys expand/toggle/opacity state

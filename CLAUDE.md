@@ -70,9 +70,9 @@ being asked.
    and explicitly declined for now. Keep `saveStore()`'s boolean return, the
    save-failed banner, and the export-staleness nudge working. Do not add a
    database, auth, or any billable infrastructure unprompted. The store is
-   versioned (`STORE_KEY` = `mx-store-v7`) with a forward migration chain
-   (`migrateV2`→`migrateV3`→`migrateV4`→`migrateV5`→`migrateV6`); a new
-   persisted field needs a version bump and a migration, both unit-tested,
+   versioned (`STORE_KEY` = `mx-store-v8`) with a forward migration chain
+   (`migrateV2`→`migrateV3`→`migrateV4`→`migrateV5`→`migrateV6`→`migrateV7`);
+   a new persisted field needs a version bump and a migration, both unit-tested,
    or existing users' data silently breaks. Downhole surveys
    (`project.surveys`) and geological logging (`project.geology`) are flat
    arrays keyed by `holeId`, mirroring `project.intervals` — never nested
@@ -91,7 +91,7 @@ being asked.
    real localStorage key under `mx-layers-v1` (`layer-ui-store.js`) for that
    row's expand/toggle/opacity state. Renaming a *label* is fine; renaming
    an *id* silently resets user state — don't, without thinking through the
-   consequences the way `mx-store-v7`'s migration chain does for project
+   consequences the way `mx-store-v8`'s migration chain does for project
    data (this key intentionally has no migration chain of its own — see
    `layer-ui-store.js`'s header comment for why that's the right call here).
    Same for target statuses and the `-TG-` id prefix: they're written into

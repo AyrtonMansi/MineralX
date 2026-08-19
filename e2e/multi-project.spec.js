@@ -7,7 +7,7 @@ import { mockBasemap, waitForMapLoaded } from './helpers.js';
 // a WA one are an undifferentiated pile.
 
 const TWO_PROJECT_STORE = {
-  version: 7,
+  version: 8,
   activeProjectId: 'p-qld',
   projects: [
     {
@@ -34,7 +34,7 @@ test.beforeEach(async ({ page }) => {
   await mockBasemap(page);
   await page.goto('/mineralx');
   await waitForMapLoaded(page);
-  await page.evaluate((store) => localStorage.setItem('mx-store-v7', JSON.stringify(store)), TWO_PROJECT_STORE);
+  await page.evaluate((store) => localStorage.setItem('mx-store-v8', JSON.stringify(store)), TWO_PROJECT_STORE);
   await page.reload();
   await waitForMapLoaded(page);
 });

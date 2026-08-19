@@ -43,7 +43,7 @@ async function promoteOne(page) {
   await page.locator('.mx-pop-promote-btn').click();
   await expect(page.locator('.mx-target-marker')).toHaveCount(1);
   return page.evaluate(() => {
-    const store = JSON.parse(localStorage.getItem('mx-store-v7'));
+    const store = JSON.parse(localStorage.getItem('mx-store-v8'));
     const t = store.projects.flatMap((p) => p.targets || [])[0];
     return { lat: t.lat, lng: t.lng };
   });

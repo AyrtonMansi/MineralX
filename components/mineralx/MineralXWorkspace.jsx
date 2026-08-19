@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { PUBLIC_DATA_CATALOG, BASEMAP_TILES, THEME_LABELS, THEME_ORDER } from './layer-data';
 import {
   WMS_LAYERS_BY_THEME, buildLayerIndex, isLayerOn, effectiveOn, layerOpacityOf,
+  projectLayerDescriptors,
 } from './layer-registry';
 import { loadLayerUiState, saveLayerUiState } from './layer-ui-store';
 import {
@@ -250,6 +251,31 @@ export default function MineralXWorkspace() {
         intervals: (p.intervals || []).filter(i => i.holeId !== id),
         surveys: (p.surveys || []).filter(s => s.holeId !== id),
         geology: (p.geology || []).filter(g => g.holeId !== id),
+      }));
+    },
+    // Correct a sample already on record — a typo'd lithology, a re-picked
+    // coordinate, an assay entered wrong — without the delete+re-add that
+    // was previously the only option, which would have severed every
+    // reference to that sample's id (target linkedSampleIds, detection
+    // limits, photo) and thrown away its place in the undo history. `id`
+    // itself is intentionally not patchable here: it's how every other
+    // record (targets, CSV re-imports) refers back to this sample, so
+    // renaming it needs to stay a deliberate, separate decision, not a
+    // side effect of fixing a lithology typo.
+    updateSample: (pid, id, patch) => {
+      pushUndo(store);
+      updateProject(pid, p => ({
+        ...p,
+        samples: p.samples.map(s => (s.id === id ? { ...s, ...patch } : s)),
+      }));
+    },
+    // Same reasoning as updateSample — id stays fixed since intervals/
+    // surveys/geology are keyed by holeId, not nested inside the collar.
+    updateCollar: (pid, id, patch) => {
+      pushUndo(store);
+      updateProject(pid, p => ({
+        ...p,
+        collars: p.collars.map(c => (c.id === id ? { ...c, ...patch } : c)),
       }));
     },
     // Promote a terrain-analysis candidate into a persistent, tracked
@@ -1004,6 +1030,7 @@ export default function MineralXWorkspace() {
           activeElement={activeElement}
           initialFilter={dataPreset}
           onAdd={(type) => { setDataOpen(false); setManageTarget({ type, projectId: activeProject?.id }); }}
+          onEdit={(type, projectId, editId) => { setDataOpen(false); setManageTarget({ type, projectId, editId }); }}
           onClose={() => { setDataOpen(false); setDataPreset(''); }}
         />
       )}
@@ -1564,12 +1591,31 @@ function ProjectTree({ project, layerOn, layerIndex, toggleLayerOn, expanded, to
   // so there was no way to actually hide them. Managed via the Targets
   // worklist tab, not this dialog's manage(+) button — omitted here since
   // it's a different kind of thing from chips/holes/boundary.
-  const rows = [
-    { nodeId: `chips:${p.id}`, name: 'Rock chips', count: p.samples.length, manage: 'chips', swatch: { background: '#C15F3C', borderRadius: '50%', width: 10, height: 10 } },
-    { nodeId: `holes:${p.id}`, name: 'Drill holes', count: p.collars.length, manage: 'holes', swatch: { background: '#F3F1E9', border: '2px solid #211E1A', width: 10, height: 10 } },
-    { nodeId: `bnd:${p.id}`, name: p.boundary ? p.boundary.name : 'Boundary', count: null, manage: 'boundary', swatch: { border: '1.5px dashed #8A857A', borderRadius: 2, width: 11, height: 11 } },
-    { nodeId: `targets:${p.id}`, name: 'Targets', count: (p.targets || []).length, manage: null, swatch: { background: 'transparent', border: '2px solid #B08A3E', transform: 'rotate(45deg)', width: 9, height: 9 } },
-  ];
+  //
+  // Structural fields (nodeId, label, manage) come straight from
+  // `projectLayerDescriptors()` rather than being re-hardcoded here — that
+  // registry function is the declared single source of truth for what
+  // rows a project has (CLAUDE.md hard rule 5). Only count/swatch stay
+  // local: genuinely presentational, and not something the data registry
+  // should know about.
+  const SWATCH_BY_KIND = {
+    chips: { background: '#C15F3C', borderRadius: '50%', width: 10, height: 10 },
+    holes: { background: '#F3F1E9', border: '2px solid #211E1A', width: 10, height: 10 },
+    bnd: { border: '1.5px dashed #8A857A', borderRadius: 2, width: 11, height: 11 },
+    targets: { background: 'transparent', border: '2px solid #B08A3E', transform: 'rotate(45deg)', width: 9, height: 9 },
+  };
+  const COUNT_BY_KIND = {
+    chips: p.samples.length,
+    holes: p.collars.length,
+    bnd: null,
+    targets: (p.targets || []).length,
+  };
+  const rows = projectLayerDescriptors(p)
+    .filter(d => d.parent === projNodeId)
+    .map(d => {
+      const kind = d.id.split(':')[0];
+      return { nodeId: d.id, name: d.label, count: COUNT_BY_KIND[kind], manage: d.manage, swatch: SWATCH_BY_KIND[kind] };
+    });
   const projOn = isLayerOn(layerOn, layerIndex, projNodeId);
   return (
     <>
