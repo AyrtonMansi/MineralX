@@ -15,15 +15,21 @@
 //
 // Structured outputs (`output_config.format`) guarantee the response
 // parses against the schema below — no hand-rolled "is this JSON" checks.
+//
+// The post-processing that actually enforces hard rules 1 and 9
+// (isProjected/inRange/assaysToMaps/normalise) lives in
+// lib/extract-normalize.js, not here — Next's route-export type checker
+// rejects any export from a route.js beyond its recognized fields, and
+// this is exactly the logic that most needs a unit test.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { normalise } from '@/lib/extract-normalize';
 
 // Extraction can take a while on long reports; Vercel's default function
 // timeout is shorter than a hard document needs.
 export const maxDuration = 60;
 
 const MAX_TEXT_CHARS = 150_000;
-const MAX_FEATURES = 500;
 
 const nullableNumber = { anyOf: [{ type: 'number' }, { type: 'null' }] };
 
@@ -146,93 +152,6 @@ Rules:
 - Grades reported as below detection limit (e.g. "<0.01") are real, disclosed results — set value to null and detectionLimit to the numeric limit (0.01). Do not omit the pair.
 - sourceHighlights: quote the exact sentence or table fragment each key extraction came from, so a geologist can verify against the source.
 - confidence: your overall confidence that the extraction is faithful to the document (0-1). Be honest — degraded scans, ambiguous tables, or inferred structure should lower it.`;
-
-const isProjected = (lat, lng) => Math.abs(lat) > 90 || Math.abs(lng) > 180;
-const inRange = (lat, lng) =>
-  typeof lat === 'number' && typeof lng === 'number' &&
-  !Number.isNaN(lat) && !Number.isNaN(lng) &&
-  lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
-
-// Mirrors the client-side readAssays()/parseAssayCell() contract in
-// project-store.js: a below-detection result becomes a detectionLimits
-// entry, never a dropped element.
-function assaysToMaps(pairs) {
-  const assays = {};
-  const detectionLimits = {};
-  (pairs || []).forEach(({ element, value, detectionLimit }) => {
-    if (!element) return;
-    const el = element.trim();
-    if (typeof value === 'number' && !Number.isNaN(value) && value >= 0) {
-      assays[el] = value;
-    } else if (typeof detectionLimit === 'number' && !Number.isNaN(detectionLimit) && detectionLimit >= 0) {
-      detectionLimits[el] = detectionLimit;
-    }
-  });
-  return { assays, detectionLimits };
-}
-
-// Applies the same coordinate-safety contract as the CSV parsers: rows
-// with projected-magnitude coordinates are separated out with an
-// explanation instead of being imported (or worse, guessed at).
-function normalise(raw) {
-  const skipped = [];
-
-  const samples = [];
-  (raw.samples || []).slice(0, MAX_FEATURES).forEach((s, i) => {
-    if (isProjected(s.lat, s.lng)) {
-      skipped.push({ kind: 'sample', id: s.id || `#${i + 1}`, reason: 'projected easting/northing — import via CSV so the MGA zone can be confirmed' });
-      return;
-    }
-    if (!inRange(s.lat, s.lng)) {
-      skipped.push({ kind: 'sample', id: s.id || `#${i + 1}`, reason: 'invalid coordinates' });
-      return;
-    }
-    const { assays, detectionLimits } = assaysToMaps(s.assays);
-    samples.push({
-      id: (s.id || '').trim(), lat: s.lat, lng: s.lng, assays,
-      ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
-      lith: s.lith || '', notes: s.notes || '',
-    });
-  });
-
-  const collars = [];
-  (raw.collars || []).slice(0, MAX_FEATURES).forEach((c, i) => {
-    if (isProjected(c.lat, c.lng)) {
-      skipped.push({ kind: 'collar', id: c.id || `#${i + 1}`, reason: 'projected easting/northing — import via CSV so the MGA zone can be confirmed' });
-      return;
-    }
-    if (!inRange(c.lat, c.lng)) {
-      skipped.push({ kind: 'collar', id: c.id || `#${i + 1}`, reason: 'invalid coordinates' });
-      return;
-    }
-    collars.push({ id: (c.id || '').trim(), lat: c.lat, lng: c.lng, azimuth: c.azimuth ?? null, dip: c.dip ?? null, depth: c.depth ?? null });
-  });
-
-  const intervals = [];
-  (raw.intervals || []).slice(0, MAX_FEATURES).forEach((iv, i) => {
-    if (!iv.holeId || typeof iv.from !== 'number' || typeof iv.to !== 'number' || iv.from > iv.to) {
-      skipped.push({ kind: 'interval', id: iv.holeId || `#${i + 1}`, reason: 'invalid interval' });
-      return;
-    }
-    const { assays, detectionLimits } = assaysToMaps(iv.assays);
-    intervals.push({
-      holeId: iv.holeId.trim(), from: iv.from, to: iv.to, assays,
-      ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
-    });
-  });
-
-  let boundary = null;
-  if (raw.boundary?.coords?.length >= 3) {
-    const coords = raw.boundary.coords.filter(pt => Array.isArray(pt) && pt.length >= 2 && inRange(pt[0], pt[1]));
-    if (coords.length >= 3) boundary = { name: raw.boundary.name || 'Extracted boundary', coords: coords.map(pt => [pt[0], pt[1]]) };
-    else skipped.push({ kind: 'boundary', id: raw.boundary.name || 'boundary', reason: 'coordinates not usable as decimal degrees' });
-  }
-
-  const confidence = typeof raw.confidence === 'number' ? Math.min(1, Math.max(0, raw.confidence)) : 0;
-  const sourceHighlights = (raw.sourceHighlights || []).slice(0, 20);
-
-  return { extracted: { samples, collars, intervals, boundary, confidence, sourceHighlights }, skipped };
-}
 
 export async function POST(request) {
   let body;
