@@ -24,6 +24,18 @@ jobs:
           node-version: '22'
       - name: Install and reconcile combined lockfile
         run: npm install --no-audit --no-fund
+      - name: Preserve reproducible source snapshot
+        run: |
+          git archive --format=tar.gz HEAD > /tmp/mineralx-release-source.tar.gz
+          tar -czf /tmp/geology-test-deps.tar.gz node_modules/proj4 node_modules/mgrs node_modules/wkt-parser node_modules/react node_modules/react-dom node_modules/react-test-renderer node_modules/scheduler node_modules/react-is node_modules/react-shallow-renderer node_modules/object-assign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geology-release-source
+          path: |
+            /tmp/mineralx-release-source.tar.gz
+            /tmp/geology-test-deps.tar.gz
+            package-lock.json
+          retention-days: 7
       - name: Geology regression tests
         run: npm run test:geology
       - name: Existing operational regression tests
