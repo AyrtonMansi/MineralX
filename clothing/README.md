@@ -1,6 +1,12 @@
 # X — By MineralX
 
-Independent pre-launch clothing storefront, contained entirely in `clothing/`. It has no dependency on the parent corporate Next.js site, its build or its environment variables. No separate GitHub repository has been created.
+Independent pre-launch clothing storefront, contained entirely in `clothing/`. Its standalone version has no dependency on the parent corporate Next.js site or its environment variables. No separate GitHub repository has been created.
+
+## MineralX production address
+
+The corporate site's build validates this folder and runs `scripts/mount.mjs` to stage a derived copy in the ignored `public/clothing/` directory. A single Next.js rewrite serves the standalone entry at `https://mineral-x.com.au/clothing`. Styles, modules and images resolve under `/clothing/`; hash routes keep collection and product navigation on that page. The corporate shell is not applied to the storefront. `npm run dev` also stages the folder before starting.
+
+Edit `clothing/dist/`, never the generated public copy. The standalone source retains its original relative paths and remains portable. When moving to its own repository, remove the corporate build hooks, rewrite and generated-output ignore entry from MineralX. No clothing application code needs to change.
 
 ## Run
 

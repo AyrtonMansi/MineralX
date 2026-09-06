@@ -12,6 +12,8 @@ out/
 
 # Production
 build
+# Derived from the standalone clothing/dist folder by the corporate build.
+/public/clothing/
 
 # Misc
 .DS_Store
