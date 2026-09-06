@@ -25,7 +25,7 @@ export async function signIn(form: FormData): Promise<{ error?: string }> {
     return {
       error: "Sign-in failed. Check your details or try again shortly.",
     };
-  redirect("/gic");
+  redirect(form.get("next") === "/plant" ? "/plant" : "/gic");
 }
 export async function signOut() {
   if (configured()) {

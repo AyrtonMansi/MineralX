@@ -2,7 +2,13 @@
 import { useState } from "react";
 import { signIn } from "@/app/gic/actions";
 import Link from "next/link";
-export function LoginForm({ active }: { active: boolean }) {
+export function LoginForm({
+  active,
+  next = "/gic",
+}: {
+  active: boolean;
+  next?: "/gic" | "/plant";
+}) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   return (
@@ -21,6 +27,7 @@ export function LoginForm({ active }: { active: boolean }) {
         }
       }}
     >
+      <input type="hidden" name="next" value={next} />
       {!active && (
         <p className="gic-notice" role="status">
           Secure access is being activated. Sign-in will be available once setup

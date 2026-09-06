@@ -27,6 +27,7 @@ export function WorkspaceNav({
         >
           Annual reporting
         </Link>
+        <Link href="/plant">Plant plan</Link>
         <form action={signOut}>
           <button>Sign out</button>
         </form>
