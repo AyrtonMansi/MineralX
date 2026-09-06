@@ -1,8 +1,19 @@
+import Link from "next/link";
+import { getArticles } from "@/lib/articles";
 import { company, footer } from "@/lib/content";
 import { InstagramIcon, LinkedInIcon } from "./icons";
 
 export function Footer() {
   const year = new Date().getFullYear();
+  const hasUpdates = getArticles().length > 0;
+  const columns = footer.columns.map((column) =>
+    column.title === "Connect" && hasUpdates
+      ? {
+          ...column,
+          links: [...column.links, { label: "Updates", href: "/updates" }],
+        }
+      : column,
+  );
   // Placeholder ("#") social links are hidden until real URLs are configured.
   const socials = company.social.filter((s) => s.href && s.href !== "#");
 
@@ -11,9 +22,13 @@ export function Footer() {
       <div className="container-site py-16 md:py-20">
         <div className="grid gap-12 lg:grid-cols-12">
           <div className="lg:col-span-5">
-            <span className="text-base font-semibold uppercase tracking-brand text-white">
+            <Link
+              href="/"
+              aria-label={`${company.name} home`}
+              className="inline-block py-2 text-base font-semibold uppercase tracking-brand text-white"
+            >
               {company.shortName}
-            </span>
+            </Link>
             <p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">
               {footer.blurb}
             </p>
@@ -35,22 +50,26 @@ export function Footer() {
             </div>
           </div>
 
-          {footer.columns.map((col) => (
-            <div key={col.title} className="lg:col-span-2">
+          {columns.map((col) => (
+            <nav
+              key={col.title}
+              aria-label={`${col.title} footer links`}
+              className="lg:col-span-2"
+            >
               <p className="eyebrow">{col.title}</p>
               <ul className="mt-5 space-y-3">
                 {col.links.map((l) => (
                   <li key={l.href}>
-                    <a
+                    <Link
                       href={l.href}
                       className="inline-block min-h-8 py-1 text-sm text-muted transition-colors hover:text-white"
                     >
                       {l.label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>
-            </div>
+            </nav>
           ))}
 
           <div className="lg:col-span-3">

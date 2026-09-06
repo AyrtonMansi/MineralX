@@ -97,7 +97,10 @@ export const footer = {
   blurb:
     "An Australian resources company building towards a broader future in mining, research and industrial development.",
   columns: [
-    { title: "Company", links: nav.slice(0, 2) },
+    {
+      title: "Company",
+      links: [{ label: "Home", href: "/" }, ...nav.slice(0, 2)],
+    },
     {
       title: "Connect",
       links: [
