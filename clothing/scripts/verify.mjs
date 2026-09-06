@@ -4,20 +4,22 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {products,categories} from '../dist/catalog.js';
+import {campaignHero} from '../dist/hero.js';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const read=p=>readFile(resolve(root,p),'utf8');
 const html=await read('dist/index.html');
-const app=await read('dist/app.js');
-const css=await read('dist/styles.css');
-for(const file of ['dist/app.js','dist/catalog.js']) execFileSync(process.execPath,['--check',resolve(root,file)]);
+const app=(await read('dist/app.js'))+(await read('dist/hero.js'));
+const css=(await read('dist/styles.css'))+(await read('dist/hero.css'));
+assert.ok(html.includes(campaignHero()),'Initial and client-rendered campaign must match');
+for(const file of ['dist/app.js','dist/catalog.js','dist/hero.js']) execFileSync(process.execPath,['--check',resolve(root,file)]);
 assert.equal(new Set(products.map(p=>p.id)).size,products.length,'Product IDs must be unique');
 assert.match(html,/<html lang="en-AU">/);
 assert.match(html,/<meta name="viewport"/);
 assert.match(html,/<main id="main"/);
 assert.match(html,/<dialog[^>]*aria-labelledby="overlay-title"/);
 assert.match(html,/name="robots" content="noindex,nofollow"/,'Preview must not claim production indexability');
-const assets=new Set([...products.map(p=>`${p.image}.webp`),...categories.map(c=>`${c.image}.webp`),'weekend-campaign.webp','x-mark.svg','tonal-detail.jpeg','hardware-detail.jpeg','pocket-detail.jpeg']);
+const assets=new Set([...products.map(p=>`${p.image}.webp`),...categories.map(c=>`${c.image}.webp`),'weekend-campaign.webp','hero-campaign-v2.webp','x-mark.svg','tonal-detail.jpeg','hardware-detail.jpeg','pocket-detail.jpeg']);
 for(const file of assets) assert.ok((await stat(resolve(root,'dist/assets',file))).size>100,`Missing asset: ${file}`);
 for(const match of html.matchAll(/(?:src|href)="\.\/([^"?#]+)"/g)) await stat(resolve(root,'dist',match[1]));
 for(const p of products){assert.ok(categories.some(c=>c.name===p.category));assert.ok(p.fitNote&&p.description&&p.details.length);}

@@ -14,3 +14,7 @@ The supplied concept deck’s final page identifies its imagery as a combination
 ## Detail imagery added 6 September 2026
 
 `tonal-detail.jpeg`, `hardware-detail.jpeg` and `pocket-detail.jpeg` are original embedded images extracted without alteration from page 32 of `X_Brand_Concept_D01(2).pdf` (PDF objects 125, 127 and 128). They illustrate proposed branding, hardware and pocketing. They are concept imagery, not final product photographs or evidence of technical performance.
+
+## Hero campaign update — 6 September 2026
+
+`hero-campaign-v2.webp` is an original imagegen output (1672 × 941) created for the hero overhaul and encoded as WebP at quality 88. Direction: closer editorial framing of two adults in carbon training wear and a chalk utility layer, a basalt coastline, raking light and mist, with open space at left for copy. It is a fictional campaign concept. No competitor photography or final-product performance claims are used. The previous campaign remains on The world of X page.
