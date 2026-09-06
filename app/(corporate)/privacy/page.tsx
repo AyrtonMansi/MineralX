@@ -56,6 +56,17 @@ export default function PrivacyPage() {
             </p>
           </div>
           <div>
+            <h2 className="text-xl font-medium">Private GIC workspace</h2>
+            <p className="body-copy mt-4">
+              GIC access is assigned by MineralX. Once activated, the workspace
+              uses authentication cookies and stores processing records, reporting
+              drafts and an account-linked history of corrections. These records
+              are available to authorised members of the relevant operation.
+              The private workspace does not load Vercel Web Analytics.
+              Contact MineralX to request access changes or a record correction.
+            </p>
+          </div>
+          <div>
             <h2 className="text-xl font-medium">Your enquiries</h2>
             <p className="body-copy mt-4">
               Please include only information relevant to your enquiry. To ask

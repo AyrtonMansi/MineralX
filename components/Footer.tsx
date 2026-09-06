@@ -7,10 +7,10 @@ export function Footer() {
   const year = new Date().getFullYear();
   const hasUpdates = getArticles().length > 0;
   const columns = footer.columns.map((column) =>
-    column.title === "Connect" && hasUpdates
+    column.title === "Connect"
       ? {
           ...column,
-          links: [...column.links, { label: "Updates", href: "/updates" }],
+          links: [...column.links, ...(hasUpdates ? [{ label: "Updates", href: "/updates" }] : []), { label: "GIC login", href: "/gic/login" }],
         }
       : column,
   );
