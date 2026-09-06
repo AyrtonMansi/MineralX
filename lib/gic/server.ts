@@ -7,8 +7,8 @@ import type { AnnualReport, Run, Workspace } from "./model";
 export function configured() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+      (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   );
 }
 export async function database() {
@@ -34,14 +34,19 @@ export async function database() {
     },
   );
 }
-export async function requireAccess(write = false) {
-  if (!configured()) redirect("/gic/login");
+export async function requireAccess(
+  write = false,
+  destination: "/gic" | "/plant" = "/gic",
+) {
+  const login =
+    destination === "/plant" ? "/gic/login?next=/plant" : "/gic/login";
+  if (!configured()) redirect(login);
   const db = await database();
   const {
     data: { user },
     error: authError,
   } = await db.auth.getUser();
-  if (authError || !user) redirect("/gic/login");
+  if (authError || !user) redirect(login);
   const { data, error } = await db
     .from("gic_members")
     .select("role, workspace:gic_workspaces(id,name,mine_name,runs_version)")

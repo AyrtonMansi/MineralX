@@ -26,4 +26,4 @@ export async function middleware(request: NextRequest) {
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   return response;
 }
-export const config = { matcher: ["/gic/:path*"] };
+export const config = { matcher: ["/gic/:path*", "/plant/:path*"] };
