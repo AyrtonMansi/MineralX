@@ -1,0 +1,31 @@
+import {readFile,readdir,stat} from 'node:fs/promises';
+import {resolve,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
+import assert from 'node:assert/strict';
+import {products,categories} from '../dist/catalog.js';
+
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const read=p=>readFile(resolve(root,p),'utf8');
+const html=await read('dist/index.html');
+const app=await read('dist/app.js');
+const css=await read('dist/styles.css');
+for(const file of ['dist/app.js','dist/catalog.js']) execFileSync(process.execPath,['--check',resolve(root,file)]);
+assert.equal(new Set(products.map(p=>p.id)).size,products.length,'Product IDs must be unique');
+assert.match(html,/<html lang="en-AU">/);
+assert.match(html,/<meta name="viewport"/);
+assert.match(html,/<main id="main"/);
+assert.match(html,/<dialog[^>]*aria-labelledby="overlay-title"/);
+assert.match(html,/name="robots" content="noindex,nofollow"/,'Preview must not claim production indexability');
+const assets=new Set([...products.map(p=>`${p.image}.webp`),...categories.map(c=>`${c.image}.webp`),'weekend-campaign.webp','x-mark.svg','tonal-detail.jpeg','hardware-detail.jpeg','pocket-detail.jpeg']);
+for(const file of assets) assert.ok((await stat(resolve(root,'dist/assets',file))).size>100,`Missing asset: ${file}`);
+for(const match of html.matchAll(/(?:src|href)="\.\/([^"?#]+)"/g)) await stat(resolve(root,'dist',match[1]));
+for(const p of products){assert.ok(categories.some(c=>c.name===p.category));assert.ok(p.fitNote&&p.description&&p.details.length);}
+for(const route of ['collection','world','fits','detail','information/release','information/product','information/privacy'])assert.ok((html+app).includes('#/'+route),`Missing navigation: ${route}`);
+assert.ok(!/https?:\/\//.test(html+app+css),'Storefront should not depend on remote scripts, fonts or images');
+assert.ok(!/fetch\s*\(|XMLHttpRequest/.test(app),'Preview must not submit customer data');
+const manifest=JSON.parse(await read('.openai/hosting.json'));
+assert.equal(manifest.static.directory,'dist');
+assert.ok(manifest.project_id);
+const files=await readdir(resolve(root,'dist/assets'));
+console.log(`Static build verified: ${products.length} products, ${categories.length} categories, ${files.length} local assets, all entrypoint references and JS syntax valid.`);

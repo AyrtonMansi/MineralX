@@ -7,7 +7,9 @@
     "node": "22.x"
   },
   "scripts": {
+    "predev": "node clothing/scripts/mount.mjs",
     "dev": "next dev",
+    "prebuild": "node clothing/scripts/verify.mjs && node clothing/scripts/mount.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
