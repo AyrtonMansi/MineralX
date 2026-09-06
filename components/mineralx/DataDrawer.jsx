@@ -37,9 +37,9 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
   const showProject = projectFilter === 'all' && store.projects.length > 1;
 
   const allSamples = useMemo(() =>
-    store.projects.flatMap(p => p.samples.map(s => ({ ...s, project: p }))), [store]);
+    store.projects.flatMap(p => p.samples.filter(s=>!s.archivedAt).map(s => ({ ...s, project: p }))), [store]);
   const allCollars = useMemo(() =>
-    store.projects.flatMap(p => p.collars.map(c => ({
+    store.projects.flatMap(p => p.collars.filter(c=>!c.archivedAt).map(c => ({
       ...c, project: p,
       intervals: (p.intervals || []).filter(i => i.holeId === c.id),
       surveys: (p.surveys || []).filter(s => s.holeId === c.id),
@@ -103,6 +103,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
   };
 
   const sampleValue = (s) => {
+    if(['unreviewed','held'].includes(s.assayReviewStatus))return 'Unreviewed — see Review';
     const primary = assayDisplay(s, activeElement);
     if (primary != null) return primary;
     const otherAssays = Object.entries(s.assays || {}).map(([el, val]) => formatAssay(el, val));
@@ -184,10 +185,10 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                       onClick={(e) => { e.stopPropagation(); onEdit('chips', s.project.id, s.id); }}
                     >{MxIcons.edit}</button>
                     <button
-                      type="button" className="mx-data-delete" title="Delete sample"
+                      type="button" className="mx-data-delete" title="Archive sample"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm(`Delete ${s.id}? (Undo with Ctrl+Z if you change your mind.)`)) api.deleteSample(s.project.id, s.id);
+                        api.deleteSample(s.project.id, s.id);
                       }}
                     >{MxIcons.trash}</button>
                   </div>
@@ -229,10 +230,10 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                         onClick={(e) => { e.stopPropagation(); onEdit('holes', c.project.id, c.id); }}
                       >{MxIcons.edit}</button>
                       <button
-                        type="button" className="mx-data-delete" title="Delete hole"
+                        type="button" className="mx-data-delete" title="Archive hole"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`Delete ${c.id} and its intervals? (Undo with Ctrl+Z if you change your mind.)`)) api.deleteCollar(c.project.id, c.id);
+                          api.deleteCollar(c.project.id, c.id);
                         }}
                       >{MxIcons.trash}</button>
                     </div>

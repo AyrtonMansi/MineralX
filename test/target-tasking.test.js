@@ -17,10 +17,10 @@ test('metersBetween: ~111m per 0.001° of latitude near the equator/QLD', () => 
   assert.ok(d > 108 && d < 113, `expected ~111 m, got ${d}`);
 });
 
-test('autoLinkSamples: a sample within range links and advances the target to sampled', () => {
+test('autoLinkSamples: an explicitly assigned primary collection advances its target to sampled', () => {
   const targets = [{ id: 'T1', lat: -20.0, lng: 146.0, status: 'proposed', linkedSampleIds: [] }];
   // ~55 m north — inside the 100 m link radius.
-  const samples = [{ id: 'S1', lat: -20.0005, lng: 146.0 }];
+  const samples = [{ id: 'S1', lat: -20.0005, lng: 146.0, targetId:'T1', lifecycle:'collected' }];
   const out = autoLinkSamples(targets, samples);
   assert.deepEqual(out[0].linkedSampleIds, ['S1']);
   assert.equal(out[0].status, 'sampled');
@@ -35,7 +35,7 @@ test('autoLinkSamples: a sample beyond range does not link, array identity prese
 
 test('autoLinkSamples: never drags a confirmed/barren target backwards', () => {
   const targets = [{ id: 'T1', lat: -20.0, lng: 146.0, status: 'confirmed', linkedSampleIds: [] }];
-  const samples = [{ id: 'S1', lat: -20.0004, lng: 146.0 }];
+  const samples = [{ id: 'S1', lat: -20.0004, lng: 146.0, targetId:'T1', lifecycle:'collected' }];
   const out = autoLinkSamples(targets, samples);
   assert.deepEqual(out[0].linkedSampleIds, ['S1']); // still records the sample
   assert.equal(out[0].status, 'confirmed'); // but keeps the assessment
@@ -43,17 +43,17 @@ test('autoLinkSamples: never drags a confirmed/barren target backwards', () => {
 
 test('autoLinkSamples: does not double-link a sample already linked', () => {
   const targets = [{ id: 'T1', lat: -20.0, lng: 146.0, status: 'sampled', linkedSampleIds: ['S1'] }];
-  const samples = [{ id: 'S1', lat: -20.0004, lng: 146.0 }];
+  const samples = [{ id: 'S1', lat: -20.0004, lng: 146.0, targetId:'T1', lifecycle:'collected' }];
   const out = autoLinkSamples(targets, samples);
   assert.equal(out, targets); // no change
 });
 
-test('LINK_RADIUS_M boundary: just inside links, just outside does not', () => {
+test('Proximity is only a suggestion: neither side of a radius establishes a collection', () => {
   const base = [{ id: 'T', lat: -20.0, lng: 146.0, status: 'proposed', linkedSampleIds: [] }];
   const inside = metersBetween(-20.0, 146.0, -20.0008, 146.0); // ~89 m
   const outside = metersBetween(-20.0, 146.0, -20.0012, 146.0); // ~133 m
   assert.ok(inside < LINK_RADIUS_M && outside > LINK_RADIUS_M);
-  assert.equal(autoLinkSamples(base, [{ id: 'A', lat: -20.0008, lng: 146.0 }])[0].linkedSampleIds.length, 1);
+  assert.equal(autoLinkSamples(base, [{ id: 'A', lat: -20.0008, lng: 146.0 }])[0].linkedSampleIds.length, 0);
   // Just outside the radius: nothing links, and the original array is
   // returned by reference (no change).
   assert.equal(autoLinkSamples(base, [{ id: 'B', lat: -20.0012, lng: 146.0 }]), base);

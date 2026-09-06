@@ -491,7 +491,7 @@ test('parseAssayCell: a plain positive number is a real measured value', () => {
 test('parseAssayCell: "<X" and "< X" are read as a detection limit, not dropped', () => {
   assert.deepEqual(parseAssayCell('<0.01'), { value: null, detectionLimit: 0.01 });
   assert.deepEqual(parseAssayCell('< 0.5'), { value: null, detectionLimit: 0.5 });
-  assert.deepEqual(parseAssayCell('≤0.01'), { value: null, detectionLimit: 0.01 });
+  assert.deepEqual(parseAssayCell('≤0.01'), { value: null, detectionLimit: 0.01, qualifier:'≤' });
 });
 
 test('parseAssayCell: a negative number is the legacy below-detection convention', () => {
