@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
 import { Eyebrow } from "@/components/Eyebrow";
 import { getArticles, formatDate } from "@/lib/articles";
 
 export const metadata: Metadata = {
   title: "Updates",
+  robots: { index: getArticles().length > 0, follow: true },
   description: "Company updates and announcements from MineralX Resources.",
   alternates: { canonical: "/updates" },
   openGraph: {
@@ -21,8 +20,7 @@ export default function UpdatesPage() {
 
   return (
     <>
-      <Navbar />
-      <main className="bg-black">
+      <main id="main-content" tabIndex={-1} className="bg-black">
         <section className="border-b border-line pb-16 pt-36 md:pb-20 md:pt-44">
           <div className="container-site">
             <Eyebrow>MineralX Resources</Eyebrow>
@@ -38,9 +36,21 @@ export default function UpdatesPage() {
         <section className="py-16 md:py-20">
           <div className="container-site">
             {articles.length === 0 ? (
-              <p className="max-w-md text-sm leading-relaxed text-muted">
-                Updates will be published here.
-              </p>
+              <div className="max-w-xl">
+                <h2 className="text-xl font-semibold">Explore MineralX</h2>
+                <p className="body-copy mt-4">
+                  For an introduction to the company and our broader ambition,
+                  explore our direction or contact the team.
+                </p>
+                <div className="mt-8 flex flex-wrap gap-4">
+                  <Link className="btn btn-ghost" href="/direction">
+                    Our direction
+                  </Link>
+                  <Link className="btn btn-ghost" href="/contact">
+                    Contact MineralX
+                  </Link>
+                </div>
+              </div>
             ) : (
               <div className="divide-y divide-line border-y border-line">
                 {articles.map((a) => (
@@ -83,7 +93,6 @@ export default function UpdatesPage() {
           </div>
         </section>
       </main>
-      <Footer />
     </>
   );
 }

@@ -43,7 +43,7 @@ export function Footer() {
                   <li key={l.href}>
                     <a
                       href={l.href}
-                      className="text-sm text-muted transition-colors hover:text-white"
+                      className="inline-block min-h-8 py-1 text-sm text-muted transition-colors hover:text-white"
                     >
                       {l.label}
                     </a>
@@ -71,17 +71,17 @@ export function Footer() {
           </div>
         </div>
 
-        <p className="mt-14 max-w-3xl text-[11px] leading-relaxed text-muted-dim">
+        <p className="mt-14 max-w-3xl text-[11px] leading-relaxed text-muted">
           {company.disclaimer}
         </p>
       </div>
 
       <div className="border-t border-line">
-        <div className="container-site flex flex-col gap-3 py-6 text-[11px] uppercase tracking-wide text-muted-dim sm:flex-row sm:items-center sm:justify-between">
+        <div className="container-site flex flex-col gap-3 py-6 text-[11px] uppercase tracking-wide text-muted sm:flex-row sm:items-center sm:justify-between">
           <span>
             © {year} {company.legalName} — All rights reserved
           </span>
-          <span>Australian Mining &amp; Exploration Company</span>
+          <span>Australian Resources Company</span>
         </div>
       </div>
     </footer>

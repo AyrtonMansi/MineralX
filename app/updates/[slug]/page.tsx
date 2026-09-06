@@ -1,19 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
 import { Eyebrow } from "@/components/Eyebrow";
 import { getArticle, getArticles, formatDate } from "@/lib/articles";
 
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
 export function generateStaticParams() {
   return getArticles().map((a) => ({ slug: a.slug }));
 }
 
-export function generateMetadata({ params }: Props): Metadata {
-  const article = getArticle(params.slug);
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const article = getArticle((await params).slug);
   if (!article) return {};
   return {
     title: article.title,
@@ -29,14 +27,13 @@ export function generateMetadata({ params }: Props): Metadata {
   };
 }
 
-export default function ArticlePage({ params }: Props) {
-  const article = getArticle(params.slug);
+export default async function ArticlePage({ params }: Props) {
+  const article = getArticle((await params).slug);
   if (!article) notFound();
 
   return (
     <>
-      <Navbar />
-      <main className="bg-black">
+      <main id="main-content" tabIndex={-1} className="bg-black">
         <article className="pb-20 pt-36 md:pb-28 md:pt-44">
           <div className="container-site">
             <div className="mx-auto max-w-3xl">
@@ -70,7 +67,6 @@ export default function ArticlePage({ params }: Props) {
           </div>
         </article>
       </main>
-      <Footer />
     </>
   );
 }

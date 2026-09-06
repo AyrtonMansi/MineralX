@@ -170,3 +170,34 @@ body {
     border-color: rgba(255, 255, 255, 0.6);
   }
 }
+
+/* Keep keyboard journeys visible throughout the monochrome interface. */
+:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 5px;
+}
+main:focus {
+  outline: none;
+}
+.skip-link {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  background: #fff;
+  color: #000;
+  padding: 0.75rem 1rem;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+[id] {
+  scroll-margin-top: 6rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-drift {
+    animation: none !important;
+    transform: none !important;
+  }
+}

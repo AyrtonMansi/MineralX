@@ -1,149 +1,134 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  AnimatePresence,
-  motion,
-  useScroll,
-  useSpring,
-  useTransform,
-} from "framer-motion";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { company, nav } from "@/lib/content";
 import { CloseIcon, MenuIcon } from "./icons";
 
-// Distance (px) over which the header fades from fully visible to gone.
-const FADE_DISTANCE = 160;
-
-export function Navbar() {
+export function Navbar({ hasUpdates = false }: { hasUpdates?: boolean }) {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [faded, setFaded] = useState(false);
-
-  // Slim, subtle scroll-progress indicator.
-  const { scrollY, scrollYProgress } = useScroll();
-  const progress = useSpring(scrollYProgress, {
-    stiffness: 120,
-    damping: 30,
-    mass: 0.3,
-  });
-
-  // The header itself fades out as the page scrolls down, rather than
-  // staying pinned — reappears once the user scrolls back near the top.
-  const headerOpacity = useSpring(
-    useTransform(scrollY, [0, FADE_DISTANCE], [1, 0]),
-    { stiffness: 120, damping: 30, mass: 0.3 },
-  );
-
+  const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const links = [
+    ...nav,
+    ...(hasUpdates ? [{ label: "Updates", href: "/updates" }] : []),
+    { label: "Contact", href: "/contact" },
+  ];
   useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 24);
-      setFaded(window.scrollY > FADE_DISTANCE - 8);
-    };
+    const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
+  function closeMenu() {
+    dialog.current?.close();
+    document.body.style.overflow = "";
+    trigger.current?.focus();
+  }
   useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const onResize = () => {
+      if (desktop.matches) {
+        dialog.current?.close();
+        document.body.style.overflow = "";
+      }
+    };
+    desktop.addEventListener("change", onResize);
     return () => {
+      desktop.removeEventListener("change", onResize);
       document.body.style.overflow = "";
     };
-  }, [open]);
-
+  }, []);
   return (
     <>
-      <motion.header
-        style={{ opacity: headerOpacity }}
-        className={`fixed inset-x-0 top-0 z-50 transition-colors duration-500 ${
-          scrolled
-            ? "border-b border-line bg-black/80 backdrop-blur-md"
-            : "border-b border-transparent bg-gradient-to-b from-black/70 to-transparent"
-        } ${faded && !open ? "pointer-events-none" : ""}`}
+      <header
+        className={`fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300 ${scrolled || pathname !== "/" ? "border-line bg-black/95 backdrop-blur-md" : "border-transparent bg-gradient-to-b from-black/80 to-transparent"}`}
       >
-        <nav className="container-site flex h-16 items-center justify-between md:h-20">
-          <a
+        <nav
+          aria-label="Main navigation"
+          className="container-site flex h-16 items-center justify-between md:h-20"
+        >
+          <Link
             href="/"
-            className="text-base font-semibold uppercase tracking-brand text-white transition-opacity hover:opacity-80"
+            className="py-3 text-base font-semibold uppercase tracking-brand"
             aria-label={`${company.name} home`}
           >
             {company.shortName}
-          </a>
-
-          <div className="hidden items-center gap-9 lg:flex">
-            {nav.map((item) => (
-              <a
+          </Link>
+          <div className="hidden items-center gap-8 lg:flex">
+            {links.map((item) => (
+              <Link
                 key={item.href}
                 href={item.href}
-                className="group relative text-[12px] font-medium uppercase tracking-wide text-muted transition-colors duration-300 hover:text-white"
+                aria-current={pathname === item.href ? "page" : undefined}
+                className={
+                  item.href === "/contact"
+                    ? "btn btn-ghost"
+                    : `py-3 text-[11px] font-medium uppercase tracking-wide transition-colors hover:text-white ${pathname === item.href ? "text-white underline underline-offset-8" : "text-muted"}`
+                }
               >
                 {item.label}
-                <span className="absolute -bottom-1.5 left-0 h-px w-full origin-left scale-x-0 bg-white/70 transition-transform duration-300 ease-out group-hover:scale-x-100" />
-              </a>
+              </Link>
             ))}
           </div>
-
           <button
+            ref={trigger}
             type="button"
-            className="p-2 text-white lg:hidden"
             aria-label="Open menu"
-            aria-expanded={open}
-            onClick={() => setOpen(true)}
+            aria-haspopup="dialog"
+            aria-controls="mobile-menu"
+            className="flex h-11 w-11 items-center justify-center lg:hidden"
+            onClick={() => {
+              dialog.current?.showModal();
+              document.body.style.overflow = "hidden";
+            }}
           >
             <MenuIcon className="h-6 w-6" />
           </button>
         </nav>
-
-        {/* Scroll progress line */}
-        <motion.div
-          className="absolute inset-x-0 bottom-0 h-px origin-left bg-white/60"
-          style={{ scaleX: progress }}
-          aria-hidden="true"
-        />
-      </motion.header>
-
-      {/* Mobile menu — rendered outside the header so the blurred header's
-          backdrop-filter doesn't trap this fixed overlay inside its box. */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            className="fixed inset-0 z-[60] bg-black lg:hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
+      </header>
+      <dialog
+        ref={dialog}
+        id="mobile-menu"
+        aria-label="Navigation menu"
+        onClose={() => {
+          document.body.style.overflow = "";
+        }}
+        className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none border-0 bg-black p-0 text-white backdrop:bg-black"
+      >
+        <div className="container-site flex h-16 items-center justify-between md:h-20">
+          <span className="text-base font-semibold uppercase tracking-brand">
+            {company.shortName}
+          </span>
+          <button
+            type="button"
+            autoFocus
+            aria-label="Close menu"
+            className="flex h-11 w-11 items-center justify-center"
+            onClick={closeMenu}
           >
-            <div className="container-site flex h-16 items-center justify-between md:h-20">
-              <span className="text-base font-semibold uppercase tracking-brand text-white">
-                {company.shortName}
-              </span>
-              <button
-                type="button"
-                className="p-2 text-white"
-                aria-label="Close menu"
-                onClick={() => setOpen(false)}
-              >
-                <CloseIcon className="h-6 w-6" />
-              </button>
-            </div>
-            <nav className="container-site mt-6 flex flex-col">
-              {nav.map((item, i) => (
-                <motion.a
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.06 * i + 0.08, ease: [0.16, 1, 0.3, 1] }}
-                  className="border-b border-line py-5 text-2xl font-medium text-white/90 transition-colors hover:text-white"
-                >
-                  {item.label}
-                </motion.a>
-              ))}
-            </nav>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <CloseIcon className="h-6 w-6" />
+          </button>
+        </div>
+        <nav
+          aria-label="Mobile navigation"
+          className="container-site mt-8 flex flex-col"
+        >
+          {links.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={closeMenu}
+              aria-current={pathname === item.href ? "page" : undefined}
+              className="border-b border-line py-6 text-2xl"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </dialog>
     </>
   );
 }

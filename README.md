@@ -1,113 +1,49 @@
-# MineralX Resources — Corporate Website
+# MineralX corporate website
 
-A premium, dark corporate website for **MineralX Resources**, an Australian
-mining and exploration company focused on disciplined gold exploration and
-development in Queensland.
+MineralX's corporate website, built with Next.js App Router, TypeScript and Tailwind CSS. The original SpaceX-inspired black theme, Inter typography and aerial hero image are retained.
 
-Single-page, investor-grade marketing site built for speed, clarity and easy
-content editing.
+## Run locally
 
-## Tech Stack
+Use Node.js 22 and install the locked dependencies:
 
-- **Framework:** [Next.js 14](https://nextjs.org/) (App Router)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **Animation:** Framer Motion (subtle, reduced-motion aware)
-- **Hosting:** Vercel
-- **Domain:** mineral-x.com.au
-
-## Getting Started
-
-```bash
-npm install
+```sh
+npm ci
 npm run dev
+npm run lint
+npm run build
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+## Public scope
 
-```bash
-npm run build   # production build
-npm run start   # serve the production build
-npm run lint    # lint
-```
+The website presents the company and its broad direction across resources, research and industrial development. Do not publish individual project details, private correspondence, unverified capabilities, financial metrics or partner names/logos without an approved public source.
 
-## Project Structure
+- `/`: corporate introduction, direction, approach and engagement
+- `/company`: identity, purpose and operating principles
+- `/direction`: three connected strategic themes
+- `/partnerships`: capital, strategic and technical/industrial relationships
+- `/contact`: clearly labelled email enquiries
+- `/privacy`: website and enquiry privacy notice
+- `/updates` and `/updates/[slug]`: Markdown corporate publishing
 
-```
-app/
-  layout.tsx           Root layout, fonts, SEO metadata, JSON-LD
-  page.tsx             Homepage composition (section order)
-  globals.css          Design tokens + shared component classes
-  opengraph-image.tsx  Auto-generated Open Graph / social image
-  icon.tsx             Auto-generated favicon
-  robots.ts            robots.txt
-  sitemap.ts           sitemap.xml
-components/
-  Preloader.tsx        Loading screen (wordmark reveal + progress)
-  Navbar.tsx           Sticky nav with scroll state + mobile menu
-  Hero.tsx             Full-bleed hero (preserved concept)
-  TerrainBackground.tsx Generated aerial-survey hero backdrop
-  Overview.tsx         Company overview + credentials strip
-  OperatingFocus.tsx   Three operating-focus cards
-  Queensland.tsx       Operating region section
-  Capability.tsx       Six capability blocks
-  Investors.tsx        Investors / partnerships + disclaimer
-  Contact.tsx          Contact section + enquiry form
-  Footer.tsx           Footer + legal
-lib/
-  content.ts           ← All site copy lives here
-```
+Shared copy and contact information are in `lib/content.ts`. Page-specific editorial content is in the corresponding `app/` route. The existing legal entity and postal address have been retained; changes require verification against company records.
 
-## Editing Content
+## Contact enquiries
 
-Nearly all text — headings, body copy, cards, contact details, nav and
-footer — is centralised in [`lib/content.ts`](lib/content.ts). Edit that file
-to update copy without touching component code.
+Contact actions open a draft addressed to `info@mineral-x.com.au` with the selected enquiry subject. Visitors send the message from their own email application. This site does not claim to submit or confirm delivery. No email provider credentials or form service are required.
 
-To change the **section order**, edit the JSX in [`app/page.tsx`](app/page.tsx).
+## Publishing corporate updates
 
-## Publishing Updates (Articles)
+Copy `content/articles/_template.md` to an approved URL slug such as `company-announcement.md`. Complete the metadata and approved corporate text, then commit and deploy. Files beginning with `_` are excluded. Updates navigation and its sitemap entry appear automatically once at least one published article exists. Keep individual projects and unpublished commercial information out of public articles. Markdown is trusted repository content; never accept visitor-uploaded Markdown.
 
-Articles are plain markdown files in [`content/articles/`](content/articles/)
-— no CMS.
+## Accessibility and performance
 
-1. Duplicate [`content/articles/_template.md`](content/articles/_template.md).
-2. Rename it to the URL slug you want (e.g. `dr-joint-venture.md` publishes
-   at `/updates/dr-joint-venture`).
-3. Fill in the frontmatter (`title`, `date`, `category`, `excerpt`) and write
-   the body in markdown.
-4. Commit and push to `main` — Vercel publishes it automatically.
+The header remains available on scroll. The native mobile dialog supports keyboard focus containment, Escape and focus return. A skip link and visible focus styles support keyboard navigation. Page content is rendered on the server, and the synthetic loading screen has been removed. The original hero image remains unchanged; reduced-motion preferences disable its drift animation.
 
-Files starting with `_` are never published. Articles are listed at
-`/updates`, newest first, and included in the sitemap.
+## Maintenance and deployment
 
-## Contact Form Delivery
+The production branch is `main`. Confirm the repository's Vercel deployment status and the custom domain after pushing. Never assume a successful Git push means the production site has deployed. Roll back using the last verified Vercel production deployment, or revert the release commit and redeploy.
 
-Set `contact.formEndpoint` in [`lib/content.ts`](lib/content.ts) to a form
-endpoint (e.g. a [Formspree](https://formspree.io) form URL like
-`https://formspree.io/f/xxxxxxx`) and the form submits directly with an
-on-page confirmation. While it is `null`, the form falls back to opening the
-visitor's email client addressed to `info@mineral-x.com.au`.
+Next.js is pinned to the patched 15.5 maintenance line. The PostCSS override selects a patched compatible 8.x release for Next's transitive dependency; review it when upgrading Next.js. Use `npm audit --omit=dev` and verify the production build after dependency changes.
 
-## Design Notes
-
-- **Palette:** black / charcoal / white, thin hairline borders. No metallic gold.
-- **Type:** Inter, with tracked uppercase eyebrows and bold display headings.
-- **Loading screen** and **hero concept** are preserved from the original site.
-- The hero backdrop is generated (SVG contour field) — no stock photography.
-- Animations are intentionally subtle and respect `prefers-reduced-motion`.
-
-The contact form is backend-free: it composes an email to
-`info@mineral-x.com.au` via the visitor's mail client. Wire it to a form
-service or API route if server-side handling is required later.
-
-## Deploying to Vercel
-
-1. Push this repository to GitHub.
-2. Import the project in [Vercel](https://vercel.com/new) — framework is
-   auto-detected (Next.js); no extra configuration required.
-3. Add the `mineral-x.com.au` domain in the Vercel project settings.
-
-## License
-
-© MineralX Resources Pty Ltd. All rights reserved.
+© MineralX Resources Pty Ltd.

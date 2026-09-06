@@ -45,7 +45,9 @@ export const getArticles = cache((): ArticleMeta[] => {
     .filter((f) => f.endsWith(".md") && !f.startsWith("_"))
     .map((f) => {
       const slug = f.replace(/\.md$/, "");
-      const { data } = matter(fs.readFileSync(path.join(ARTICLES_DIR, f), "utf8"));
+      const { data } = matter(
+        fs.readFileSync(path.join(ARTICLES_DIR, f), "utf8"),
+      );
       return {
         slug,
         title: String(data.title ?? slug),
@@ -58,6 +60,7 @@ export const getArticles = cache((): ArticleMeta[] => {
 });
 
 export const getArticle = cache((slug: string): Article | null => {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(slug)) return null;
   const file = path.join(ARTICLES_DIR, `${slug}.md`);
   if (!fs.existsSync(file) || path.basename(file).startsWith("_")) return null;
   const { data, content } = matter(fs.readFileSync(file, "utf8"));

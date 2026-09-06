@@ -1,5 +1,3 @@
-"use client";
-
 import { hero } from "@/lib/content";
 import { GRAIN_TEXTURE } from "./grain";
 
