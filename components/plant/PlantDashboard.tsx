@@ -1,5 +1,11 @@
 "use client";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { usePlanGestures } from './usePlanGestures';
+import { useReviewNotes } from './useReviewNotes';
+import { ReviewNotes, anchorName } from './ReviewNotes';
+import type { Anchor, NoteDraft, ReviewNote } from '@/lib/plant/notes';
+import { distance, gestureView, type Point } from '@/lib/plant/viewport';
+import { Button } from './Controls';
 import {
   palette,
   groupNames,
@@ -9,7 +15,7 @@ import {
 } from "@/lib/plant/model";
 
 type View = { x: number; y: number; w: number; h: number };
-type Tab = "plan" | "equipment" | "basis";
+type Tab = "plan" | "equipment" | "basis" | "notes";
 const routeLayers: Record<string, string> = {
   conveyor: "Conveyors",
   slurry: "Slurry pipes",
@@ -26,7 +32,7 @@ function download(name: string, content: string, type: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function PlantDashboard({ model }: { model: PlantModel }) {
+export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: PlantModel; notesEndpoint?:string }) {
   const full: View = {
     x: -5,
     y: -7,
@@ -47,16 +53,23 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
     slurry: true,
     water: false,
     chute: true,
-    loader: false,
-    manual: false,
+    loader: true,
+    manual: true,
   });
   const svg = useRef<SVGSVGElement>(null);
-  const drag = useRef<{
-    x: number;
-    y: number;
-    view: View;
-    moved: boolean;
-  } | null>(null);
+  const [tool,setTool]=useState<'pan'|'measure'|'pin'>('pan');
+  const [measurement,setMeasurement]=useState<Point[]>([]);
+  const [expanded,setExpanded]=useState(false),[sideNotes,setSideNotes]=useState(false);
+  const [showPins,setShowPins]=useState(true),[activeNote,setActiveNote]=useState('');
+  const [draft,setDraft]=useState<NoteDraft|null>(null);
+  const notes=useReviewNotes(notesEndpoint);
+  useEffect(()=>{if(tab!=='plan')setExpanded(false);},[tab]);
+  useEffect(()=>{
+    if(typeof window==='undefined')return;
+    const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){setExpanded(false);setTool('pan');}};
+    window.addEventListener('keydown',key);return ()=>window.removeEventListener('keydown',key);
+  },[]);
+  useEffect(()=>{if(!expanded)return;const previous=document.body.style.overflow;document.body.style.overflow='hidden';return ()=>{document.body.style.overflow=previous;};},[expanded]);
   const trace = model.traces.find((t) => t.id === traceId),
     equipment = model.equipment.find((e) => e.id === selected),
     stream = model.streams.find((s) => s.id === streamId);
@@ -79,6 +92,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
   const choose = (id: string) => {
     setSelected(id);
     setStreamId("");
+    setSideNotes(false);
   };
   const zoom = (factor: number) =>
     setView((v) => {
@@ -113,6 +127,41 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
       "image/svg+xml",
     );
   };
+  const anchorFor = (type: 'equipment'|'route', id: string): Anchor => {
+    const q=model.equipment.find(e=>e.id===id);
+    const route=model.streams.find(e=>e.id===id);
+    const point=q?[q.x+q.w/2,q.y+q.h/2]:route?.points[Math.floor(route.points.length/2)]||[0,0];
+    return {type,id,x:point[0],y:point[1],revision:model.revision};
+  };
+  const beginNote=(anchor:Anchor)=>{
+    if(draft){setSideNotes(true);return;}
+    setDraft({id:crypto.randomUUID(),body:'',priority:'normal',anchor});setSideNotes(true);setTool('pan');setShowPins(true);
+  };
+  const locateNote=(note:ReviewNote)=>{
+    const a=note.anchor.type==='point'?note.anchor:anchorFor(note.anchor.type,note.anchor.id!);
+    setTab('plan');setSideNotes(true);setActiveNote(note.id);setShowPins(true);
+    setView({x:a.x-15,y:model.height-a.y-15*full.h/full.w,w:30,h:30*full.h/full.w});
+  };
+  const onTap=(point:Point,target:Element)=>{
+    const local={x:point.x,y:model.height-point.y};
+    const qid=target.closest('[data-equipment-id]')?.getAttribute('data-equipment-id');
+    const rid=target.closest('[data-route-id]')?.getAttribute('data-route-id');
+    const nid=target.closest('[data-note-id]')?.getAttribute('data-note-id');
+    if(tool==='measure'){
+      if(local.x>=0&&local.x<=model.width&&local.y>=0&&local.y<=model.height)setMeasurement(old=>old.length===1?[...old,local]:[local]);
+      return;
+    }
+    if(tool==='pin'){
+      if(local.x<0||local.x>model.width||local.y<0||local.y>model.height)return;
+      beginNote(qid?anchorFor('equipment',qid):rid?anchorFor('route',rid):{type:'point',id:null,x:Number(local.x.toFixed(2)),y:Number(local.y.toFixed(2)),revision:model.revision});return;
+    }
+    if(nid){const n=notes.notes.find(n=>n.id===nid);if(n){setActiveNote(nid);setSideNotes(true);}return;}
+    if(qid){choose(qid);return;}
+    if(rid){setStreamId(rid);setSelected('');setSideNotes(false);return;}
+  };
+  const gestures=usePlanGestures(svg,view,setView,full.w*1.5,tab==='plan',onTap);
+  const notePanel=(scoped=false)=><ReviewNotes store={notes} model={model} draft={draft} setDraft={setDraft} activeId={activeNote} onLocate={locateNote} onPin={()=>{setTab('plan');setTool('pin');setSideNotes(false);}} scope={scoped?(selected||streamId||undefined):undefined}/>;
+  const pinScale=view.w/full.w;
   return (
     <main id="main-content" className="plant-main">
       <div className="plant-heading">
@@ -174,7 +223,8 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
           [
             ["plan", "Site plan"],
             ["equipment", "Equipment register"],
-            ["basis", "Design basis & sources"],
+            ["basis", "Layout reasoning"],
+            ["notes", `Review notes (${notes.notes.filter(n=>n.status==='open').length})`],
           ] as const
         ).map(([id, name]) => (
           <button
@@ -234,23 +284,25 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
               </small>
             </p>
           </div>
-          <div className="plant-canvas-layout">
+          <div className={`plant-canvas-layout ${expanded?'is-expanded':''}`}>
+
             <div className="plant-drawing">
               <div className="plant-map-toolbar">
                 <div>
                   <button onClick={() => setView(full)}>Fit site</button>
                   <button
-                    onClick={() => setView({ x: 28, y: 6, w: 46, h: 43 })}
+                    onClick={() => setView(model.view_presets.wet)}
                   >
                     Wet circuit
                   </button>
                   <button
-                    onClick={() => setView({ x: 40, y: 41, w: 31, h: 29 })}
+                    onClick={() => setView(model.view_presets.cleanup)}
                   >
                     Cleanup
                   </button>
                 </div>
                 <div>
+                  <button aria-pressed={expanded} onClick={()=>setExpanded(v=>!v)}>{expanded?'↙ Close expanded':'⛶ Expand'}</button>
                   <button aria-label="Zoom out" onClick={() => zoom(1.25)}>
                     −
                   </button>
@@ -262,44 +314,35 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                   </button>
                 </div>
               </div>
+              <div className="plant-interaction-toolbar">
+                <div role="group" aria-label="Drawing tool">
+                  <Button variant="ghost" size="sm" aria-pressed={tool==='pan'} onClick={()=>setTool('pan')}>↔ Pan & select</Button>
+                  <Button variant="ghost" size="sm" aria-pressed={tool==='measure'} onClick={()=>{setTool('measure');setMeasurement([]);}}>↗ Measure</Button>
+                  <Button variant="ghost" size="sm" aria-pressed={tool==='pin'} disabled={!!draft} onClick={()=>setTool('pin')}>＋ Pin note</Button>
+                </div>
+                <button className="plant-notes-toggle" aria-pressed={sideNotes} onClick={()=>setSideNotes(v=>!v)}>Notes <span>{notes.notes.filter(n=>n.status==='open').length}</span></button>
+              </div>
+              {tool!=='pan'&&<div className="plant-tool-prompt" role="status">{tool==='pin'?'Select a machine, connection or point inside the yard to add a note.':measurement.length===0?'Select the first measurement point.':measurement.length===1?'Select the second point.':'Select another point to start a new measurement.'}<button onClick={()=>{setTool('pan');setMeasurement([]);}}>Done</button></div>}
               <svg
                 ref={svg}
-                className="plant-svg"
+                className={`plant-svg tool-${tool}`}
                 viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+                tabIndex={0}
                 role="group"
                 aria-label="Interactive top view plant site plan. Select equipment or use the equipment register. Drag the background to pan."
-                onPointerDown={(e) => {
-                  if ((e.target as Element).closest("[data-interactive]"))
-                    return;
-                  drag.current = {
-                    x: e.clientX,
-                    y: e.clientY,
-                    view,
-                    moved: false,
-                  };
-                  e.currentTarget.setPointerCapture(e.pointerId);
+                {...gestures}
+                onDoubleClick={e=>{
+                  if(tool!=='pan')return;
+                  const p={x:e.clientX,y:e.clientY},bounds=e.currentTarget.getBoundingClientRect();
+                  setView(v=>gestureView(v,bounds,p,p,.65,full.w*1.5));
                 }}
-                onPointerMove={(e) => {
-                  const d = drag.current;
-                  if (!d) return;
-                  const box = e.currentTarget.getBoundingClientRect();
-                  const scale = Math.min(
-                    box.width / d.view.w,
-                    box.height / d.view.h,
-                  );
-                  if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3)
-                    d.moved = true;
-                  setView({
-                    ...d.view,
-                    x: d.view.x - (e.clientX - d.x) / scale,
-                    y: d.view.y - (e.clientY - d.y) / scale,
-                  });
-                }}
-                onPointerUp={() => {
-                  drag.current = null;
-                }}
-                onPointerCancel={() => {
-                  drag.current = null;
+                onKeyDown={e=>{
+                  if(e.target!==e.currentTarget)return;
+                  if(['+','=','-','0','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))e.preventDefault();
+                  if(e.key==='+'||e.key==='=')zoom(.8);
+                  if(e.key==='-')zoom(1.25);
+                  if(e.key==='0')setView(full);
+                  if(e.key.startsWith('Arrow'))setView(v=>({...v,x:v.x+(e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0)*v.w*.1,y:v.y+(e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0)*v.h*.1}));
                 }}
               >
                 <title>{`${model.title} — ${model.revision} — ${model.status}`}</title>
@@ -386,6 +429,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                         <g
                           key={s.id}
                           data-interactive="true"
+                          data-route-id={s.id}
                           role="button"
                           tabIndex={0}
                           aria-label={`${s.id}: ${nameOf(s.source)} to ${nameOf(s.target)}, ${s.route_type}`}
@@ -451,6 +495,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                       <g
                         key={e.id}
                         data-interactive="true"
+                        data-equipment-id={e.id}
                         role="button"
                         tabIndex={0}
                         aria-label={`${e.name}, ${e.w} by ${e.h} metres`}
@@ -503,13 +548,13 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                 {labels &&
                   model.equipment.map((e) => {
                     const label = e.label;
-                    if (!label?.[0] || e.id.startsWith("PP")) return null;
+                    if (!label?.[0] || ((e.id.startsWith("PP") || /^S0[2-6]$/.test(e.id)) && view.w > full.w / 1.8 && selected !== e.id)) return null;
                     return (
                       <g key={e.id} pointerEvents="none">
                         <rect
-                          x={label[1] - (label[0].length * 0.43 + 0.8) / 2}
+                          x={label[1] - (label[0].length * 0.5 + 0.8) / 2}
                           y={model.height - label[2] - 1.05}
-                          width={label[0].length * 0.43 + 0.8}
+                          width={label[0].length * 0.5 + 0.8}
                           height={1.4}
                           fill="#f9fbfa"
                           fillOpacity={0.92}
@@ -518,7 +563,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                           x={label[1]}
                           y={model.height - label[2]}
                           textAnchor="middle"
-                          fontSize=".84"
+                          fontSize="1.0"
                           fontFamily="Arial,sans-serif"
                           fontWeight="600"
                           fill="#273f39"
@@ -532,29 +577,34 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                       </g>
                     );
                   })}
-                {access && (
-                  <g
-                    fill="#6d8179"
-                    fontSize=".7"
-                    fontFamily="Arial,sans-serif"
-                    textAnchor="middle"
-                  >
-                    <text x="27" y="34" transform="rotate(-90 27 34)">
-                      6 m central service lane
-                    </text>
-                    <text x="14" y="44">
-                      LOADER APRON
-                    </text>
-                    <text x="36.5" y="39">
-                      MAINTENANCE
-                    </text>
-                    <text x="78" y="67.3">
-                      GATE
-                    </text>
-                  </g>
-                )}
+                {labels&&model.streams.filter(s=>s.label&&(trace?activeRoutes.has(s.id):layers[s.route_type])).map(s=>{
+                  const label=s.label!;
+                  return <g key={`label-${s.id}`} pointerEvents="none"><rect x={label[1]-(label[0].length*.48+1)/2} y={model.height-label[2]-1.1} width={label[0].length*.48+1} height={1.5} fill="#f9fbfa" fillOpacity=".95"/><text x={label[1]} y={model.height-label[2]} textAnchor="middle" fontSize=".96" fontWeight="700" fontFamily="Arial,sans-serif" fill={palette[s.kind]}>{label[0]}</text></g>;
+                })}
+                {access && <g fill="#65796e" fontSize=".85" fontFamily="Arial,sans-serif" textAnchor="middle" pointerEvents="none">
+                  {model.annotations.map(a=><text key={a.text} x={a.x} y={model.height-a.y} transform={a.rotation?`rotate(${-a.rotation} ${a.x} ${model.height-a.y})`:undefined}>{a.text}</text>)}
+                </g>}
+                {measurement.length>0&&<g pointerEvents="none">
+                  {measurement.map((p,i)=><circle key={i} cx={p.x} cy={model.height-p.y} r={.4*pinScale} fill="#153bdf" stroke="white" strokeWidth={.16*pinScale}/>)}
+                  {measurement.length===2&&<>
+                    <path d={`M${measurement[0].x} ${model.height-measurement[0].y} L${measurement[1].x} ${model.height-measurement[1].y}`} stroke="#153bdf" strokeWidth={.22*pinScale} strokeDasharray={`${.6*pinScale} ${.4*pinScale}`}/>
+                    <text x={(measurement[0].x+measurement[1].x)/2} y={model.height-(measurement[0].y+measurement[1].y)/2-1.1*pinScale} textAnchor="middle" fill="#143cca" fontSize={1.3*pinScale} fontWeight="700" stroke="white" strokeWidth={.45*pinScale} paintOrder="stroke">{distance(measurement[0],measurement[1]).toFixed(2)} m</text>
+                  </>}
+                </g>}
+                {showPins&&notes.notes.filter(n=>(n.status==='open'||n.id===activeNote)&&(n.anchor.type!=='point'||n.anchor.revision===model.revision)).map(n=>{
+                  const a=n.anchor.type==='point'?n.anchor:anchorFor(n.anchor.type,n.anchor.id!);
+                  const duplicates=notes.notes.filter(other=>other.status==='open'&&other.anchor.type===n.anchor.type&&other.anchor.id===n.anchor.id&&other.anchor.x===n.anchor.x&&other.anchor.y===n.anchor.y);
+                  const dx=(1.8+duplicates.findIndex(other=>other.id===n.id)*2.4)*pinScale;
+                  return <g key={n.id} data-note-id={n.id} role="button" tabIndex={0} aria-label={`Note ${notes.notes.indexOf(n)+1}: ${n.body}`} onClick={()=>{setActiveNote(n.id);setSideNotes(true);}} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setActiveNote(n.id);setSideNotes(true);}}}>
+                    <title>{anchorName(n.anchor,model)}: {n.body}</title>
+                    <path d={`M${a.x} ${model.height-a.y} l${dx} ${-2*pinScale}`} stroke="#bd651c" strokeWidth={.14*pinScale}/>
+                    <circle cx={a.x+dx} cy={model.height-a.y-2*pinScale} r={1.05*pinScale} fill={n.status==='resolved'?'#687e6b':n.priority==='attention'?'#b74b22':'#235940'} stroke={activeNote===n.id?'#ffc45a':'white'} strokeWidth={.25*pinScale}/>
+                    <text x={a.x+dx} y={model.height-a.y-1.62*pinScale} fill="white" fontSize={1.05*pinScale} textAnchor="middle" pointerEvents="none">{notes.notes.indexOf(n)+1}</text>
+                  </g>;
+                })}
+                {draft&&<circle cx={draft.anchor.x} cy={model.height-draft.anchor.y} r={1.2*pinScale} fill="none" stroke="#245be0" strokeWidth={.25*pinScale} strokeDasharray={`${.5*pinScale} ${.3*pinScale}`} pointerEvents="none"/>}
                 <g fill="#476359" fontSize="1" fontFamily="Arial,sans-serif">
-                  <text x="40" y="-2.8" textAnchor="middle">
+                  <text x={model.width/2} y="-2.8" textAnchor="middle">
                     {model.width} m
                   </text>
                   <path
@@ -564,18 +614,18 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                   />
                   <text
                     x="-3"
-                    y="35"
+                    y={model.height/2}
                     textAnchor="middle"
-                    transform="rotate(-90 -3 35)"
+                    transform={`rotate(-90 -3 ${model.height/2})`}
                   >
                     {model.height} m
                   </text>
                   <path
-                    d="M76 -3 V-5 L75.5 -4 M76 -5 L76.5 -4"
+                    d={`M${model.width-4} -3 V-5 L${model.width-4.5} -4 M${model.width-4} -5 L${model.width-3.5} -4`}
                     stroke="#243e34"
                     strokeWidth=".18"
                   />
-                  <text x="77" y="-4">
+                  <text x={model.width-3} y="-4">
                     N
                   </text>
                   <path
@@ -599,8 +649,9 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                   </text>
                 </g>
               </svg>
+              {measurement.length===2&&<div className="plant-measure-result" role="status"><strong>{distance(measurement[0],measurement[1]).toFixed(2)} m</strong><span>East/west {Math.abs(measurement[1].x-measurement[0].x).toFixed(2)} m · North/south {Math.abs(measurement[1].y-measurement[0].y).toFixed(2)} m · Horizontal plan distance</span><button onClick={()=>setMeasurement([])}>Clear</button></div>}
               <div className="plant-map-footer">
-                <span>Drag to pan · select a machine or connection</span>
+                <span>Scroll / pinch to zoom · drag to pan · double-click to zoom in</span>
                 <span>Footprints to planning scale · line widths symbolic</span>
               </div>
             </div>
@@ -608,6 +659,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
               className="plant-inspector"
               aria-label="Plan controls and inspection"
             >
+              {(sideNotes||draft)?<><button className="plant-back-inspector" onClick={()=>{setSideNotes(false);if(draft)setTab('notes');}}>← {draft?'Open draft in notes tab':'Equipment & layers'}</button>{notePanel()}</>:<>
               <div className="plant-inspector-title">
                 <span className="plant-eyebrow">
                   {equipment
@@ -652,6 +704,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                   >
                     Focus on this machine ↗
                   </button>
+                  <Button variant="outline" className="plant-add-note" onClick={()=>beginNote(anchorFor('equipment',equipment.id))}>＋ Note on this machine</Button>
                   <h3>
                     Connections <span>{connections.length}</span>
                   </h3>
@@ -702,6 +755,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                     No pipe diameter, elevation or pump head is implied by this
                     line.
                   </p>
+                  <Button variant="outline" className="plant-add-note" onClick={()=>beginNote(anchorFor('route',stream.id))}>＋ Note on this connection</Button>
                   <div className="plant-endpoints">
                     {[stream.source, stream.target]
                       .filter((id) => model.equipment.some((e) => e.id === id))
@@ -752,6 +806,7 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                   </p>
                 )}
                 <div className="plant-layer-options">
+                  <label><input type="checkbox" checked={showPins} onChange={e=>setShowPins(e.target.checked)}/>Review note pins</label>
                   {Object.entries(routeLayers).map(([id, name]) => (
                     <label key={id}>
                       <input
@@ -799,10 +854,12 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
                   </span>
                 ))}
               </div>
+            </>}
             </aside>
           </div>
         </section>
       )}
+      {tab === "notes" && <section role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" className="plant-notes-page">{notePanel()}</section>}
       {tab === "equipment" && (
         <section
           role="tabpanel"
@@ -891,6 +948,11 @@ export function PlantDashboard({ model }: { model: PlantModel }) {
               </p>
             </div>
             <span className="plant-pill">{model.holds.length} open holds</span>
+          </div>
+          <div className="plant-layout-reasoning">
+            <h2>Why this arrangement?</h2>
+            <p>The earlier compact layout kept return routes close. P4 opens out the main process west to east while keeping the wet circuit together. The yard centre and 70 m south move are retained.</p>
+            <div>{model.layout_reasoning.map(r=><article key={r.title}><h3>{r.title}</h3><p>{r.detail}</p></article>)}</div>
           </div>
           <div className="plant-holds">
             {model.holds.map((h, i) => (
