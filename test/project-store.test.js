@@ -445,22 +445,21 @@ test('samplesToCsv: round-trips sample_type/qaqc_type/duplicate_of/coord_source'
 // one CSV path with zero round-trip test, per CLAUDE.md's testing rule
 // that anything touching CSV parsing needs a unit test.
 
-test('collarsToCsv / parseCollarCsv: round-trips a collar including notes, with a comma stripped like sample notes', () => {
+test('collarsToCsv / parseCollarCsv: round-trips a collar including notes, preserving quoted commas in notes', () => {
   const collars = [
     { id: 'CT-DD-004', lat: -20.07, lng: 146.26, azimuth: 90, dip: -60, depth: 300, date: '2026-07-01', notes: 'Rig moved off, resume next visit' },
   ];
   const csv = collarsToCsv(collars);
   const [header, row] = csv.split('\n');
   assert.match(header, /hole_id,lat,lng,azimuth,dip,depth,notes,date/);
-  // Same convention as samplesToCsv: a literal comma in free text is
-  // stripped (this app doesn't quote CSV fields), not left to corrupt
-  // the column count.
-  assert.equal(row.includes('Rig moved off, resume'), false);
-  assert.ok(row.includes('Rig moved off; resume next visit'));
+  // CSV quoting must preserve the original text rather than silently changing it.
+  assert.equal(row.includes('Rig moved off, resume'), true);
+  assert.ok(row.includes('"Rig moved off, resume next visit"'));
 
   const reparsed = parseCollarCsv(csv, [], 'CT-DD-');
   assert.equal(reparsed.collars[0].id, 'CT-DD-004');
-  assert.equal(reparsed.collars[0].notes, 'Rig moved off; resume next visit');
+  assert.equal(reparsed.collars[0].notes, 'Rig moved off, resume next visit');
+  assert.equal(reparsed.collars[0].date, '2026-07-01');
   assert.equal(reparsed.collars[0].depth, 300);
 });
 
@@ -563,9 +562,9 @@ test('intervalsToCsv: exports the from-to-grade table (previously not exportable
   ];
   const csv = intervalsToCsv(intervals);
   const lines = csv.split('\n');
-  assert.equal(lines[0], 'hole_id,from,to,width_m,au');
-  assert.equal(lines[1], 'CT-DD-001,10,12.5,2.50,3.1');
-  assert.equal(lines[2], 'CT-DD-001,12.5,14,1.50,<0.01');
+  assert.equal(lines[0], 'hole_id,sample_id,from,to,width_m,Au_gpt');
+  assert.equal(lines[1], 'CT-DD-001,,10,12.5,2.50,3.1');
+  assert.equal(lines[2], 'CT-DD-001,,12.5,14,1.50,<0.01');
 });
 
 test('parseAssayCsv: a fresh measured value supersedes a stale detection limit for the same element', () => {
@@ -726,8 +725,9 @@ test('geologyToCsv: sorts by hole then from, escapes commas in free text, and ro
   // CT-DD-001 rows sorted by from (50 before 100), then CT-DD-002.
   assert.equal(lines[1], 'CT-DD-001,50,60,Granodiorite,,,');
   assert.equal(lines[2], 'CT-DD-001,100,110,Quartz vein,Silicification,,');
-  assert.equal(lines[3], 'CT-DD-002,5,15,Siltstone; minor sand,,,');
+  assert.equal(lines[3], 'CT-DD-002,5,15,"Siltstone, minor sand",,,');
 
   const reparsed = parseGeologyCsv(csv);
   assert.equal(reparsed.geology.length, 3);
+  assert.equal(reparsed.geology[2].lithology, 'Siltstone, minor sand');
 });

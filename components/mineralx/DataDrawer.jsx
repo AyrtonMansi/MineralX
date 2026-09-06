@@ -7,6 +7,7 @@ import {
 import { evidenceSummary, targetStatusMeta } from './map-render-helpers';
 import { orderTargetsForField, targetsToGpx, targetsToWaypointCsv } from './target-tasking';
 import { MxIcons } from './MineralXIcons';
+import { scopedDownholeRecords } from './field-workflows.js';
 
 // Short badge text for the QAQC tag on a sample row — a manager scanning
 // the list needs to see QAQC coverage at a glance, not read a full label.
@@ -74,24 +75,15 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
 
   // The from-to-grade table for whichever holes are in scope — previously
   // there was no way at all to get assay-interval data back out of the app.
-  const scopedIntervals = () => {
-    const holeIds = new Set(scoped(allCollars).map(c => c.id));
-    return store.projects.flatMap(p => (p.intervals || []).filter(i => holeIds.has(i.holeId)));
-  };
+  const scopedIntervals = () => scopedDownholeRecords(store, projectFilter, 'intervals');
   const exportIntervals = () => downloadText('drill_assay_intervals.csv', intervalsToCsv(scopedIntervals()));
 
   // The downhole survey record for whichever holes are in scope.
-  const scopedSurveys = () => {
-    const holeIds = new Set(scoped(allCollars).map(c => c.id));
-    return store.projects.flatMap(p => (p.surveys || []).filter(s => holeIds.has(s.holeId)));
-  };
+  const scopedSurveys = () => scopedDownholeRecords(store, projectFilter, 'surveys');
   const exportSurveys = () => downloadText('drill_downhole_surveys.csv', surveysToCsv(scopedSurveys()));
 
   // The geological log for whichever holes are in scope.
-  const scopedGeology = () => {
-    const holeIds = new Set(scoped(allCollars).map(c => c.id));
-    return store.projects.flatMap(p => (p.geology || []).filter(g => holeIds.has(g.holeId)));
-  };
+  const scopedGeology = () => scopedDownholeRecords(store, projectFilter, 'geology');
   const exportGeology = () => downloadText('drill_geological_log.csv', geologyToCsv(scopedGeology()));
 
   // Field tasking: the shown targets (the filter doubles as a selection),
@@ -106,7 +98,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
   // Which samples across the program a target is linked to (for the
   // expandable detail + unlink).
   const linkedSamplesOf = (t) => {
-    const byId = new Map(allSamples.map(s => [s.id, s]));
+    const byId = new Map(allSamples.filter(s => s.project.id === t.project.id).map(s => [s.id, s]));
     return (t.linkedSampleIds || []).map(id => byId.get(id)).filter(Boolean);
   };
 
@@ -244,7 +236,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
                         }}
                       >{MxIcons.trash}</button>
                     </div>
-                    {open && <IntervalTable collar={c} activeElement={activeElement} onAddIntervals={() => onAdd('holes')} />}
+                    {open && <IntervalTable collar={c} activeElement={activeElement} onAddIntervals={() => onAdd('holes', c.project.id)} />}
                     {open && <SurveyTable collar={c} />}
                     {open && <GeologyTable collar={c} />}
                   </div>
@@ -328,7 +320,7 @@ export default function DataDrawer({ store, api, tab, setTab, activeElement, ini
 
         {(tab === 'chips' || tab === 'holes') && (
           <div className="mx-data-footer">
-            <button type="button" className="mx-btn-primary mx-btn-sm" onClick={() => onAdd(tab)}>
+            <button type="button" className="mx-btn-primary mx-btn-sm" disabled={projectFilter === 'all'} onClick={() => onAdd(tab, projectFilter)}>
               + {tab === 'chips' ? 'Add sample' : 'Add collar'}
             </button>
             <button type="button" className="mx-btn-secondary mx-btn-sm" onClick={exportCurrent}>

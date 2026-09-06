@@ -9,6 +9,10 @@ export const plantSchema = z.object({
   status: label,
   width: z.number().positive(),
   height: z.number().positive(),
+  georeference: z.object({ origin_WGS84: point, metres_per_longitude_degree: z.number(), metres_per_latitude_degree: z.number(), heading_degrees: z.number() }),
+  annotations: z.array(z.object({ text: label, x: z.number(), y: z.number(), rotation: z.number() })),
+  layout_reasoning: z.array(z.object({ title: label, detail: z.string() })),
+  view_presets: z.record(z.string(),z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })),
   translation_from_P1_m: point,
   yard_centre_WGS84: point,
   equipment: z
@@ -41,6 +45,7 @@ export const plantSchema = z.object({
         note: z.string().max(3000),
         route_type: label,
         horizontal_route_m: z.number().nonnegative(),
+        label: z.tuple([label,z.number(),z.number()]).optional(),
       }),
     )
     .max(3000),
@@ -105,7 +110,10 @@ export function xml(value: string) {
 }
 export function planKml(model: PlantModel) {
   const coords = (p: number[][]) => p.map((v) => `${v[0]},${v[1]},0`).join(" ");
-  const polygon = (name: string, p: number[][], style: string, note = "") =>
-    `<Placemark><name>${xml(name)}</name><description>${xml(note)}</description><styleUrl>#${style}</styleUrl><Polygon><altitudeMode>clampToGround</altitudeMode><outerBoundaryIs><LinearRing><coordinates>${coords(p)}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xml(model.title)} — ${xml(model.revision)}</name><description>${xml(model.status)}. Footprints are planning envelopes; verify survey and OEM drawings.</description><Style id="boundary"><LineStyle><color>ff0088dd</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style><Style id="machine"><LineStyle><color>ff897f16</color></LineStyle><PolyStyle><color>bb897f16</color></PolyStyle></Style><Style id="route"><LineStyle><color>ff705030</color><width>2</width></LineStyle></Style>${polygon("Source lease boundary", model.lease, "boundary")}${polygon("Plant yard", model.yard_geographic, "boundary")}<Folder><name>Equipment envelopes</name>${model.equipment.map((e) => polygon(`${e.name} · ${e.id}`, e.geographic, "machine", `${e.w} × ${e.h} m. ${e.basis}. ${e.note}`)).join("")}</Folder><Folder><name>Conveyors and services</name>${model.streams.map((s) => `<Placemark><name>${xml(s.id)} · ${xml(s.source)} → ${xml(s.target)}</name><description>${xml(s.route_type + ". " + s.note)}</description><styleUrl>#route</styleUrl><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${coords(s.geographic)}</coordinates></LineString></Placemark>`).join("")}</Folder></Document></kml>`;
+  const geo = (p:number[]) => [model.georeference.origin_WGS84[0]+p[0]/model.georeference.metres_per_longitude_degree,model.georeference.origin_WGS84[1]+p[1]/model.georeference.metres_per_latitude_degree];
+  const polygon = (p:number[][]) => `<Polygon><altitudeMode>clampToGround</altitudeMode><outerBoundaryIs><LinearRing><coordinates>${coords(p)}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+  const mark = (name:string,geometry:string,style:string,note='') => `<Placemark><name>${xml(name)}</name><description>${xml(note)}</description><styleUrl>#${style}</styleUrl>${geometry}</Placemark>`;
+  const color = (hex:string) => 'ff'+hex.slice(5,7)+hex.slice(3,5)+hex.slice(1,3);
+  const styles=Object.entries(palette).map(([id,value])=>`<Style id="${id}"><LineStyle><color>${color(value)}</color><width>2</width></LineStyle><PolyStyle><color>${color(value)}</color></PolyStyle></Style>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xml(model.title)} — ${xml(model.revision)}</name><description>${xml(model.status)}. One Russell jig, nominal 2 x 2 ft. All footprints are planning allowances unless identified as OEM references. Confirm survey and vendor drawings.</description>${styles}<Style id="boundary"><LineStyle><color>ff0088dd</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style><Style id="reservation"><LineStyle><color>ff819386</color><width>1</width></LineStyle><PolyStyle><color>339aaf9a</color></PolyStyle></Style><Style id="road"><LineStyle><color>ffadbfb5</color></LineStyle><PolyStyle><color>889cad9f</color></PolyStyle></Style>${mark('Source lease boundary',polygon(model.lease),'boundary')}${mark('Plant yard — 100 × 60 m',polygon(model.yard_geographic),'boundary')}<Folder><name>Solid equipment symbols</name>${model.equipment.map(e=>mark(`${e.name} · ${e.id}`,`<MultiGeometry>${e.symbol.filter(p=>p.fill).map(p=>polygon(p.points.map(geo))).join('')}</MultiGeometry>`,e.group,`${e.w} × ${e.h} m planning envelope. ${e.basis}. ${e.note}`)).join('')}</Folder><Folder><name>Machine envelope checks</name><visibility>0</visibility>${model.equipment.map(e=>mark(e.name,polygon(e.geographic),'reservation',e.note)).join('')}</Folder><Folder><name>Access lanes and service bays</name>${model.roads.map((r,i)=>mark(`Vehicle lane reservation ${i+1}`,polygon(r.map(geo)),'road')).join('')}${model.zones.map(z=>mark(z.name,polygon(z.points.map(geo)),'reservation')).join('')}</Folder><Folder><name>Conveyors and process connections</name>${model.streams.filter(s=>s.route_type!=='water').map(s=>mark(`${s.id} · ${s.source} → ${s.target}`,`<LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${coords(s.geographic)}</coordinates></LineString>`,s.kind,`${s.route_type}. ${s.horizontal_route_m.toFixed(2)} m horizontal route. ${s.note}`)).join('')}</Folder><Folder><name>Process water lines</name><visibility>0</visibility>${model.streams.filter(s=>s.route_type==='water').map(s=>mark(`${s.id} · ${s.source} → ${s.target}`,`<LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${coords(s.geographic)}</coordinates></LineString>`,'service',s.note)).join('')}</Folder></Document></kml>`;
 }

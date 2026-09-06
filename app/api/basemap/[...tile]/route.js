@@ -1,7 +1,7 @@
 // Same-origin raster proxy. Await route params on the supported Next.js baseline.
 export const runtime = 'edge';
 const SERVICES = { satellite: 'World_Imagery', topo: 'World_Topo_Map' };
-const BLANK = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), c => c.charCodeAt(0));
+const BLANK = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg=='), c => c.charCodeAt(0));
 function unavailable() {
   return new Response(BLANK, { status: 200, headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=30', 'X-MineralX-Tile': 'upstream-unavailable' } });
 }

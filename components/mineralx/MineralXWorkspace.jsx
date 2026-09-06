@@ -12,7 +12,7 @@ import {
   elementInfo, elementsInStore, formatAssay, detectCsvKind,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, geologyToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
-  pushUndo, undo, redo, undoAvailable, redoAvailable,
+  pushUndo, undo, redo, undoAvailable, redoAvailable, clearUndo,
   nextId, targetKey, targetPrefix, targetHitRate, crsLabel,
 } from './project-store';
 import { MxIcons } from './MineralXIcons';
@@ -27,13 +27,17 @@ import {
 } from './map-render-helpers';
 import { autoLinkSamples } from './target-tasking';
 import { useFlowAnalysis } from './useFlowAnalysis';
+import FieldWorkflowPanel from './FieldWorkflowPanel';
+import { useDurableStore } from './useDurableStore';
+import { assertUniqueIds, assertCollar, assertInterval, stageAssays, upgradeStore } from './field-workflows.js';
+import { parseCsv } from './csv.js';
 
 // ── Main component ─────────────────────────────────────────────────────
 export default function MineralXWorkspace() {
   // SSR renders the demo store; the persisted store loads after mount so
   // server and client markup match (avoids hydration mismatches).
-  const [store, setStore] = useState(createDemoStore);
-  const [hydrated, setHydrated] = useState(false);
+  const persistence = useDurableStore();
+  const { store, setStore, hydrated } = persistence;
   // Layer UI state: one shape for every layer type (project markers/
   // boundary, WMS public layers, Target Analysis's own sub-layers),
   // replacing what used to be three separately-shaped, two-different-
@@ -47,7 +51,7 @@ export default function MineralXWorkspace() {
   const [layerExpanded, setLayerExpanded] = useState({}); // nodeId -> bool (defaults below)
   const [wmsErrors, setWmsErrors] = useState({});    // layerId -> true when tiles fail
 
-  const [activePanel, setActivePanel] = useState('home');
+  const [activePanel, setActivePanel] = useState(null);
   const [manageTarget, setManageTarget] = useState(null); // {type, projectId}
   const [dataOpen, setDataOpen] = useState(false);
   const [dataTab, setDataTab] = useState('chips');
@@ -96,12 +100,10 @@ export default function MineralXWorkspace() {
   }, [activeProject]);
 
   useEffect(() => {
-    setStore(loadStore());
     const savedLayerUi = loadLayerUiState();
     setLayerOn(savedLayerUi.layerOn);
     setLayerOpacity(savedLayerUi.layerOpacity);
     setLayerExpanded(savedLayerUi.layerExpanded);
-    setHydrated(true);
     setLastExportAt(Date.now()); // staleness clock starts from app open, not epoch 0
   }, []);
 
@@ -115,11 +117,9 @@ export default function MineralXWorkspace() {
   }, [layerOn, layerOpacity, layerExpanded, hydrated]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    const ok = saveStore(store);
-    setSaveFailed(!ok);
-    if (ok) setLastChangeAt(Date.now());
-  }, [store, hydrated]);
+    setSaveFailed(['blocked', 'conflict'].includes(persistence.status));
+    if (persistence.status === 'saved') setLastChangeAt(Date.now());
+  }, [persistence.status]);
 
   const STALE_EXPORT_MS = 30 * 60_000;
   const exportStale = lastChangeAt > lastExportAt && Date.now() - lastExportAt > STALE_EXPORT_MS;
@@ -146,7 +146,22 @@ export default function MineralXWorkspace() {
   const updateProject = useCallback((pid, fn) => {
     setStore(prev => ({
       ...prev,
-      projects: prev.projects.map(p => (p.id === pid ? fn(p) : p)),
+      projects: prev.projects.map(p => {
+        if (p.id !== pid) return p;
+        const next = fn(p);
+        const newSamples = next.samples.filter(s => !p.samples.some(old => old.recordId ? old.recordId === s.recordId : old === s));
+        const newCollars = next.collars.filter(c => !p.collars.some(old => old.recordId ? old.recordId === c.recordId : old === c));
+        assertUniqueIds(p.samples, newSamples);
+        assertUniqueIds(p.collars, newCollars, 'Hole');
+        newCollars.forEach(assertCollar);
+        for (const row of next.samples) {
+          const original = p.samples.find(old => old.recordId && old.recordId === row.recordId);
+          if (original && original.id !== row.id) throw new Error('Bag identifiers cannot be changed through a metadata edit.');
+        }
+        const protectedSamples = new Set([...(p.dispatches || []).flatMap(d => d.sampleRecordIds), ...(p.assayBatches || []).flatMap(b => b.results.map(r => r.sampleRecordId))]);
+        if (p.samples.some(row => protectedSamples.has(row.recordId) && !next.samples.some(s => s.recordId === row.recordId))) throw new Error('This sample has dispatch or analytical history. It cannot be deleted.');
+        return upgradeStore({version: 8, projects: [next]}).projects[0];
+      }),
     }));
   }, []);
 
@@ -195,18 +210,27 @@ export default function MineralXWorkspace() {
       if (last) focusOn(last.lat, last.lng);
     },
     applyAssays: (pid, text, fileName) => {
-      const project = store.projects.find(p => p.id === pid);
-      const result = parseAssayCsv(text, project.samples);
-      if (!result.error && result.updated) {
-        pushUndo(store);
-        updateProject(pid, p => ({ ...p, samples: result.updated }));
-        if (fileName) addFile(pid, fileName, 'Assays', `${result.matched} results linked`);
-      }
-      return result;
+      try {
+        const project = store.projects.find(p => p.id === pid);
+        const batch = stageAssays(project, text, fileName || 'Imported results');
+        clearUndo();
+        updateProject(pid, p => ({ ...p, assayBatches: [...(p.assayBatches || []), batch] }));
+        return { matched: new Set(batch.results.map(r => r.sampleRecordId).filter(Boolean)).size, unmatched: [], staged: true, error: null };
+      } catch (error) { return { matched: 0, unmatched: [], error: error.message }; }
     },
     addIntervals: (pid, intervals, fileName) => {
       pushUndo(store);
-      updateProject(pid, p => ({ ...p, intervals: [...(p.intervals || []), ...intervals] }));
+      updateProject(pid, p => {
+        const all = [...(p.intervals || [])];
+        for (const interval of intervals) {
+          const collar = p.collars.find(c => c.id === interval.holeId);
+          if (!collar) throw new Error(`Hole ${interval.holeId} is not in this project.`);
+          assertInterval(interval.from, interval.to, all, interval.holeId);
+          if (collar.depth != null && interval.to > collar.depth) throw new Error('An imported interval extends past the recorded hole depth.');
+          all.push({ ...interval, collarRecordId: collar.recordId });
+        }
+        return { ...p, intervals: all };
+      });
       if (fileName) addFile(pid, fileName, 'Drill assays', `${intervals.length} intervals`);
     },
     // Downhole survey shots — a hole's actual deviation, distinct from the
@@ -266,7 +290,7 @@ export default function MineralXWorkspace() {
       pushUndo(store);
       updateProject(pid, p => ({
         ...p,
-        samples: p.samples.map(s => (s.id === id ? { ...s, ...patch } : s)),
+        samples: p.samples.map(s => (s.id === id ? { ...s, ...patch, id: s.id, recordId: s.recordId, assays: s.assays, detectionLimits: s.detectionLimits, assayHistory: s.assayHistory, holeId: s.holeId, collarRecordId: s.collarRecordId, from: s.from, to: s.to } : s)),
       }));
     },
     // Same reasoning as updateSample — id stays fixed since intervals/
@@ -275,7 +299,7 @@ export default function MineralXWorkspace() {
       pushUndo(store);
       updateProject(pid, p => ({
         ...p,
-        collars: p.collars.map(c => (c.id === id ? { ...c, ...patch } : c)),
+        collars: p.collars.map(c => (c.id === id ? { ...c, ...patch, id: c.id, recordId: c.recordId } : c)),
       }));
     },
     // Promote a terrain-analysis candidate into a persistent, tracked
@@ -623,7 +647,7 @@ export default function MineralXWorkspace() {
       const chipKey = `${p.id}:chips`;
       (groupMembers.current.get(chipKey) || new Set()).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
       const chipIds = new Set();
-      p.samples.forEach(s => {
+      [...p.samples.filter(s => !s.holeId), ...(p.observations || []).map(o => ({ ...o, observation: true }))].forEach(s => {
         const g = gradeOf(s, activeElement);
         const swatch = {
           width: `${gradeRadius(g) * 2}px`, height: `${gradeRadius(g) * 2}px`, borderRadius: '50%',
@@ -633,10 +657,10 @@ export default function MineralXWorkspace() {
         const el = buildMarkerEl(swatch, s.id);
         const marker = new mgl.current.Marker({ element: el })
           .setLngLat([s.lng, s.lat])
-          .setPopup(new mgl.current.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '260px' }).setHTML(samplePopupHtml(s)))
+          .setPopup(new mgl.current.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '260px' }).setHTML(s.observation ? `<div class="mx-pop-id">${esc(s.id)} · Observation</div><div class="mx-pop-row">${esc(s.lith || '')}</div><div class="mx-pop-row">${esc(s.notes || '')}</div>` : samplePopupHtml(s)))
           .addTo(map);
-        markers.current.set(s.id, marker);
-        chipIds.add(s.id);
+        markers.current.set(`${p.id}:sample:${s.id}`, marker);
+        chipIds.add(`${p.id}:sample:${s.id}`);
       });
       groupMembers.current.set(chipKey, chipIds);
 
@@ -653,8 +677,8 @@ export default function MineralXWorkspace() {
           .setLngLat([c.lng, c.lat])
           .setPopup(new mgl.current.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '260px' }).setHTML(collarPopupHtml(c, p.intervals || [], activeElement)))
           .addTo(map);
-        markers.current.set(c.id, marker);
-        holeIds.add(c.id);
+        markers.current.set(`${p.id}:hole:${c.id}`, marker);
+        holeIds.add(`${p.id}:hole:${c.id}`);
       });
       groupMembers.current.set(holeKey, holeIds);
 
@@ -670,8 +694,8 @@ export default function MineralXWorkspace() {
           .setLngLat([t.lng, t.lat])
           .setPopup(new mgl.current.Popup({ className: 'mx-popup', closeButton: false, maxWidth: '260px' }).setHTML(targetPopupHtml(t)))
           .addTo(map);
-        markers.current.set(t.id, marker);
-        tgtIds.add(t.id);
+        markers.current.set(`${p.id}:target:${t.id}`, marker);
+        tgtIds.add(`${p.id}:target:${t.id}`);
       });
       groupMembers.current.set(tgtKey, tgtIds);
 
@@ -940,8 +964,8 @@ export default function MineralXWorkspace() {
                   if (window.confirm('Reset to demo data? This clears all projects on this device.')) {
                     pushUndo(store); // an accidental reset is the most valuable thing to undo
                     const fresh = createDemoStore();
-                    setStore(fresh);
-                    saveStore(fresh);
+                    setStore(upgradeStore(fresh));
+                    // The durable store saves this explicit, confirmed change.
                   }
                 }}
               >
@@ -951,6 +975,19 @@ export default function MineralXWorkspace() {
           )}
         </div>
       </div>
+
+      <FieldWorkflowPanel
+        persistence={persistence}
+        legacyOpen={!!activePanel || !!manageTarget || dataOpen}
+        onNavigate={() => { setActivePanel(null); setManageTarget(null); setDataOpen(false); }}
+        onTool={(name) => {
+          setManageTarget(null); setDataOpen(false);
+          if (name === 'targets' || name === 'holes') { setActivePanel(null); setDataTab(name); setDataOpen(true); }
+          else setActivePanel(name);
+        }}
+        onFocus={focusOn}
+        getMapCenter={() => mapInstance.current?.getCenter() || null}
+      />
 
       {/* STORAGE BANNERS */}
       {saveFailed && (
@@ -1029,7 +1066,7 @@ export default function MineralXWorkspace() {
           setTab={setDataTab}
           activeElement={activeElement}
           initialFilter={dataPreset}
-          onAdd={(type) => { setDataOpen(false); setManageTarget({ type, projectId: activeProject?.id }); }}
+          onAdd={(type, projectId) => { setDataOpen(false); setManageTarget({ type, projectId: projectId || activeProject?.id }); }}
           onEdit={(type, projectId, editId) => { setDataOpen(false); setManageTarget({ type, projectId, editId }); }}
           onClose={() => { setDataOpen(false); setDataPreset(''); }}
         />
@@ -1165,6 +1202,7 @@ function UploadPanel({ onClose, project, api }) {
 
     const reader = new FileReader();
     reader.onload = () => {
+      try {
       const text = String(reader.result);
       const detected = (kind) => (cat === 'Auto' ? `Detected ${KIND_LABELS[kind]} — ` : '');
 
@@ -1193,7 +1231,7 @@ function UploadPanel({ onClose, project, api }) {
           const r = api.applyAssays(project.id, text, file.name);
           if (r.error) return setMsg({ error: true, text: r.error });
           const extra = r.unmatched.length ? ` ${r.unmatched.length} ID${r.unmatched.length === 1 ? '' : 's'} not found: ${r.unmatched.slice(0, 3).join(', ')}${r.unmatched.length > 3 ? '…' : ''}.` : '';
-          setMsg({ error: false, text: `${detected('assays')}linked ${r.matched} result${r.matched === 1 ? '' : 's'}.${extra}` });
+          setMsg({ error: false, text: `${detected('assays')}staged ${r.matched} sample result${r.matched === 1 ? '' : 's'}. Open Review to inspect and release.${extra}` });
         },
         intervals: () => {
           const { intervals, error } = parseIntervalCsv(text);
@@ -1208,7 +1246,7 @@ function UploadPanel({ onClose, project, api }) {
 
       if (cat === 'Auto') {
         if (isKml || text.trimStart().startsWith('<?xml') || text.includes('<kml')) return importKind.kml();
-        const headers = text.split(/\r?\n/)[0]?.split(',').map(h => h.trim()) || [];
+        const headers = parseCsv(text)[0] || [];
         const kind = detectCsvKind(headers);
         if (!kind) return setMsg({ error: true, text: 'Couldn’t tell what this file is — pick a category and drop it again.' });
         return importKind[kind]();
@@ -1217,6 +1255,7 @@ function UploadPanel({ onClose, project, api }) {
       if (cat === 'Rock chips') return importKind.chips();
       if (cat === 'Drill collars') return importKind.collars();
       if (cat === 'Assays') return importKind.assays();
+      } catch (error) { setMsg({ error: true, text: error.message }); }
     };
     reader.readAsText(file);
   }, [cat, project, api]);
@@ -1268,9 +1307,7 @@ function UploadPanel({ onClose, project, api }) {
               <button key={c} type="button" className={`mx-cat-chip ${cat === c ? 'active' : ''}`} onClick={() => { setCat(c); setMsg(null); }}>{c}</button>
             ))}
           </div>
-          <button type="button" className="mx-extract-open" onClick={() => setExtractOpen(true)}>
-            &#10022; Extract from report text (AI)
-          </button>
+          <p className="mx-empty-hint">AI extraction is not enabled on this release. CSV imports remain available.</p>
         </div>
       )}
       <div className="mx-recent-section">

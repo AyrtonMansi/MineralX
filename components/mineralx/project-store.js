@@ -4,6 +4,7 @@
 // real backend slots in later without touching any component.
 
 import proj4 from 'proj4';
+import { parseCsv, csvRow } from './csv.js';
 
 // Projected-coordinate support is worldwide, because a real exploration
 // group runs projects in different countries. A file's grid can't be
@@ -90,10 +91,10 @@ const V2_KEY = 'mx-store-v2';
 // All fields are optional with a conservative default so nothing about
 // existing data is asserted that isn't true — 'unknown' coordinate source
 // is itself honest information (worth disclosing as a gap), not a guess.
-export const SAMPLE_TYPES = ['rock_chip', 'soil', 'channel', 'trench', 'float', 'core', 'other'];
+export const SAMPLE_TYPES = ['rock_chip', 'soil', 'channel', 'trench', 'float', 'core', 'rc', 'diamond_core', 'other'];
 export const SAMPLE_TYPE_LABELS = {
   rock_chip: 'Rock chip', soil: 'Soil', channel: 'Channel', trench: 'Trench',
-  float: 'Float', core: 'Core (RC/diamond)', other: 'Other',
+  float: 'Float', core: 'Core (legacy classification)', rc: 'RC chips', diamond_core: 'Diamond core', other: 'Other',
 };
 
 // QAQC type: what this sample IS, for the lab-quality audit trail. A
@@ -556,16 +557,16 @@ export function validateCoordinates(lat, lng) {
 // "-0.01" meaning <0.01), not grades — treat them as absent rather than
 // plotting a nonsense negative grade.
 export function validateAssayValue(value) {
-  return typeof value === 'number' && !Number.isNaN(value) && value >= 0;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 // ── CSV ────────────────────────────────────────────────────────────────
 function splitCsv(text) {
-  return text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(',').map(c => c.trim()));
+  return parseCsv(text);
 }
 
 function headerIndex(headers) {
-  const h = headers.map(x => x.toLowerCase());
+  const h = headers.map(x => x.trim().toLowerCase());
   return (...names) => h.findIndex(x => names.includes(x));
 }
 
@@ -579,6 +580,18 @@ export function detectElementColumns(headers) {
     if (symbol) out.push({ index, element: symbol });
   });
   return out;
+}
+
+// Mass-fraction conversion is independent of display. Bare legacy headers retain
+// their documented display unit; the Review importer requires explicit confirmation.
+export function detectAssayColumns(headers) {
+  const scale = { ppb: 0.001, ppm: 1, 'g/t': 1, '%': 10000 };
+  return detectElementColumns(headers).map(column => {
+    const raw = headers[column.index].trim();
+    const suffix = raw.slice(column.element.length).replace(/^[_(\s]+|[)\s]+$/g, '').toLowerCase();
+    const sourceUnit = suffix === 'gpt' ? 'g/t' : ['pct', 'percent'].includes(suffix) ? '%' : suffix || elementInfo(column.element).unit;
+    return { ...column, sourceUnit, unitWasExplicit: !!suffix, factor: scale[sourceUnit] / scale[elementInfo(column.element).unit] };
+  });
 }
 
 // What kind of CSV is this? Detection from the header row, so users can
@@ -612,7 +625,7 @@ const ENUM_ALIASES = {
   blank: 'blank', blk: 'blank',
   none: 'none', original: 'none',
   rock_chip: 'rock_chip', rockchip: 'rock_chip', chip: 'rock_chip',
-  soil: 'soil', channel: 'channel', trench: 'trench', float: 'float', core: 'core', other: 'other',
+  rc: 'rc', diamond_core: 'diamond_core', soil: 'soil', channel: 'channel', trench: 'trench', float: 'float', core: 'core', other: 'other',
   gps_handheld: 'gps_handheld', gps: 'gps_handheld', handheld: 'gps_handheld', handheld_gps: 'gps_handheld',
   dgps: 'dgps', differential_gps: 'dgps',
   survey: 'survey', surveyed: 'survey', survey_grade: 'survey',
@@ -636,28 +649,29 @@ function normaliseEnum(raw, validSet) {
 // sample — real lab data silently lost, and "never tested" became
 // indistinguishable from "tested, came back clean".
 export function parseAssayCell(raw) {
-  const s = String(raw ?? '').trim();
-  if (!s) return { value: null, detectionLimit: null };
-  const belowMatch = s.match(/^[<≤]\s*([\d.]+)$/);
-  if (belowMatch) {
-    const dl = parseFloat(belowMatch[1]);
-    return Number.isNaN(dl) ? { value: null, detectionLimit: null } : { value: null, detectionLimit: dl };
-  }
-  const v = parseFloat(s);
-  if (Number.isNaN(v)) return { value: null, detectionLimit: null };
-  if (v < 0) return { value: null, detectionLimit: Math.abs(v) }; // legacy BDL convention
-  return { value: v, detectionLimit: null };
+  const text = String(raw ?? '').trim();
+  if (!text) return { value: null, detectionLimit: null };
+  const match = text.match(/^([<≤])?\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)$/);
+  if (!match) return { value: null, detectionLimit: null };
+  const value = Number(match[2]);
+  if (!Number.isFinite(value)) return { value: null, detectionLimit: null };
+  if (match[1] || value < 0) return { value: null, detectionLimit: Math.abs(value) };
+  return { value, detectionLimit: null };
 }
 
 function readAssays(cells, elementCols) {
-  const assays = {};
-  const detectionLimits = {};
-  elementCols.forEach(({ index, element }) => {
-    const { value, detectionLimit } = parseAssayCell(cells[index]);
-    if (value != null) assays[element] = value;
-    else if (detectionLimit != null) detectionLimits[element] = detectionLimit;
+  const assays = {}, detectionLimits = {}, reportedAssays = [];
+  elementCols.forEach(({ index, element, sourceUnit, factor = 1, unitWasExplicit }) => {
+    const reportedText = String(cells[index] ?? '').trim();
+    if (!reportedText) return;
+    if (!Number.isFinite(factor)) throw new Error(`Unknown source unit for ${element}. Use ppb, ppm, g/t or %. No data was imported.`);
+    const { value, detectionLimit } = parseAssayCell(reportedText);
+    if (value == null && detectionLimit == null) throw new Error(`Unresolved analytical result for ${element}: ${reportedText}. No data was imported.`);
+    if (value != null) assays[element] = value * factor;
+    else if (detectionLimit != null) detectionLimits[element] = detectionLimit * factor;
+    reportedAssays.push({ element, reportedText, sourceUnit: sourceUnit || elementInfo(element).unit, unitWasExplicit: !!unitWasExplicit });
   });
-  return { assays, detectionLimits };
+  return { assays, detectionLimits, reportedAssays };
 }
 
 // Rock chip CSV → samples. Recognised headers (case-insensitive):
@@ -679,11 +693,12 @@ export function parseSampleCsv(text, existing, prefix, crs) {
   const iLng = col('lng', 'lon', 'longitude', 'easting');
   const iLith = col('lith', 'lithology');
   const iNotes = col('notes', 'comment', 'comments');
+  const iDate = col('date', 'collection_date', 'collected_at');
   const iSampleType = col('sample_type', 'sampletype', 'type');
   const iQaqc = col('qaqc_type', 'qaqc', 'qc_type');
   const iDupOf = col('duplicate_of', 'dup_of', 'original_id');
   const iCoordSrc = col('coord_source', 'coordsource', 'coord_src');
-  const elementCols = detectElementColumns(rows[0]);
+  const elementCols = detectAssayColumns(rows[0]);
   if (iLat < 0 || iLng < 0) return { samples: [], error: 'CSV needs lat/northing and lng/easting columns.' };
 
   const out = [];
@@ -720,6 +735,7 @@ export function parseSampleCsv(text, existing, prefix, crs) {
     }
 
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
+    if (pool.some(record => record.id === id)) { rowErrors.push(`row ${r + 1}: duplicate ID ${id}`); continue; }
 
     let sampleType = 'rock_chip';
     if (iSampleType >= 0 && cells[iSampleType]) {
@@ -737,15 +753,19 @@ export function parseSampleCsv(text, existing, prefix, crs) {
       if (v) coordSource = v; else fieldWarnings.push(`row ${r + 1}: unrecognised coord_source "${cells[iCoordSrc]}"`);
     }
     const duplicateOf = (iDupOf >= 0 && cells[iDupOf]) ? cells[iDupOf] : null;
-    const { assays, detectionLimits } = readAssays(cells, elementCols);
+    const { assays, detectionLimits, reportedAssays } = readAssays(cells, elementCols);
 
     const sample = {
       id, lat, lng,
+      recordId: crypto.randomUUID(),
+      reportedAssays,
+      sourceRow: Object.fromEntries(rows[0].map((h,i) => [h,cells[i] ?? ''])),
       assays,
       ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
       lith: iLith >= 0 ? cells[iLith] || '' : '',
       notes: iNotes >= 0 ? cells[iNotes] || '' : '',
-      date: today(),
+      date: iDate >= 0 && cells[iDate] ? cells[iDate] : today(),
+      importedAt: new Date().toISOString(),
       sampleType, qaqcType, coordSource,
       ...(duplicateOf ? { duplicateOf } : {}),
     };
@@ -802,8 +822,13 @@ export function parseCollarCsv(text, existing, prefix, crs) {
 
     const num = (i) => { const v = i >= 0 ? parseFloat(cells[i]) : NaN; return Number.isNaN(v) ? null : v; };
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
+    if (pool.some(record => record.id === id)) { rowErrors.push(`row ${r + 1}: duplicate ID ${id}`); continue; }
+    const orientation = { azimuth: num(iAzi), dip: num(iDip), depth: num(iDepth) };
+    if (Object.values(orientation).some(v => v != null && !Number.isFinite(v)) || (orientation.azimuth != null && (orientation.azimuth < 0 || orientation.azimuth >= 360)) || (orientation.dip != null && Math.abs(orientation.dip) > 90) || (orientation.depth != null && orientation.depth <= 0)) {
+      rowErrors.push(`row ${r + 1}: invalid collar orientation or depth`); continue;
+    }
     const collar = {
-      id, lat, lng, azimuth: num(iAzi), dip: num(iDip), depth: num(iDepth), date: today(),
+      id, recordId: crypto.randomUUID(), lat, lng, ...orientation, date: cells[col('date','collection_date')] || today(),
       notes: iNotes >= 0 ? cells[iNotes] || '' : '',
     };
     out.push(collar);
@@ -820,7 +845,7 @@ export function parseAssayCsv(text, samples) {
   if (rows.length < 2) return { updated: null, matched: 0, unmatched: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
   const iId = col('sample_id', 'id');
-  const elementCols = detectElementColumns(rows[0]);
+  const elementCols = detectAssayColumns(rows[0]);
   if (iId < 0) return { updated: null, matched: 0, unmatched: [], error: 'Assay CSV needs a sample_id column.' };
   if (!elementCols.length) return { updated: null, matched: 0, unmatched: [], error: 'No element columns found (e.g. au, ag, cu, zn…).' };
 
@@ -828,6 +853,7 @@ export function parseAssayCsv(text, samples) {
   for (let r = 1; r < rows.length; r++) {
     const id = rows[r][iId];
     if (!id) continue;
+    if (results.has(id) || samples.filter(s => s.id === id).length > 1) return {updated: null, matched: 0, unmatched: [], error: `Ambiguous or duplicate sample ID ${id}; resolve before import.`};
     const { assays, detectionLimits } = readAssays(rows[r], elementCols);
     if (Object.keys(assays).length || Object.keys(detectionLimits).length) results.set(id, { assays, detectionLimits });
   }
@@ -849,7 +875,7 @@ export function parseAssayCsv(text, samples) {
       // value this round, the stale (now-empty) key would survive the
       // conditional spread below and linger in storage forever.
       const { detectionLimits: _stale, ...rest } = s;
-      return { ...rest, assays, ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) };
+      return { ...rest, assays, assayHistory: [...(s.assayHistory || []), { importedAt: new Date().toISOString(), source: 'legacy-csv-import', previous: { assays: s.assays || {}, detectionLimits: s.detectionLimits || {} }, incoming }], ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) };
     }
     return s;
   });
@@ -864,7 +890,7 @@ export function parseIntervalCsv(text) {
   const iHole = col('hole_id', 'id', 'hole');
   const iFrom = col('from', 'from_m');
   const iTo = col('to', 'to_m');
-  const elementCols = detectElementColumns(rows[0]);
+  const elementCols = detectAssayColumns(rows[0]);
   if (iHole < 0 || iFrom < 0 || iTo < 0) return { intervals: [], error: 'Interval CSV needs hole_id, from and to columns.' };
   const out = [];
   const rowErrors = []; // same per-row collection contract as parseSampleCsv
@@ -872,12 +898,12 @@ export function parseIntervalCsv(text) {
     const cells = rows[r];
     const from = parseFloat(cells[iFrom]);
     const to = parseFloat(cells[iTo]);
-    if (!cells[iHole] || Number.isNaN(from) || Number.isNaN(to) || from > to) {
+    if (!cells[iHole] || !Number.isFinite(from) || !Number.isFinite(to) || from < 0 || from >= to) {
       rowErrors.push(`row ${r + 1}: invalid interval`);
       continue;
     }
     const { assays, detectionLimits } = readAssays(cells, elementCols);
-    out.push({ holeId: cells[iHole], from, to, assays, ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) });
+    out.push({ recordId: crypto.randomUUID(), ...(col('sample_id', 'bag_id') >= 0 && cells[col('sample_id', 'bag_id')] ? { sampleId: cells[col('sample_id', 'bag_id')] } : {}), holeId: cells[iHole], from, to, assays, ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) });
   }
   if (!out.length) return { intervals: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No valid interval rows found.' };
   return { intervals: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
@@ -913,7 +939,7 @@ export function parseSurveyCsv(text) {
     const depth = parseFloat(cells[iDepth]);
     let azimuth = parseFloat(cells[iAzi]);
     const dip = parseFloat(cells[iDip]);
-    if (!cells[iHole] || Number.isNaN(depth) || depth < 0 || Number.isNaN(azimuth) || Number.isNaN(dip) || dip < -90 || dip > 90) {
+    if (!cells[iHole] || !Number.isFinite(depth) || depth < 0 || !Number.isFinite(azimuth) || !Number.isFinite(dip) || dip < -90 || dip > 90) {
       rowErrors.push(`row ${r + 1}: invalid survey shot`);
       continue;
     }
@@ -952,7 +978,7 @@ export function parseGeologyCsv(text) {
     const cells = rows[r];
     const from = parseFloat(cells[iFrom]);
     const to = parseFloat(cells[iTo]);
-    if (!cells[iHole] || Number.isNaN(from) || Number.isNaN(to) || from > to) {
+    if (!cells[iHole] || !Number.isFinite(from) || !Number.isFinite(to) || from < 0 || from >= to) {
       rowErrors.push(`row ${r + 1}: invalid geology interval`);
       continue;
     }
@@ -984,16 +1010,16 @@ function assayCsvCell(record, el) {
 // usable by a Competent Person, not just the grades.
 export function samplesToCsv(samples) {
   const elements = [...new Set(samples.flatMap(s => [...Object.keys(s.assays || {}), ...Object.keys(s.detectionLimits || {})]))];
-  const header = ['sample_id', 'lat', 'lng', ...elements.map(e => e.toLowerCase()), 'lithology', 'notes', 'sample_type', 'qaqc_type', 'duplicate_of', 'coord_source', 'date'];
+  const header = ['sample_id', 'lat', 'lng', ...elements.map(e => `${e}_${elementInfo(e).unit === '%' ? 'pct' : elementInfo(e).unit === 'g/t' ? 'gpt' : elementInfo(e).unit}`), 'lithology', 'notes', 'sample_type', 'qaqc_type', 'duplicate_of', 'coord_source', 'date'];
   return [
     header.join(','),
     ...samples.map(s => [
       s.id, s.lat, s.lng,
       ...elements.map(e => assayCsvCell(s, e)),
-      s.lith || '', (s.notes || '').replace(/,/g, ';'),
+      s.lith || '', s.notes || '',
       s.sampleType || 'rock_chip', s.qaqcType || 'none', s.duplicateOf || '', s.coordSource || 'unknown',
       s.date || '',
-    ].join(',')),
+    ].map(v => csvRow([v])).join(',')),
   ].join('\n');
 }
 
@@ -1005,13 +1031,13 @@ export function samplesToCsv(samples) {
 // a cosmetic one. Same detection-limit-aware cell format as samplesToCsv.
 export function intervalsToCsv(intervals) {
   const elements = [...new Set(intervals.flatMap(i => [...Object.keys(i.assays || {}), ...Object.keys(i.detectionLimits || {})]))];
-  const header = ['hole_id', 'from', 'to', 'width_m', ...elements.map(e => e.toLowerCase())];
+  const header = ['hole_id', 'sample_id', 'from', 'to', 'width_m', ...elements.map(e => `${e}_${elementInfo(e).unit === '%' ? 'pct' : elementInfo(e).unit === 'g/t' ? 'gpt' : elementInfo(e).unit}`)];
   return [
     header.join(','),
     ...intervals.map(i => [
-      i.holeId, i.from, i.to, (i.to - i.from).toFixed(2),
+      i.holeId, i.sampleId || '', i.from, i.to, (i.to - i.from).toFixed(2),
       ...elements.map(e => assayCsvCell(i, e)),
-    ].join(',')),
+    ].map(v => csvRow([v])).join(',')),
   ].join('\n');
 }
 
@@ -1021,7 +1047,7 @@ export function surveysToCsv(surveys) {
   const sorted = [...surveys].sort((a, b) => a.holeId.localeCompare(b.holeId) || a.depth - b.depth);
   return [
     'hole_id,depth,azimuth,dip',
-    ...sorted.map(s => [s.holeId, s.depth, s.azimuth, s.dip].join(',')),
+    ...sorted.map(s => [s.holeId, s.depth, s.azimuth, s.dip].map(v => csvRow([v])).join(',')),
   ].join('\n');
 }
 
@@ -1031,12 +1057,12 @@ export function surveysToCsv(surveys) {
 // same comma-to-semicolon escaping as samplesToCsv's notes column, since
 // this is a plain-comma CSV writer, not a quoting one.
 export function geologyToCsv(geology) {
-  const esc = (v) => (v || '').replace(/,/g, ';');
+  const esc = (v) => v || '';
   return [
     'hole_id,from,to,lithology,alteration,structure,notes',
     ...[...geology].sort((a, b) => a.holeId.localeCompare(b.holeId) || a.from - b.from).map(g => [
       g.holeId, g.from, g.to, esc(g.lithology), esc(g.alteration), esc(g.structure), esc(g.notes),
-    ].join(',')),
+    ].map(v => csvRow([v])).join(',')),
   ].join('\n');
 }
 
@@ -1045,8 +1071,8 @@ export function collarsToCsv(collars) {
     'hole_id,lat,lng,azimuth,dip,depth,notes,date',
     ...collars.map(c => [
       c.id, c.lat, c.lng, c.azimuth ?? '', c.dip ?? '', c.depth ?? '',
-      (c.notes || '').replace(/,/g, ';'), c.date || '',
-    ].join(',')),
+      c.notes || '', c.date || '',
+    ].map(v => csvRow([v])).join(',')),
   ].join('\n');
 }
 
@@ -1065,7 +1091,7 @@ export function targetsToCsv(targets) {
       (t.linkedSampleIds || []).join(' '),
       t.provenance?.analysedAt || t.createdAt || '',
       `"${evidenceSummary(t).replace(/"/g, "'")}"`,
-    ].join(',')),
+    ].map(v => csvRow([v])).join(',')),
   ].join('\n');
 }
 

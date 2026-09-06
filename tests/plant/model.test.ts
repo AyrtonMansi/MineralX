@@ -8,6 +8,8 @@ test("KML escapes document, equipment and route text without changing coordinate
     [140, -20],
   ];
   const m = {
+    georeference:{origin_WGS84:[140,-20],metres_per_longitude_degree:100000,metres_per_latitude_degree:110000,heading_degrees:0},
+    width:20,height:20,roads:[],zones:[],
     title: "Test <plan>",
     revision: "R&1",
     status: "Concept",
@@ -15,6 +17,7 @@ test("KML escapes document, equipment and route text without changing coordinate
     yard_geographic: p,
     equipment: [
       {
+        group:"wet",symbol:[{points:[[0,0],[1,0],[1,1],[0,0]],fill:true}],
         name: "Pump <one>",
         id: "A&B",
         w: 2,
@@ -26,6 +29,7 @@ test("KML escapes document, equipment and route text without changing coordinate
     ],
     streams: [
       {
+        kind:"wet",horizontal_route_m:3,
         id: "Line & 1",
         source: "A&B",
         target: "C",
