@@ -15,10 +15,8 @@ export function Hero() {
           <p className="eyebrow text-white/75">
             Australian resources. A broader ambition.
           </p>
-          <h1 className="display mt-6 max-w-4xl text-[clamp(2.5rem,6.3vw,5.6rem)]">
-            Advancing resources.
-            <br />
-            Building industry.
+          <h1 className="display mt-6 max-w-xl text-[28px] md:text-[36px]">
+            Advancing resources. Building industry.
           </h1>
           <p className="mt-7 max-w-xl text-base leading-relaxed text-white/80 md:text-lg">
             {hero.supporting}

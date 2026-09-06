@@ -32,7 +32,7 @@ export function PageIntro({
     <section className="border-b border-line pb-16 pt-36 md:pb-24 md:pt-48">
       <div className="container-site">
         <p className="eyebrow">{eyebrow}</p>
-        <h1 className="display mt-6 max-w-4xl text-4xl sm:text-5xl lg:text-7xl">
+        <h1 className="display mt-6 max-w-2xl text-[28px] md:text-[36px]">
           {title}
         </h1>
         <p className="body-copy mt-7 max-w-2xl md:text-lg">{intro}</p>
@@ -46,9 +46,8 @@ export function PartnerCTA() {
       <div className="container-site flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-end">
         <div>
           <p className="eyebrow">Build with MineralX</p>
-          <h2 className="display mt-5 max-w-2xl text-3xl md:text-5xl">
-            Progress starts with
-            <br />a conversation.
+          <h2 className="display mt-5 max-w-2xl text-2xl md:text-[28px]">
+            Progress starts with a conversation.
           </h2>
           <p className="body-copy mt-6 max-w-xl">
             Connect with us about investment, strategic collaboration and

@@ -18,7 +18,7 @@ export default function CompanyPage() {
         <div className="container-site grid gap-10 lg:grid-cols-12">
           <p className="eyebrow lg:col-span-4">Who we are</p>
           <div className="lg:col-span-8">
-            <h2 className="text-2xl font-semibold md:text-3xl">
+            <h2 className="text-xl font-medium md:text-2xl">
               Building from the resource forward.
             </h2>
             <p className="body-copy mt-6">
@@ -48,13 +48,13 @@ export default function CompanyPage() {
       <section className="border-t border-line py-20 md:py-28">
         <div className="container-site">
           <p className="eyebrow">How we work</p>
-          <h2 className="display mt-5 text-3xl md:text-5xl">
+          <h2 className="display mt-5 text-2xl md:text-[28px]">
             A considered path forward.
           </h2>
           <div className="mt-12 grid gap-10 md:grid-cols-3">
             {principles.map((p) => (
               <article key={p.title} className="border-t border-line pt-7">
-                <h3 className="text-xl font-semibold">{p.title}</h3>
+                <h3 className="text-xl font-medium">{p.title}</h3>
                 <p className="body-copy mt-4">{p.body}</p>
               </article>
             ))}

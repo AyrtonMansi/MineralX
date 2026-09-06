@@ -80,7 +80,7 @@ body {
   }
 
   .display {
-    @apply font-bold uppercase leading-[0.95] tracking-[-0.01em] text-white;
+    @apply font-normal normal-case leading-[1.25] tracking-[-0.015em] text-white;
   }
 
   .body-copy {

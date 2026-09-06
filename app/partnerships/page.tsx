@@ -19,7 +19,7 @@ export default function PartnershipsPage() {
           {partnerTypes.map((p, i) => (
             <article key={p.title} className="border-t border-line pt-7">
               <p className="eyebrow">0{i + 1}</p>
-              <h2 className="mt-7 text-2xl font-semibold">{p.title}</h2>
+              <h2 className="mt-7 text-xl font-medium">{p.title}</h2>
               <p className="body-copy mt-5">{p.body}</p>
             </article>
           ))}
@@ -29,10 +29,8 @@ export default function PartnershipsPage() {
         <div className="container-site grid gap-10 lg:grid-cols-2">
           <div>
             <p className="eyebrow">Start a conversation</p>
-            <h2 className="display mt-5 text-3xl md:text-5xl">
-              The right connection
-              <br />
-              moves things forward.
+            <h2 className="display mt-5 text-2xl md:text-[28px]">
+              The right connection moves things forward.
             </h2>
           </div>
           <div>

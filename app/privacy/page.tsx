@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       <section className="container-site py-16 md:py-24">
         <div className="max-w-3xl space-y-10">
           <div>
-            <h2 className="text-xl font-semibold">Contacting MineralX</h2>
+            <h2 className="text-xl font-medium">Contacting MineralX</h2>
             <p className="body-copy mt-4">
               The contact links on this website open your email application. The
               website does not submit an enquiry or upload the contents of your
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
             </p>
           </div>
           <div>
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-xl font-medium">
               Website hosting and analytics
             </h2>
             <p className="body-copy mt-4">
@@ -56,7 +56,7 @@ export default function PrivacyPage() {
             </p>
           </div>
           <div>
-            <h2 className="text-xl font-semibold">Your enquiries</h2>
+            <h2 className="text-xl font-medium">Your enquiries</h2>
             <p className="body-copy mt-4">
               Please include only information relevant to your enquiry. To ask
               about information you have provided, request a correction or raise
@@ -71,7 +71,7 @@ export default function PrivacyPage() {
             </p>
           </div>
           <div>
-            <h2 className="text-xl font-semibold">External services</h2>
+            <h2 className="text-xl font-medium">External services</h2>
             <p className="body-copy mt-4">
               Links to external websites and the email service you use are
               governed by their own privacy practices.

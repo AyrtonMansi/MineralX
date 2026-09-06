@@ -23,7 +23,7 @@ export default function DirectionPage() {
           >
             <p className="eyebrow md:col-span-2">{t.index} / Direction</p>
             <div className="md:col-span-4">
-              <h2 className="text-2xl font-semibold md:text-3xl">{t.title}</h2>
+              <h2 className="text-xl font-medium md:text-2xl">{t.title}</h2>
             </div>
             <div className="md:col-span-6">
               <p className="text-lg leading-relaxed text-white/90">{t.body}</p>
@@ -34,10 +34,8 @@ export default function DirectionPage() {
       </div>
       <section className="border-t border-line bg-ink-900 py-20">
         <div className="container-site grid gap-8 lg:grid-cols-2">
-          <h2 className="display text-3xl md:text-4xl">
-            Connected by purpose.
-            <br />
-            Advanced in stages.
+          <h2 className="display text-2xl md:text-[28px]">
+            Connected by purpose. Advanced in stages.
           </h2>
           <p className="body-copy max-w-xl">
             These themes form one corporate direction. We build progressively,

@@ -47,7 +47,7 @@ export default function ContactPage() {
             </div>
           </div>
           <div className="lg:col-span-6 lg:col-start-7">
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-xl font-medium">
               What would you like to discuss?
             </h2>
             <div className="mt-7 divide-y divide-line border-y border-line">

@@ -46,7 +46,7 @@ export default async function ArticlePage({ params }: Props) {
                   </>
                 )}
               </Eyebrow>
-              <h1 className="mt-6 text-3xl font-bold leading-[1.1] tracking-[-0.01em] text-white sm:text-4xl lg:text-5xl">
+              <h1 className="mt-6 text-[28px] font-normal leading-[1.25] tracking-[-0.015em] text-white md:text-[36px]">
                 {article.title}
               </h1>
 

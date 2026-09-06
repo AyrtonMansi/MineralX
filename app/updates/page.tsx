@@ -24,9 +24,7 @@ export default function UpdatesPage() {
         <section className="border-b border-line pb-16 pt-36 md:pb-20 md:pt-44">
           <div className="container-site">
             <Eyebrow>MineralX Resources</Eyebrow>
-            <h1 className="display mt-5 text-4xl sm:text-5xl lg:text-6xl">
-              Updates
-            </h1>
+            <h1 className="display mt-5 text-[28px] md:text-[36px]">Updates</h1>
             <p className="body-copy mt-5 max-w-xl">
               Company updates and announcements.
             </p>
@@ -37,7 +35,7 @@ export default function UpdatesPage() {
           <div className="container-site">
             {articles.length === 0 ? (
               <div className="max-w-xl">
-                <h2 className="text-xl font-semibold">Explore MineralX</h2>
+                <h2 className="text-xl font-medium">Explore MineralX</h2>
                 <p className="body-copy mt-4">
                   For an introduction to the company and our broader ambition,
                   explore our direction or contact the team.
@@ -68,7 +66,7 @@ export default function UpdatesPage() {
                       </p>
                     </div>
                     <div className="md:col-span-9">
-                      <h2 className="text-xl font-semibold text-white transition-opacity group-hover:opacity-75 md:text-2xl">
+                      <h2 className="text-xl font-medium text-white transition-opacity group-hover:opacity-75 md:text-2xl">
                         {a.title}
                       </h2>
                       {a.excerpt && (
