@@ -17,11 +17,11 @@ assert.match(html,/<meta name="viewport"/);
 assert.match(html,/<main id="main"/);
 assert.match(html,/<dialog[^>]*aria-labelledby="overlay-title"/);
 assert.match(html,/name="robots" content="noindex,nofollow"/,'Preview must not claim production indexability');
-const assets=new Set([...products.map(p=>`${p.image}.webp`),...categories.map(c=>`${c.image}.webp`),'weekend-campaign.webp','x-mark.svg']);
+const assets=new Set([...products.map(p=>`${p.image}.webp`),...categories.map(c=>`${c.image}.webp`),'weekend-campaign.webp','x-mark.svg','tonal-detail.jpeg','hardware-detail.jpeg','pocket-detail.jpeg']);
 for(const file of assets) assert.ok((await stat(resolve(root,'dist/assets',file))).size>100,`Missing asset: ${file}`);
 for(const match of html.matchAll(/(?:src|href)="\.\/([^"?#]+)"/g)) await stat(resolve(root,'dist',match[1]));
 for(const p of products){assert.ok(categories.some(c=>c.name===p.category));assert.ok(p.fitNote&&p.description&&p.details.length);}
-for(const route of ['collection','world','fits','information/release','information/product','information/privacy'])assert.ok((html+app).includes('#/'+route),`Missing navigation: ${route}`);
+for(const route of ['collection','world','fits','detail','information/release','information/product','information/privacy'])assert.ok((html+app).includes('#/'+route),`Missing navigation: ${route}`);
 assert.ok(!/https?:\/\//.test(html+app+css),'Storefront should not depend on remote scripts, fonts or images');
 assert.ok(!/fetch\s*\(|XMLHttpRequest/.test(app),'Preview must not submit customer data');
 const manifest=JSON.parse(await read('.openai/hosting.json'));

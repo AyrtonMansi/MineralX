@@ -21,7 +21,8 @@ There are no npm dependencies or installation steps. `dist/` is the authored sta
 - Eight concept product pages, individual fit notes, related pieces and size preferences.
 - Native accessible navigation, search and saved-edit dialogs, with Escape dismissal and focus restoration.
 - Saved edits in device-local storage; duplicate handling, removal, size changes and copy/export to the clipboard with a manual fallback.
-- Brand story, mineral palette, silhouette guide, release/product information and preview privacy page.
+- Brand story, mineral palette, silhouette guide, garment-detail editorial, release/product information and preview privacy page.
+- Product enquiries open an email draft to the verified MineralX contact; no email is sent by the website.
 - Original vector X mark and product/editorial images extracted from the supplied concept; an original generated coastal campaign hero.
 
 ## Product truth
@@ -52,4 +53,4 @@ Confirm the name and approved logo/font masters; approve final garments, photogr
 
 ## Verification scope
 
-`npm run build` checks entrypoints, local assets, navigation references, catalog integrity and JavaScript syntax. `npm test` covers combined filters, invalid/stale stored edits, deduplication and size persistence. Browser visual and interaction QA was not performed in this build session.
+`npm run build` checks entrypoints, local assets, navigation references, catalog integrity and JavaScript syntax. `npm test` covers combined filters, invalid/stale stored edits, deduplication and size persistence. Browser visual and interaction QA was not performed. The retained build and tests were rerun after the detail-page and accessibility refinements.

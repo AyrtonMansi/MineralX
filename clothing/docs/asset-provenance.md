@@ -10,3 +10,7 @@ All storefront images are served locally. No competitor images, hotlinks, tracki
 | `weekend-campaign.webp` | Original imagegen output created for this build on 6 September 2026, 1672 × 941, then encoded as WebP. Two adults in understated carbon/chalk apparel on a coastal headland, positioned to the right for text. It is a fictional campaign visual, not evidence of a real garment or shoot. |
 
 The supplied concept deck’s final page identifies its imagery as a combination of AI-generated visualisation, creative direction and compositing. The website discloses conceptual imagery and product-development status in its footer and product-information page. No claims about actual fabric, test performance, measurements or manufacturing location are derived from these visualisations.
+
+## Detail imagery added 6 September 2026
+
+`tonal-detail.jpeg`, `hardware-detail.jpeg` and `pocket-detail.jpeg` are original embedded images extracted without alteration from page 32 of `X_Brand_Concept_D01(2).pdf` (PDF objects 125, 127 and 128). They illustrate proposed branding, hardware and pocketing. They are concept imagery, not final product photographs or evidence of technical performance.

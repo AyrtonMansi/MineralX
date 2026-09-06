@@ -1,4 +1,4 @@
-export const brand = Object.freeze({name:'X',endorsement:'By MineralX',collection:'MINERAL / 01',status:'preview'});
+export const brand = Object.freeze({name:'X',endorsement:'By MineralX',collection:'MINERAL / 01',status:'preview',contact:'info@mineral-x.com.au'});
 export const categories = [
   {name:'Utility',number:'01',line:'Quietly capable.',description:'Considered layers and practical details for time in the field and everything after.',image:'utility-story'},
   {name:'Move',number:'02',line:'In your element.',description:'Closer fits and easy layers for training, recovery and the way home.',image:'move-story'},
