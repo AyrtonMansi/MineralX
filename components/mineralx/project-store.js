@@ -5,6 +5,7 @@
 
 import proj4 from 'proj4';
 import { parseCsv, csvRow } from './csv.js';
+import {idKey,isControl} from './record-rules.js';
 
 // Projected-coordinate support is worldwide, because a real exploration
 // group runs projects in different countries. A file's grid can't be
@@ -149,29 +150,21 @@ export function elementInfo(el) {
   return ELEMENTS[el] || GENERIC_THRESHOLDS;
 }
 
-// Grade of a sample for one element. 'pending' = no assay results at all
-// (neither a measured value nor a detection limit for anything). A
-// below-detection result ("<0.01 g/t Au") is a real, low result — it
-// grades as background, not as "not analysed" — because the sample WAS
-// tested and returned a genuine (if unremarkable) answer; conflating
-// that with "awaiting assay" would hide real QAQC-passing data from a
-// manager scanning for what's still outstanding.
+// A classification is only definite when the whole possible value range is in it.
+// Quarantined imported results and QA/QC controls never seed anomaly products.
 export function gradeOf(sample, element) {
-  const assays = sample?.assays || {};
-  const dls = sample?.detectionLimits || {};
-  if (Object.keys(assays).length === 0 && Object.keys(dls).length === 0) return 'pending';
-  const v = assays[element];
-  if (v != null && !Number.isNaN(v)) {
-    const t = elementInfo(element);
-    if (v >= t.high) return 'high';
-    if (v >= t.anom) return 'anom';
-    return 'bg';
-  }
-  if (dls[element] != null) return 'bg'; // below detection: real, low result
-  return 'none'; // assayed for other elements, but not this one
+  if(sample?.archivedAt)return 'archived';
+  if(isControl(sample))return 'control';
+  if(['unreviewed','held'].includes(sample?.assayReviewStatus))return 'unreviewed';
+  const assays=sample?.assays||{}, dls=sample?.detectionLimits||{}, lower=sample?.lowerLimits||{};
+  if(!Object.keys(assays).length&&!Object.keys(dls).length&&!Object.keys(lower).length)return 'pending';
+  const t=elementInfo(element),v=assays[element];
+  if(Number.isFinite(v)&&v>=0)return v>=t.high?'high':v>=t.anom?'anom':'bg';
+  if(dls[element]!=null){const limit=dls[element];return Number.isFinite(limit)&&limit>=0&&(limit<t.anom||limit===t.anom&&sample?.assayQualifiers?.[element]!=='≤')?'bg':'indeterminate';}
+  if(lower[element]!=null)return Number.isFinite(lower[element])&&lower[element]>=t.high?'high':'indeterminate';
+  return v!=null?'indeterminate':'none';
 }
-
-export const GRADE_COLORS = { high: '#C15F3C', anom: '#B08A3E', bg: '#A39C8C', none: '#8A857A', pending: '#F3F1E9' };
+export const GRADE_COLORS={high:'#C15F3C',anom:'#B08A3E',bg:'#A39C8C',none:'#8A857A',pending:'#F3F1E9',indeterminate:'#8275A0',unreviewed:'#8A857A',control:'#5E6E7A',archived:'#8A857A'};
 
 // Union of elements present in the data (always includes Au so the
 // selector never renders empty). Elements that only ever came back below
@@ -183,10 +176,12 @@ export function elementsInStore(store) {
     p.samples.forEach(s => {
       Object.keys(s.assays || {}).forEach(e => set.add(e));
       Object.keys(s.detectionLimits || {}).forEach(e => set.add(e));
+      Object.keys(s.lowerLimits || {}).forEach(e => set.add(e));
     });
     (p.intervals || []).forEach(i => {
       Object.keys(i.assays || {}).forEach(e => set.add(e));
       Object.keys(i.detectionLimits || {}).forEach(e => set.add(e));
+      Object.keys(i.lowerLimits || {}).forEach(e => set.add(e));
     });
   });
   return [...set];
@@ -204,9 +199,11 @@ export function formatAssay(el, value, { belowDetection = false } = {}) {
 // interval tables, popups) reads it the same way.
 export function assayDisplay(record, el) {
   const v = record?.assays?.[el];
-  if (v != null && !Number.isNaN(v)) return formatAssay(el, v);
+  if (Number.isFinite(v) && v>=0) return formatAssay(el, v);
   const dl = record?.detectionLimits?.[el];
-  if (dl != null) return formatAssay(el, dl, { belowDetection: true });
+  if (Number.isFinite(dl)) return `${record?.assayQualifiers?.[el]==='≤'?'≤':'<'}${formatAssay(el,dl)}`;
+  const lower=record?.lowerLimits?.[el];
+  if(Number.isFinite(lower))return `${record?.assayQualifiers?.[el]==='≥'?'≥':'>'}${formatAssay(el,lower)}`;
   return null;
 }
 
@@ -522,7 +519,7 @@ export function bestLinkedGrade(linkedSamples, element) {
   let best = null;
   linkedSamples.forEach(s => {
     const v = s?.assays?.[element];
-    if (validateAssayValue(v) && (best == null || v > best)) best = v;
+    if (!isControl(s) && !s.archivedAt && !['unreviewed','held'].includes(s.assayReviewStatus) && validateAssayValue(v) && (best == null || v > best)) best = v;
   });
   return best;
 }
@@ -651,27 +648,37 @@ function normaliseEnum(raw, validSet) {
 export function parseAssayCell(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return { value: null, detectionLimit: null };
-  const match = text.match(/^([<≤])?\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)$/);
+  const match = text.match(/^([<≤>≥])?\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)$/);
   if (!match) return { value: null, detectionLimit: null };
   const value = Number(match[2]);
   if (!Number.isFinite(value)) return { value: null, detectionLimit: null };
+  if(match[1]&&value<0)return {value:null,detectionLimit:null};
+  if(['>','≥'].includes(match[1]))return value<0?{value:null,detectionLimit:null}:{value:null,detectionLimit:null,lowerLimit:value,qualifier:match[1]};
+  if(match[1]==='≤')return {value:null,detectionLimit:Math.abs(value),qualifier:'≤'};
   if (match[1] || value < 0) return { value: null, detectionLimit: Math.abs(value) };
   return { value, detectionLimit: null };
 }
 
 function readAssays(cells, elementCols) {
-  const assays = {}, detectionLimits = {}, reportedAssays = [];
+  const assays = {}, detectionLimits = {}, lowerLimits = {}, assayQualifiers = {}, reportedAssays = [];
+  const seen = new Set();
   elementCols.forEach(({ index, element, sourceUnit, factor = 1, unitWasExplicit }) => {
+    if (seen.has(element)) throw new Error(`Multiple columns for ${element}. Separate analytical methods before import.`);
+    seen.add(element);
     const reportedText = String(cells[index] ?? '').trim();
     if (!reportedText) return;
     if (!Number.isFinite(factor)) throw new Error(`Unknown source unit for ${element}. Use ppb, ppm, g/t or %. No data was imported.`);
-    const { value, detectionLimit } = parseAssayCell(reportedText);
-    if (value == null && detectionLimit == null) throw new Error(`Unresolved analytical result for ${element}: ${reportedText}. No data was imported.`);
-    if (value != null) assays[element] = value * factor;
-    else if (detectionLimit != null) detectionLimits[element] = detectionLimit * factor;
+    const { value, detectionLimit, lowerLimit, qualifier } = parseAssayCell(reportedText);
+    if (value == null && detectionLimit == null && lowerLimit == null) throw new Error(`Unresolved analytical result for ${element}: ${reportedText}. No data was imported.`);
+    const scaled=(value??detectionLimit??lowerLimit)*factor;
+    if(!Number.isFinite(scaled))throw new Error(`Result for ${element} is outside the supported numerical range.`);
+    if (value != null) assays[element] = scaled;
+    else if (detectionLimit != null) detectionLimits[element] = scaled;
+    else lowerLimits[element] = scaled;
+    if(qualifier)assayQualifiers[element]=qualifier;
     reportedAssays.push({ element, reportedText, sourceUnit: sourceUnit || elementInfo(element).unit, unitWasExplicit: !!unitWasExplicit });
   });
-  return { assays, detectionLimits, reportedAssays };
+  return { assays, detectionLimits, lowerLimits, assayQualifiers, reportedAssays };
 }
 
 // Rock chip CSV → samples. Recognised headers (case-insensitive):
@@ -688,7 +695,7 @@ export function parseSampleCsv(text, existing, prefix, crs) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { samples: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
-  const iId = col('sample_id', 'id');
+  const iId = col('sample_id', 'bag_id', 'id');
   const iLat = col('lat', 'latitude', 'northing');
   const iLng = col('lng', 'lon', 'longitude', 'easting');
   const iLith = col('lith', 'lithology');
@@ -699,7 +706,7 @@ export function parseSampleCsv(text, existing, prefix, crs) {
   const iDupOf = col('duplicate_of', 'dup_of', 'original_id');
   const iCoordSrc = col('coord_source', 'coordsource', 'coord_src');
   const elementCols = detectAssayColumns(rows[0]);
-  if (iLat < 0 || iLng < 0) return { samples: [], error: 'CSV needs lat/northing and lng/easting columns.' };
+  if ((iLat < 0 || iLng < 0) && iQaqc < 0) return { samples: [], error: 'CSV needs lat/northing and lng/easting columns, or an explicit QA/QC control type.' };
 
   const out = [];
   let pool = existing;
@@ -715,27 +722,20 @@ export function parseSampleCsv(text, existing, prefix, crs) {
   const fieldWarnings = [];
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
-    const rawLat = parseFloat(cells[iLat]);
-    const rawLng = parseFloat(cells[iLng]);
-    if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) {
-      rowErrors.push(`row ${r + 1}: invalid coordinates`);
-      continue;
-    }
-
-    let lat = rawLat, lng = rawLng;
-    if (crs) {
-      ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, crs));
-    } else if (isProjectedCoord(rawLat, rawLng)) {
-      return { samples: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
-    }
-
-    if (!validateCoordinates(lat, lng)) {
-      rowErrors.push(`row ${r + 1}: coordinates out of range`);
-      continue;
+    const controlType=normaliseEnum(cells[iQaqc],QAQC_TYPES);
+    const noGeometry=['blank','standard'].includes(controlType)&&!String(cells[iLat]??'').trim()&&!String(cells[iLng]??'').trim();
+    const rawLat = String(cells[iLat]??'').trim()?Number(cells[iLat]):NaN;
+    const rawLng = String(cells[iLng]??'').trim()?Number(cells[iLng]):NaN;
+    let lat = noGeometry?null:rawLat, lng = noGeometry?null:rawLng;
+    if(!noGeometry){
+      if (!Number.isFinite(rawLat) || !Number.isFinite(rawLng)) { rowErrors.push(`row ${r + 1}: invalid coordinates`); continue; }
+      if (crs) ({ lat, lng } = reprojectEastingNorthing(rawLng, rawLat, crs));
+      else if (isProjectedCoord(rawLat, rawLng)) return { samples: [], error: null, needsProjection: true, easting: rawLng, northing: rawLat };
+      if (!validateCoordinates(lat, lng)) { rowErrors.push(`row ${r + 1}: coordinates out of range`); continue; }
     }
 
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
-    if (pool.some(record => record.id === id)) { rowErrors.push(`row ${r + 1}: duplicate ID ${id}`); continue; }
+    if (pool.some(record => idKey(record.id) === idKey(id))) { rowErrors.push(`row ${r + 1}: duplicate ID ${id}`); continue; }
 
     let sampleType = 'rock_chip';
     if (iSampleType >= 0 && cells[iSampleType]) {
@@ -753,18 +753,23 @@ export function parseSampleCsv(text, existing, prefix, crs) {
       if (v) coordSource = v; else fieldWarnings.push(`row ${r + 1}: unrecognised coord_source "${cells[iCoordSrc]}"`);
     }
     const duplicateOf = (iDupOf >= 0 && cells[iDupOf]) ? cells[iDupOf] : null;
-    const { assays, detectionLimits, reportedAssays } = readAssays(cells, elementCols);
+    const { assays, detectionLimits, lowerLimits, assayQualifiers, reportedAssays } = readAssays(cells, elementCols);
 
     const sample = {
       id, lat, lng,
       recordId: crypto.randomUUID(),
-      reportedAssays,
+      reportedAssays, lowerLimits, assayQualifiers,
+      lifecycle:'imported',
+      referenceMaterial:cells[col('reference_material','crm')]||'',
+      collector:cells[col('collector')]||'',
+      ...(cells[col('archived_at')]?{archivedAt:cells[col('archived_at')],archiveReason:cells[col('archive_reason')]||'Imported archived record'}:{}),
+      assayReviewStatus:reportedAssays.length?'unreviewed':'pending',
       sourceRow: Object.fromEntries(rows[0].map((h,i) => [h,cells[i] ?? ''])),
       assays,
       ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}),
       lith: iLith >= 0 ? cells[iLith] || '' : '',
       notes: iNotes >= 0 ? cells[iNotes] || '' : '',
-      date: iDate >= 0 && cells[iDate] ? cells[iDate] : today(),
+      date: iDate >= 0 && cells[iDate] ? cells[iDate] : '',
       importedAt: new Date().toISOString(),
       sampleType, qaqcType, coordSource,
       ...(duplicateOf ? { duplicateOf } : {}),
@@ -792,7 +797,8 @@ export function parseCollarCsv(text, existing, prefix, crs) {
   const iLng = col('lng', 'lon', 'longitude', 'easting');
   const iAzi = col('azimuth', 'azi');
   const iDip = col('dip');
-  const iDepth = col('depth', 'eoh', 'planned_depth');
+  const iDepth = col('actual_depth','depth', 'eoh');
+  const iPlannedDepth = col('planned_depth');
   const iNotes = col('notes', 'comment', 'comments');
   if (iLat < 0 || iLng < 0) return { collars: [], error: 'CSV needs lat/northing and lng/easting columns.' };
 
@@ -801,8 +807,8 @@ export function parseCollarCsv(text, existing, prefix, crs) {
   const rowErrors = []; // same per-row collection contract as parseSampleCsv
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
-    const rawLat = parseFloat(cells[iLat]);
-    const rawLng = parseFloat(cells[iLng]);
+    const rawLat = (String(cells[iLat]??'').trim()?Number(cells[iLat]):NaN);
+    const rawLng = (String(cells[iLng]??'').trim()?Number(cells[iLng]):NaN);
     if (Number.isNaN(rawLat) || Number.isNaN(rawLng)) {
       rowErrors.push(`row ${r + 1}: invalid coordinates`);
       continue;
@@ -820,15 +826,15 @@ export function parseCollarCsv(text, existing, prefix, crs) {
       continue;
     }
 
-    const num = (i) => { const v = i >= 0 ? parseFloat(cells[i]) : NaN; return Number.isNaN(v) ? null : v; };
+    const num = i => i<0||!String(cells[i]??'').trim()?null:Number(cells[i]);
     const id = (iId >= 0 && cells[iId]) ? cells[iId] : nextId(pool, prefix);
-    if (pool.some(record => record.id === id)) { rowErrors.push(`row ${r + 1}: duplicate ID ${id}`); continue; }
+    if (pool.some(record => idKey(record.id) === idKey(id))) { rowErrors.push(`row ${r + 1}: duplicate ID ${id}`); continue; }
     const orientation = { azimuth: num(iAzi), dip: num(iDip), depth: num(iDepth) };
     if (Object.values(orientation).some(v => v != null && !Number.isFinite(v)) || (orientation.azimuth != null && (orientation.azimuth < 0 || orientation.azimuth >= 360)) || (orientation.dip != null && Math.abs(orientation.dip) > 90) || (orientation.depth != null && orientation.depth <= 0)) {
       rowErrors.push(`row ${r + 1}: invalid collar orientation or depth`); continue;
     }
     const collar = {
-      id, recordId: crypto.randomUUID(), lat, lng, ...orientation, date: cells[col('date','collection_date')] || today(),
+      id, recordId: crypto.randomUUID(), lat, lng, ...orientation, actualDepth:orientation.depth, plannedDepth:num(iPlannedDepth), date: cells[col('date','collection_date')] || '',
       notes: iNotes >= 0 ? cells[iNotes] || '' : '',
     };
     out.push(collar);
@@ -844,7 +850,7 @@ export function parseAssayCsv(text, samples) {
   const rows = splitCsv(text);
   if (rows.length < 2) return { updated: null, matched: 0, unmatched: [], error: 'CSV needs a header row and at least one data row.' };
   const col = headerIndex(rows[0]);
-  const iId = col('sample_id', 'id');
+  const iId = col('sample_id', 'bag_id', 'id');
   const elementCols = detectAssayColumns(rows[0]);
   if (iId < 0) return { updated: null, matched: 0, unmatched: [], error: 'Assay CSV needs a sample_id column.' };
   if (!elementCols.length) return { updated: null, matched: 0, unmatched: [], error: 'No element columns found (e.g. au, ag, cu, zn…).' };
@@ -853,29 +859,32 @@ export function parseAssayCsv(text, samples) {
   for (let r = 1; r < rows.length; r++) {
     const id = rows[r][iId];
     if (!id) continue;
-    if (results.has(id) || samples.filter(s => s.id === id).length > 1) return {updated: null, matched: 0, unmatched: [], error: `Ambiguous or duplicate sample ID ${id}; resolve before import.`};
-    const { assays, detectionLimits } = readAssays(rows[r], elementCols);
-    if (Object.keys(assays).length || Object.keys(detectionLimits).length) results.set(id, { assays, detectionLimits });
+    if (results.has(idKey(id)) || samples.filter(s => idKey(s.id) === idKey(id)).length > 1) return {updated: null, matched: 0, unmatched: [], error: `Ambiguous or duplicate sample ID ${id}; resolve before import.`};
+    const { assays, detectionLimits, lowerLimits, assayQualifiers } = readAssays(rows[r], elementCols);
+    if (Object.keys(assays).length || Object.keys(detectionLimits).length || Object.keys(lowerLimits).length) results.set(idKey(id), { assays, detectionLimits, lowerLimits, assayQualifiers });
   }
   let matched = 0;
   const updated = samples.map(s => {
-    if (results.has(s.id)) {
+    if (results.has(idKey(s.id))) {
       matched++;
-      const incoming = results.get(s.id);
+      const incoming = results.get(idKey(s.id));
       const assays = { ...(s.assays || {}), ...incoming.assays };
       const detectionLimits = { ...(s.detectionLimits || {}), ...incoming.detectionLimits };
+      const lowerLimits = {...(s.lowerLimits||{}),...incoming.lowerLimits};
+      const assayQualifiers = {...(s.assayQualifiers||{}),...incoming.assayQualifiers};
       // A new lab result always supersedes an older one for that element —
       // a fresh measured value clears any stale detection-limit entry
       // (and vice versa), so an element never ends up in both maps at once.
-      Object.keys(incoming.assays).forEach(el => { delete detectionLimits[el]; });
-      Object.keys(incoming.detectionLimits).forEach(el => { delete assays[el]; });
-      results.delete(s.id);
+      for(const el of Object.keys(incoming.assays)){delete detectionLimits[el];delete lowerLimits[el];delete assayQualifiers[el];}
+      for(const el of Object.keys(incoming.detectionLimits)){delete assays[el];delete lowerLimits[el];if(!incoming.assayQualifiers[el])delete assayQualifiers[el];}
+      for(const el of Object.keys(incoming.lowerLimits)){delete assays[el];delete detectionLimits[el];}
+      results.delete(idKey(s.id));
       // Spread from a copy of `s` with any old detectionLimits key
       // stripped first — otherwise, if every element resolved to a real
       // value this round, the stale (now-empty) key would survive the
       // conditional spread below and linger in storage forever.
       const { detectionLimits: _stale, ...rest } = s;
-      return { ...rest, assays, assayHistory: [...(s.assayHistory || []), { importedAt: new Date().toISOString(), source: 'legacy-csv-import', previous: { assays: s.assays || {}, detectionLimits: s.detectionLimits || {} }, incoming }], ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) };
+      return { ...rest, assays, lowerLimits, assayQualifiers, assayReviewStatus:'unreviewed', assayHistory: [...(s.assayHistory || []), { importedAt: new Date().toISOString(), source: 'legacy-csv-import', previous: { assays: s.assays || {}, detectionLimits: s.detectionLimits || {} }, incoming }], ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) };
     }
     return s;
   });
@@ -896,14 +905,14 @@ export function parseIntervalCsv(text) {
   const rowErrors = []; // same per-row collection contract as parseSampleCsv
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
-    const from = parseFloat(cells[iFrom]);
-    const to = parseFloat(cells[iTo]);
+    const from = (String(cells[iFrom]??'').trim()?Number(cells[iFrom]):NaN);
+    const to = (String(cells[iTo]??'').trim()?Number(cells[iTo]):NaN);
     if (!cells[iHole] || !Number.isFinite(from) || !Number.isFinite(to) || from < 0 || from >= to) {
       rowErrors.push(`row ${r + 1}: invalid interval`);
       continue;
     }
-    const { assays, detectionLimits } = readAssays(cells, elementCols);
-    out.push({ recordId: crypto.randomUUID(), ...(col('sample_id', 'bag_id') >= 0 && cells[col('sample_id', 'bag_id')] ? { sampleId: cells[col('sample_id', 'bag_id')] } : {}), holeId: cells[iHole], from, to, assays, ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) });
+    const { assays, detectionLimits, lowerLimits, assayQualifiers, reportedAssays } = readAssays(cells, elementCols);
+    out.push({ recordId: crypto.randomUUID(), ...(col('sample_id', 'bag_id') >= 0 && cells[col('sample_id', 'bag_id')] ? { sampleId: cells[col('sample_id', 'bag_id')] } : {}), holeId: cells[iHole], from, to, assays, lowerLimits, assayQualifiers, reportedAssays, sampleType:normaliseEnum(cells[col('sample_type','method')],SAMPLE_TYPES)||'other', qaqcType:normaliseEnum(cells[col('qaqc_type')],QAQC_TYPES)||'none', assayReviewStatus:'unreviewed',sourceRow:Object.fromEntries(rows[0].map((h,i)=>[h,cells[i]??''])), ...(Object.keys(detectionLimits).length ? { detectionLimits } : {}) });
   }
   if (!out.length) return { intervals: [], error: rowErrors.length ? `No importable rows (${rowErrors.join('; ')}).` : 'No valid interval rows found.' };
   return { intervals: out, error: null, warnings: rowErrors.length ? `Skipped ${rowErrors.length} row${rowErrors.length === 1 ? '' : 's'}: ${rowErrors.join('; ')}` : null };
@@ -976,8 +985,8 @@ export function parseGeologyCsv(text) {
   const rowErrors = [];
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r];
-    const from = parseFloat(cells[iFrom]);
-    const to = parseFloat(cells[iTo]);
+    const from = (String(cells[iFrom]??'').trim()?Number(cells[iFrom]):NaN);
+    const to = (String(cells[iTo]??'').trim()?Number(cells[iTo]):NaN);
     if (!cells[iHole] || !Number.isFinite(from) || !Number.isFinite(to) || from < 0 || from >= to) {
       rowErrors.push(`row ${r + 1}: invalid geology interval`);
       continue;
@@ -999,18 +1008,19 @@ export function parseGeologyCsv(text) {
 // blank if that element was never analysed at all — so exporting and
 // re-importing is lossless instead of silently dropping BDL results.
 function assayCsvCell(record, el) {
-  const v = record.assays?.[el];
-  if (v != null) return v;
-  const dl = record.detectionLimits?.[el];
-  return dl != null ? `<${dl}` : '';
+  const value=record.assays?.[el],dl=record.detectionLimits?.[el],lower=record.lowerLimits?.[el];
+  if(Number.isFinite(value))return value;
+  if(Number.isFinite(dl))return `${record.assayQualifiers?.[el]==='≤'?'≤':'<'}${dl}`;
+  if(Number.isFinite(lower))return `${record.assayQualifiers?.[el]==='≥'?'≥':'>'}${lower}`;
+  return '';
 }
 
 // sample_type/qaqc_type/duplicate_of/coord_source round-trip through
 // export/import — a report or handover CSV needs this provenance to be
 // usable by a Competent Person, not just the grades.
 export function samplesToCsv(samples) {
-  const elements = [...new Set(samples.flatMap(s => [...Object.keys(s.assays || {}), ...Object.keys(s.detectionLimits || {})]))];
-  const header = ['sample_id', 'lat', 'lng', ...elements.map(e => `${e}_${elementInfo(e).unit === '%' ? 'pct' : elementInfo(e).unit === 'g/t' ? 'gpt' : elementInfo(e).unit}`), 'lithology', 'notes', 'sample_type', 'qaqc_type', 'duplicate_of', 'coord_source', 'date'];
+  const elements = [...new Set(samples.flatMap(s => [...Object.keys(s.assays || {}), ...Object.keys(s.detectionLimits || {}), ...Object.keys(s.lowerLimits || {})]))];
+  const header = ['sample_id', 'lat', 'lng', ...elements.map(e => `${e}_${elementInfo(e).unit === '%' ? 'pct' : elementInfo(e).unit === 'g/t' ? 'gpt' : elementInfo(e).unit}`), 'lithology', 'notes', 'sample_type', 'qaqc_type', 'duplicate_of', 'coord_source', 'date', 'assay_review_status', 'reference_material', 'collector','archived_at','archive_reason'];
   return [
     header.join(','),
     ...samples.map(s => [
@@ -1018,7 +1028,7 @@ export function samplesToCsv(samples) {
       ...elements.map(e => assayCsvCell(s, e)),
       s.lith || '', s.notes || '',
       s.sampleType || 'rock_chip', s.qaqcType || 'none', s.duplicateOf || '', s.coordSource || 'unknown',
-      s.date || '',
+      s.date || '', s.assayReviewStatus||'unreviewed', s.referenceMaterial||'',s.collector||'',s.archivedAt||'',s.archiveReason||'',
     ].map(v => csvRow([v])).join(',')),
   ].join('\n');
 }
@@ -1030,7 +1040,7 @@ export function samplesToCsv(samples) {
 // unable to leave the app once entered is a data-preservation gap, not
 // a cosmetic one. Same detection-limit-aware cell format as samplesToCsv.
 export function intervalsToCsv(intervals) {
-  const elements = [...new Set(intervals.flatMap(i => [...Object.keys(i.assays || {}), ...Object.keys(i.detectionLimits || {})]))];
+  const elements = [...new Set(intervals.flatMap(i => [...Object.keys(i.assays || {}), ...Object.keys(i.detectionLimits || {}), ...Object.keys(i.lowerLimits || {})]))];
   const header = ['hole_id', 'sample_id', 'from', 'to', 'width_m', ...elements.map(e => `${e}_${elementInfo(e).unit === '%' ? 'pct' : elementInfo(e).unit === 'g/t' ? 'gpt' : elementInfo(e).unit}`)];
   return [
     header.join(','),

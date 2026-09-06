@@ -2,7 +2,8 @@
 // DOM/string builders and styling lookups with no closure over component
 // state or MapLibre instances. Split out of MineralXWorkspace.jsx purely
 // to keep that file's size down; nothing here changed behavior.
-import { PROJECT_COLORS, formatAssay, evidenceSummary, assayDisplay } from './project-store';
+import { PROJECT_COLORS, formatAssay, evidenceSummary, assayDisplay } from './project-store.js';
+import {isControl} from './record-rules.js';
 
 export { evidenceSummary }; // re-exported for callers already importing it from here
 
@@ -117,9 +118,9 @@ export function samplePopupHtml(s) {
   // Below-detection results ("<0.01 g/t Au") are real, reported results —
   // showing "awaiting assay" for a sample that's actually all-BDL would
   // wrongly tell a geologist standing at the pin that nothing came back yet.
-  const elements = [...new Set([...Object.keys(s.assays || {}), ...Object.keys(s.detectionLimits || {})])];
-  const assayLine = elements.length
-    ? `<strong>${elements.map((el) => assayDisplay(s, el)).join(' · ')}</strong>`
+  const elements = [...new Set([...Object.keys(s.assays || {}), ...Object.keys(s.detectionLimits || {}),...Object.keys(s.lowerLimits||{})])];
+  const assayLine = ['unreviewed','held'].includes(s.assayReviewStatus) ? '<span class="mx-pop-pending">Unreviewed imported results</span>' : elements.length
+    ? `<strong>${elements.map((el) => esc(assayDisplay(s, el))).join(' · ')}</strong>`
     : '<span class="mx-pop-pending">awaiting assay</span>';
   return `
     <div class="mx-pop">
@@ -127,16 +128,16 @@ export function samplePopupHtml(s) {
       <div class="mx-pop-assay">${assayLine}</div>
       ${s.lith ? `<div class="mx-pop-row">${esc(s.lith)}</div>` : ''}
       ${s.notes ? `<div class="mx-pop-notes">${esc(s.notes)}</div>` : ''}
-      ${s.photo ? `<img class="mx-pop-photo" src="${s.photo}" alt="${esc(s.id)}" />` : ''}
-      <div class="mx-pop-coords">${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}${s.date ? ` · ${s.date}` : ''}</div>
+      ${safePhotoUrl(s.photo) ? `<img class="mx-pop-photo" src="${esc(s.photo)}" alt="${esc(s.id)}" />` : ''}
+      <div class="mx-pop-coords">${Number.isFinite(s.lat)?s.lat.toFixed(4):'—'}, ${Number.isFinite(s.lng)?s.lng.toFixed(4):'—'}${s.date ? ` · ${esc(s.date)}` : ''}</div>
     </div>`;
 }
 
 export function collarPopupHtml(c, intervals, element) {
-  const holeIntervals = intervals.filter((i) => i.holeId === c.id);
+  const holeIntervals = intervals.filter((i) => i.holeId === c.id && !i.archivedAt && !isControl(i) && !['unreviewed','held'].includes(i.assayReviewStatus));
   const best = holeIntervals.reduce((b, i) => {
     const v = i.assays?.[element];
-    return v != null && (b == null || v > b.assays[element]) ? i : b;
+    return Number.isFinite(v) && (b == null || v > b.assays[element]) ? i : b;
   }, null);
   return `
     <div class="mx-pop">
@@ -144,6 +145,12 @@ export function collarPopupHtml(c, intervals, element) {
       <div class="mx-pop-assay"><strong>${c.depth != null ? `${c.depth} m` : 'Drill hole'}</strong>${c.azimuth != null ? ` · ${c.azimuth}°/${c.dip ?? '?'}°` : ''}</div>
       ${holeIntervals.length ? `<div class="mx-pop-row">${holeIntervals.length} assay interval${holeIntervals.length === 1 ? '' : 's'}</div>` : '<div class="mx-pop-notes">No downhole assays yet</div>'}
       ${best ? `<div class="mx-pop-notes">Best: ${formatAssay(element, best.assays[element])} · ${best.from}–${best.to} m</div>` : ''}
-      <div class="mx-pop-coords">${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}${c.date ? ` · ${c.date}` : ''}</div>
+      <div class="mx-pop-coords">${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}${c.date ? ` · ${esc(c.date)}` : ''}</div>
     </div>`;
+}
+
+export function safePhotoUrl(url){
+  if(typeof url!=='string')return false;
+  if(/^data:image\/(?:jpeg|png|webp|avif);base64,[A-Za-z0-9+/=]+$/.test(url))return true;
+  try {const parsed=new URL(url);return parsed.protocol==='https:';}catch{return false;}
 }

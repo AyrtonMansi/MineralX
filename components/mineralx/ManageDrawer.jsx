@@ -65,12 +65,14 @@ function NewProjectManager({ api, onClose }) {
   const readKml = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
       const { error: err } = parseKmlBoundary(String(reader.result));
       if (err) { setError(err); setKmlText(null); setKmlName(null); return; }
       setError(null);
       setKmlText(String(reader.result));
       setKmlName(file.name);
+      }catch(err){setImportMsg({error:true,text:err.message});}
     };
     reader.readAsText(file);
   };
@@ -107,6 +109,7 @@ function NewProjectManager({ api, onClose }) {
 // ── Project settings ───────────────────────────────────────────────────
 function ProjectManager({ project, api, onClose }) {
   const [name, setName] = useState(project.name);
+  const [error,setError]=useState('');
 
   return (
     <div className="mx-manage-sections">
@@ -115,10 +118,11 @@ function ProjectManager({ project, api, onClose }) {
           label="Project name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onBlur={() => { if (name.trim() && name !== project.name) api.renameProject(project.id, name.trim()); }}
+          onBlur={() => {try{if(name.trim()&&name!==project.name)api.renameProject(project.id,name.trim());}catch(err){setError(err.message);}}}
         />
+        {error&&<p role="alert">{error}</p>}
         <ManageField label="Sample ID prefix" value={project.idPrefix} readOnly />
-        <ManageField label="Datum" value="GDA2020 (lat/lng)" readOnly />
+        <ManageField label="Display coordinates" value="WGS84 latitude / longitude" readOnly />
         <ManageField label="Created" value={project.createdAt || '—'} readOnly />
         <ManageField label="Boundary" value={project.boundary ? project.boundary.name : 'None — add via KML upload'} readOnly />
       </div>
@@ -129,13 +133,12 @@ function ProjectManager({ project, api, onClose }) {
         <button
           type="button" className="mx-btn-danger mx-btn-sm"
           onClick={() => {
-            if (window.confirm(`Delete “${project.name}” and all its data? (Undo with Ctrl+Z if you change your mind.)`)) {
-              api.deleteProject(project.id);
-              onClose();
+            if (window.confirm(`Archive “${project.name}”? Records remain in full backups.`)) {
+              try{api.deleteProject(project.id);onClose();}catch(err){setError(err.message);}
             }
           }}
         >
-          {MxIcons.trash} Delete project
+          {MxIcons.trash} Archive project
         </button>
       </div>
     </div>
@@ -174,11 +177,12 @@ function RockChipManager({ project, api, onClose, editId }) {
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
-  const saveSample = () => {
-    const lat = parseFloat(form.lat);
-    const lng = parseFloat(form.lng);
+  const saveSample = async () => {
+    try {
+    const lat = form.lat.trim()?Number(form.lat):NaN;
+    const lng = form.lng.trim()?Number(form.lng):NaN;
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      setError('Easting and northing are required (decimal degrees).');
+      setError('Latitude and longitude are required (decimal degrees).');
       return;
     }
     if (isProjectedCoord(lat, lng)) {
@@ -210,10 +214,13 @@ function RockChipManager({ project, api, onClose, editId }) {
     };
     if (editSample) {
       api.updateSample(project.id, editSample.id, patch);
+      if(photo&&photo!==editSample.photo)api.attachPhoto(project.id,editSample.id,photo);
     } else {
       api.addSamples(project.id, [{ id: form.id.trim() || autoId, date: today(), ...patch }]);
     }
+    await api.flush();
     onClose();
+    }catch(err){setError(err.message);}
   };
 
   const attachPhoto = (file) => {
@@ -226,18 +233,21 @@ function RockChipManager({ project, api, onClose, editId }) {
   const importFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
       const text = String(reader.result);
       const r = parseSampleCsv(text, project.samples, project.idPrefix);
       if (r.needsProjection) { setPendingProjection({ text, easting: r.easting, northing: r.northing, fileName: file.name }); return; }
       if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
       api.addSamples(project.id, r.samples, file.name);
       setImportMsg({ error: false, text: `Imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+      }catch(err){setImportMsg({error:true,text:err.message});}
     };
     reader.readAsText(file);
   };
 
   const confirmProjection = (crs) => {
+    try {
     if (!pendingProjection) return;
     const { text, fileName } = pendingProjection;
     const r = parseSampleCsv(text, project.samples, project.idPrefix, crs);
@@ -245,6 +255,7 @@ function RockChipManager({ project, api, onClose, editId }) {
     if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
     api.addSamples(project.id, r.samples, fileName);
     setImportMsg({ error: false, text: `Reprojected from ${crsLabel(crs)} — imported ${r.samples.length} sample${r.samples.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+    }catch(err){setImportMsg({error:true,text:err.message});}
   };
 
   return (
@@ -261,7 +272,7 @@ function RockChipManager({ project, api, onClose, editId }) {
           <ManageField label="Sample ID" value={form.id} onChange={setField('id')} readOnly={!!editSample} placeholder={`Auto: ${autoId}`} />
           <div className="mx-manage-row-2">
             <ManageSelect
-              label="Sample type" value={form.sampleType} onChange={setField('sampleType')}
+              label="Sample type" disabled={!!editSample} value={form.sampleType} onChange={setField('sampleType')}
               options={SAMPLE_TYPES.map(t => [t, SAMPLE_TYPE_LABELS[t]])}
             />
             <ManageSelect
@@ -272,15 +283,15 @@ function RockChipManager({ project, api, onClose, editId }) {
           </div>
           <ManageField label="Lithology" value={form.lith} onChange={setField('lith')} placeholder="e.g. Quartz vein float" />
           <div className="mx-manage-row-2">
-            <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="146.2570" />
-            <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.0665" />
+            <ManageField label="Longitude (WGS84)" value={form.lng} onChange={setField('lng')} placeholder="146.2570" />
+            <ManageField label="Latitude (WGS84)" value={form.lat} onChange={setField('lat')} placeholder="-20.0665" />
           </div>
-          <AssayInputs rows={assayRows} setRows={setAssayRows} />
+          <p className="mx-manage-hint">Laboratory values are read-only here. Import a certificate in Review to change analytical results with retained history.</p>
           {/* QAQC: what this sample IS in the lab-quality audit trail — a */}
           {/* standard/blank/duplicate, or an original. Field duplicates */}
           {/* record which original sample they were split alongside. */}
           <ManageSelect
-            label="QAQC type" value={form.qaqcType} onChange={setField('qaqcType')}
+            label="QAQC type" disabled={!!editSample} value={form.qaqcType} onChange={setField('qaqcType')}
             title="Standards, blanks and duplicates form the QAQC record a Competent Person needs to verify assay quality"
             options={QAQC_TYPES.map(q => [q, QAQC_TYPE_LABELS[q]])}
           />
@@ -364,42 +375,48 @@ function DrillHoleManager({ project, api, onClose, editId }) {
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
-  const saveCollar = () => {
-    const lat = parseFloat(form.lat);
-    const lng = parseFloat(form.lng);
+  const saveCollar = async () => {
+    try {
+    const lat = form.lat.trim()?Number(form.lat):NaN;
+    const lng = form.lng.trim()?Number(form.lng):NaN;
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      setError('Easting and northing are required (decimal degrees).');
+      setError('Latitude and longitude are required (decimal degrees).');
       return;
     }
     if (isProjectedCoord(lat, lng)) {
       setError('These look like projected metres (MGA easting/northing), not decimal degrees — use CSV import to confirm a zone and reproject.');
       return;
     }
-    const num = (v) => { const n = parseFloat(v); return Number.isNaN(n) ? null : n; };
+    const num = v => v.trim()?Number(v):null;
     const patch = { lat, lng, azimuth: num(form.azimuth), dip: num(form.dip), depth: num(form.depth), notes: form.notes.trim() };
     if (editCollar) {
       api.updateCollar(project.id, editCollar.id, patch);
     } else {
       api.addCollars(project.id, [{ id: form.id.trim() || autoId, date: today(), ...patch }]);
     }
+    await api.flush();
     onClose();
+    }catch(err){setError(err.message);}
   };
 
   const importCollars = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
       const text = String(reader.result);
       const r = parseCollarCsv(text, project.collars, holePrefix);
       if (r.needsProjection) { setPendingProjection({ text, easting: r.easting, northing: r.northing, fileName: file.name }); return; }
       if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
       api.addCollars(project.id, r.collars, file.name);
       setImportMsg({ error: false, text: `Imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+      }catch(err){setImportMsg({error:true,text:err.message});}
     };
     reader.readAsText(file);
   };
 
   const confirmProjection = (crs) => {
+    try {
     if (!pendingProjection) return;
     const { text, fileName } = pendingProjection;
     const r = parseCollarCsv(text, project.collars, holePrefix, crs);
@@ -407,12 +424,14 @@ function DrillHoleManager({ project, api, onClose, editId }) {
     if (r.error) { setImportMsg({ error: true, text: r.error }); return; }
     api.addCollars(project.id, r.collars, fileName);
     setImportMsg({ error: false, text: `Reprojected from ${crsLabel(crs)} — imported ${r.collars.length} collar${r.collars.length === 1 ? '' : 's'}.${r.warnings ? ` ${r.warnings}` : ''}` });
+    }catch(err){setImportMsg({error:true,text:err.message});}
   };
 
   const importIntervals = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
       const { intervals, error: err, warnings } = parseIntervalCsv(String(reader.result));
       if (err) { setImportMsg({ error: true, text: err }); return; }
       const known = new Set(project.collars.map(c => c.id));
@@ -421,6 +440,7 @@ function DrillHoleManager({ project, api, onClose, editId }) {
       if (!matched.length) { setImportMsg({ error: true, text: 'No hole IDs in this file matched the project.' }); return; }
       api.addIntervals(project.id, matched, file.name);
       setImportMsg({ error: false, text: `Imported ${matched.length} interval${matched.length === 1 ? '' : 's'}.${skipped ? ` ${skipped} skipped (unknown hole ID).` : ''}${warnings ? ` ${warnings}` : ''}` });
+      }catch(err){setImportMsg({error:true,text:err.message});}
     };
     reader.readAsText(file);
   };
@@ -428,7 +448,8 @@ function DrillHoleManager({ project, api, onClose, editId }) {
   const importSurveys = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
       const { surveys, error: err, warnings } = parseSurveyCsv(String(reader.result));
       if (err) { setImportMsg({ error: true, text: err }); return; }
       const known = new Set(project.collars.map(c => c.id));
@@ -437,6 +458,7 @@ function DrillHoleManager({ project, api, onClose, editId }) {
       if (!matched.length) { setImportMsg({ error: true, text: 'No hole IDs in this file matched the project.' }); return; }
       api.addSurveys(project.id, matched, file.name);
       setImportMsg({ error: false, text: `Imported ${matched.length} survey shot${matched.length === 1 ? '' : 's'}.${skipped ? ` ${skipped} skipped (unknown hole ID).` : ''}${warnings ? ` ${warnings}` : ''}` });
+      }catch(err){setImportMsg({error:true,text:err.message});}
     };
     reader.readAsText(file);
   };
@@ -444,7 +466,8 @@ function DrillHoleManager({ project, api, onClose, editId }) {
   const importGeology = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
       const { geology, error: err, warnings } = parseGeologyCsv(String(reader.result));
       if (err) { setImportMsg({ error: true, text: err }); return; }
       const known = new Set(project.collars.map(c => c.id));
@@ -453,6 +476,7 @@ function DrillHoleManager({ project, api, onClose, editId }) {
       if (!matched.length) { setImportMsg({ error: true, text: 'No hole IDs in this file matched the project.' }); return; }
       api.addGeology(project.id, matched, file.name);
       setImportMsg({ error: false, text: `Imported ${matched.length} logged interval${matched.length === 1 ? '' : 's'}.${skipped ? ` ${skipped} skipped (unknown hole ID).` : ''}${warnings ? ` ${warnings}` : ''}` });
+      }catch(err){setImportMsg({error:true,text:err.message});}
     };
     reader.readAsText(file);
   };
@@ -473,8 +497,8 @@ function DrillHoleManager({ project, api, onClose, editId }) {
         <div className="mx-manage-form">
           <ManageField label="Hole ID" value={form.id} onChange={setField('id')} readOnly={!!editCollar} placeholder={`Auto: ${autoId}`} />
           <div className="mx-manage-row-2">
-            <ManageField label="Easting (lng)" value={form.lng} onChange={setField('lng')} placeholder="146.2545" />
-            <ManageField label="Northing (lat)" value={form.lat} onChange={setField('lat')} placeholder="-20.0648" />
+            <ManageField label="Longitude (WGS84)" value={form.lng} onChange={setField('lng')} placeholder="146.2545" />
+            <ManageField label="Latitude (WGS84)" value={form.lat} onChange={setField('lat')} placeholder="-20.0648" />
           </div>
           <div className="mx-manage-row-2">
             <ManageField label="Azimuth (°)" value={form.azimuth} onChange={setField('azimuth')} placeholder="90" />
@@ -600,13 +624,15 @@ function BoundaryManager({ project, api }) {
   const replaceKml = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
       const { coords, error } = parseKmlBoundary(String(reader.result));
       if (error) { setMsg({ error: true, text: error }); return; }
       const boundaryName = name.trim() || file.name.replace(/\.kml$/i, '');
       api.setBoundary(project.id, boundaryName, coords, file.name);
       setName(boundaryName);
       setMsg({ error: false, text: 'Boundary updated — zoomed to it.' });
+      }catch(err){setMsg({error:true,text:err.message});}
     };
     reader.readAsText(file);
   };

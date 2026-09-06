@@ -24,3 +24,10 @@
 @media(max-width:1050px){.mxf-status{display:none}.mxf-navigation nav button{padding:11px 12px}.mxf-panel{width:470px}}
 @media(max-width:650px){.mxf-navigation{left:10px;right:10px;top:74px;gap:5px;flex-wrap:wrap}.mxf-navigation nav{width:100%;justify-content:space-between}.mxf-navigation nav button{padding:10px 12px;font-size:12px}.mxf-collect{position:fixed;right:12px;bottom:16px;z-index:50;padding:12px!important}.mxf-panel{top:133px;left:10px;right:10px;bottom:67px;width:auto;max-width:none}.mxf-panel-body{padding:16px}.mxf-panel-head{padding:16px}.mxf-form{gap:11px}.mxf-release{left:10px;bottom:17px;max-width:calc(100% - 175px);font-size:8px;padding:5px 7px}.mxf-map-context{left:10px;top:132px;max-width:calc(100% - 20px);padding:17px}.mxf-recovery{top:134px;left:10px;right:10px;max-width:none;width:auto}.mxf-welcome{padding:23px;top:47%}.mx-workspace .mx-panel{top:133px;left:10px}.mx-workspace .mx-data-drawer-wrap,.mx-workspace .mx-manage-drawer-wrap{top:133px}.mxf-welcome h1{font-size:26px}}
 @media(prefers-reduced-motion:reduce){.mxf-panel,.mxf-navigation{animation:none;transition:none}}
+/* Consolidated field release: readable touch inputs and visible durable-save state. */
+.mxf-panel input:not([type=checkbox]),.mxf-panel select,.mxf-panel textarea,.mxf-welcome input{font-size:16px;min-height:44px}
+.mxf-panel button,.mxf-navigation nav button,.mxf-map-context button,.mxf-welcome button{min-height:44px}
+.mxf-panel-head h1{font-size:24px;font-weight:400}.mxf-label{font-size:13px}.mxf-panel p{font-size:14px}.mxf-card summary{line-height:1.6;overflow-wrap:anywhere}
+.mxf-status[data-state=blocked],.mxf-status[data-state=conflict],.mxf-status[data-state=saving]{display:block}
+@media(max-width:1050px){.mxf-status{display:block;position:fixed;top:127px;right:24px;max-width:calc(100% - 48px);font-size:10px;z-index:35}}
+@media(max-width:650px){.mxf-status{top:auto;bottom:68px;right:10px;max-width:calc(100% - 20px);padding:5px 8px}.mxf-panel button{font-size:14px}.mxf-navigation nav button{padding:9px;font-size:12px}.mxf-label{font-size:12px}.mxf-panel-body{padding-bottom:36px}}

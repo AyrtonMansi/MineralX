@@ -1,3 +1,4 @@
+import {isControl} from './record-rules.js';
 // Field-tasking helpers for the target worklist: turn a set of targets
 // into a walkable waypoint sequence for a handheld GPS, and link samples
 // to the target they were taken at. All pure and side-effect-free so the
@@ -7,8 +8,7 @@
 // which (unlike the Next bundler) requires it to resolve the import.
 import { evidenceSummary } from './project-store.js';
 
-// A sample taken within this radius of a target is treated as a sample
-// *of* that target — close enough that, on the ground, it's the same spot.
+// Retained for proximity suggestions only, never evidence of sampling completion.
 export const LINK_RADIUS_M = 100;
 
 const R_EARTH_M = 6_371_000;
@@ -25,18 +25,19 @@ export function metersBetween(aLat, aLng, bLat, bLng) {
   return 2 * R_EARTH_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-// Link newly-added samples to any target they fall within range of, and
+// Link only explicitly assigned primary field samples; proximity is not evidence.
+// Then
 // advance that target to 'sampled' if it was still earlier in the pipeline
 // (never drags a confirmed/barren target backwards). Returns a new targets
 // array only where something actually changed, so React can skip work.
-export function autoLinkSamples(targets, newSamples, radius = LINK_RADIUS_M) {
+export function autoLinkSamples(targets, newSamples) {
   if (!targets?.length || !newSamples?.length) return targets;
   const advanceable = new Set(['proposed', 'planned', 'visited']);
   let changed = false;
   const next = targets.map((t) => {
     const existing = new Set(t.linkedSampleIds || []);
     const hits = newSamples.filter(
-      (s) => s.id && !existing.has(s.id) && metersBetween(t.lat, t.lng, s.lat, s.lng) <= radius,
+      (s) => s.id && !isControl(s) && !s.archivedAt && s.lifecycle==='collected' && ((s.targetRecordId && s.targetRecordId===t.recordId) || (s.targetId && s.targetId===t.id)) && !existing.has(s.id),
     );
     if (!hits.length) return t;
     changed = true;

@@ -9,7 +9,7 @@ import {
 import { loadLayerUiState, saveLayerUiState } from './layer-ui-store';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
-  elementInfo, elementsInStore, formatAssay, detectCsvKind,
+  elementInfo, elementsInStore, formatAssay, detectCsvKind, validateCoordinates,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
   samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, geologyToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
   pushUndo, undo, redo, undoAvailable, redoAvailable, clearUndo,
@@ -25,11 +25,13 @@ import {
   gradeRadius, esc, samplePopupHtml, collarPopupHtml,
   buildTargetMarkerEl, targetPopupHtml,
 } from './map-render-helpers';
+import {isControl} from './record-rules.js';
+import {importPhysicalIntervals,importDownhole,archiveRecord,correctSample,correctCollar} from './project-integrity.js';
 import { autoLinkSamples } from './target-tasking';
 import { useFlowAnalysis } from './useFlowAnalysis';
 import FieldWorkflowPanel from './FieldWorkflowPanel';
 import { useDurableStore } from './useDurableStore';
-import { assertUniqueIds, assertCollar, assertInterval, stageAssays, upgradeStore } from './field-workflows.js';
+import { assertUniqueIds, assertCollar, assertInterval, stageAssays, addAssayBatch, upgradeStore, collectSample } from './field-workflows.js';
 import { parseCsv } from './csv.js';
 
 // ── Main component ─────────────────────────────────────────────────────
@@ -90,7 +92,7 @@ export default function MineralXWorkspace() {
       const lng = coords.reduce((s, c) => s + c[1], 0) / coords.length;
       return { lat, lng };
     }
-    const pts = [...(activeProject?.samples || []), ...(activeProject?.collars || [])];
+    const pts = [...(activeProject?.samples || []), ...(activeProject?.collars || [])].filter(p=>!p.archivedAt&&!isControl(p)&&validateCoordinates(p.lat,p.lng));
     if (pts.length) {
       const lat = pts.reduce((s, p) => s + p.lat, 0) / pts.length;
       const lng = pts.reduce((s, p) => s + p.lng, 0) / pts.length;
@@ -163,13 +165,14 @@ export default function MineralXWorkspace() {
         return upgradeStore({version: 8, projects: [next]}).projects[0];
       }),
     }));
-  }, []);
+  }, [setStore]);
 
   const addFile = useCallback((pid, name, category, meta) => {
     updateProject(pid, p => ({ ...p, files: [{ name, category, meta, date: today() }, ...p.files] }));
   }, [updateProject]);
 
   const focusOn = useCallback((lat, lng, featureId) => {
+    if(!validateCoordinates(lat,lng))return;
     const map = mapInstance.current;
     if (!map) return;
     map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14), duration: 600 });
@@ -187,17 +190,19 @@ export default function MineralXWorkspace() {
   // operations (focusOn, exportProject) don't snapshot.
   const api = useMemo(() => ({
     focusOn,
+    flush: persistence.flush,
     addSamples: (pid, samples, fileName) => {
       pushUndo(store);
-      // Any new sample that lands within range of a target links to it and
-      // advances that target to 'sampled' — the geologist collects, the
-      // app does the bookkeeping (Engage). Applies to manual adds, CSV
-      // imports and AI extraction alike, since all three land here.
-      updateProject(pid, p => ({
-        ...p,
-        samples: [...p.samples, ...samples],
-        targets: autoLinkSamples(p.targets || [], samples),
-      }));
+      updateProject(pid, p => {
+        if(fileName)return {...p,samples:[...p.samples,...samples.map(s=>({...s,assayReviewStatus:Object.keys({...s.assays,...s.detectionLimits,...s.lowerLimits}).length?'unreviewed':'pending',lifecycle:'imported'}))]};
+        let next=p;
+        for(const sample of samples){
+          const duplicate=sample.duplicateOf?next.samples.find(s=>s.id.toUpperCase()===sample.duplicateOf.toUpperCase()):null;
+          next=collectSample(next,{...sample,duplicateRecordId:duplicate?.recordId});
+          if(sample.photo)next={...next,samples:next.samples.map(s=>s.id===sample.id?{...s,photo:sample.photo}:s)};
+        }
+        return next;
+      });
       if (fileName) addFile(pid, fileName, 'Rock chips', `${samples.length} samples`);
       const last = samples[samples.length - 1];
       if (last) focusOn(last.lat, last.lng);
@@ -211,26 +216,15 @@ export default function MineralXWorkspace() {
     },
     applyAssays: (pid, text, fileName) => {
       try {
-        const project = store.projects.find(p => p.id === pid);
-        const batch = stageAssays(project, text, fileName || 'Imported results');
+        let batch;
         clearUndo();
-        updateProject(pid, p => ({ ...p, assayBatches: [...(p.assayBatches || []), batch] }));
+        updateProject(pid, p => {batch=stageAssays(p,text,fileName||'Imported results');return addAssayBatch(p,batch);});
         return { matched: new Set(batch.results.map(r => r.sampleRecordId).filter(Boolean)).size, unmatched: [], staged: true, error: null };
       } catch (error) { return { matched: 0, unmatched: [], error: error.message }; }
     },
     addIntervals: (pid, intervals, fileName) => {
       pushUndo(store);
-      updateProject(pid, p => {
-        const all = [...(p.intervals || [])];
-        for (const interval of intervals) {
-          const collar = p.collars.find(c => c.id === interval.holeId);
-          if (!collar) throw new Error(`Hole ${interval.holeId} is not in this project.`);
-          assertInterval(interval.from, interval.to, all, interval.holeId);
-          if (collar.depth != null && interval.to > collar.depth) throw new Error('An imported interval extends past the recorded hole depth.');
-          all.push({ ...interval, collarRecordId: collar.recordId });
-        }
-        return { ...p, intervals: all };
-      });
+      updateProject(pid, p => importPhysicalIntervals(p, intervals));
       if (fileName) addFile(pid, fileName, 'Drill assays', `${intervals.length} intervals`);
     },
     // Downhole survey shots — a hole's actual deviation, distinct from the
@@ -238,7 +232,7 @@ export default function MineralXWorkspace() {
     // storage shape as intervals.
     addSurveys: (pid, surveys, fileName) => {
       pushUndo(store);
-      updateProject(pid, p => ({ ...p, surveys: [...(p.surveys || []), ...surveys] }));
+      updateProject(pid, p => importDownhole(p, 'surveys', surveys));
       if (fileName) addFile(pid, fileName, 'Downhole surveys', `${surveys.length} survey shots`);
     },
     // Geological logging — lithology/alteration/structure by from-to, the
@@ -246,7 +240,7 @@ export default function MineralXWorkspace() {
     // intervals (lab assays for a from-to); same flat storage shape.
     addGeology: (pid, geology, fileName) => {
       pushUndo(store);
-      updateProject(pid, p => ({ ...p, geology: [...(p.geology || []), ...geology] }));
+      updateProject(pid, p => importDownhole(p, 'geology', geology));
       if (fileName) addFile(pid, fileName, 'Geological logging', `${geology.length} logged interval${geology.length === 1 ? '' : 's'}`);
     },
     setBoundary: (pid, name, coords, fileName) => {
@@ -263,19 +257,13 @@ export default function MineralXWorkspace() {
         samples: p.samples.map(s => (s.id === sampleId ? { ...s, photo: dataUrl } : s)),
       }));
     },
-    deleteSample: (pid, id) => {
-      pushUndo(store);
-      updateProject(pid, p => ({ ...p, samples: p.samples.filter(s => s.id !== id) }));
+    deleteSample: (pid,id) => {
+      const reason=window.prompt('Reason for archiving this sample (source and custody remain):');
+      if(reason)updateProject(pid,p=>archiveRecord(p,'samples',id,reason));
     },
-    deleteCollar: (pid, id) => {
-      pushUndo(store);
-      updateProject(pid, p => ({
-        ...p,
-        collars: p.collars.filter(c => c.id !== id),
-        intervals: (p.intervals || []).filter(i => i.holeId !== id),
-        surveys: (p.surveys || []).filter(s => s.holeId !== id),
-        geology: (p.geology || []).filter(g => g.holeId !== id),
-      }));
+    deleteCollar: (pid,id) => {
+      const reason=window.prompt('Reason for archiving this hole (all downhole history remains):');
+      if(reason)updateProject(pid,p=>archiveRecord(p,'collars',id,reason));
     },
     // Correct a sample already on record — a typo'd lithology, a re-picked
     // coordinate, an assay entered wrong — without the delete+re-add that
@@ -288,19 +276,13 @@ export default function MineralXWorkspace() {
     // side effect of fixing a lithology typo.
     updateSample: (pid, id, patch) => {
       pushUndo(store);
-      updateProject(pid, p => ({
-        ...p,
-        samples: p.samples.map(s => (s.id === id ? { ...s, ...patch, id: s.id, recordId: s.recordId, assays: s.assays, detectionLimits: s.detectionLimits, assayHistory: s.assayHistory, holeId: s.holeId, collarRecordId: s.collarRecordId, from: s.from, to: s.to } : s)),
-      }));
+      updateProject(pid, p => correctSample(p,id,patch));
     },
     // Same reasoning as updateSample — id stays fixed since intervals/
     // surveys/geology are keyed by holeId, not nested inside the collar.
     updateCollar: (pid, id, patch) => {
       pushUndo(store);
-      updateProject(pid, p => ({
-        ...p,
-        collars: p.collars.map(c => (c.id === id ? { ...c, ...patch, id: c.id, recordId: c.recordId } : c)),
-      }));
+      updateProject(pid, p => correctCollar(p,id,patch));
     },
     // Promote a terrain-analysis candidate into a persistent, tracked
     // target. The evidence (score + what seeded it + the element and date
@@ -382,10 +364,13 @@ export default function MineralXWorkspace() {
       updateProject(pid, p => ({ ...p, name }));
     },
     deleteProject: (pid) => {
-      pushUndo(store);
+      const reason=window.prompt('Reason for archiving this project (all records retained in backups):');
+      if(!reason?.trim())return;
+      clearUndo();
       setStore(prev => {
+        const project=prev.projects.find(p=>p.id===pid);if(!project)throw new Error('Project not found.');
         const projects = prev.projects.filter(p => p.id !== pid);
-        return { ...prev, projects, activeProjectId: projects[0]?.id || null };
+        return { ...prev, projects, archivedProjects:[...(prev.archivedProjects||[]),{...project,archivedAt:new Date().toISOString(),archiveReason:reason.trim()}], activeProjectId: projects[0]?.id || null };
       });
     },
     createProject: (name, kmlText) => {
@@ -443,7 +428,7 @@ export default function MineralXWorkspace() {
     // `store` (not `store.projects`) in deps: pushUndo snapshots the whole
     // store, so a stale closure would capture an out-of-date activeProjectId.
     // activeElement: promoteTarget freezes it into the target's provenance.
-  }), [store, updateProject, addFile, focusOn, activeElement]);
+  }), [store, updateProject, addFile, focusOn, activeElement, persistence.flush, setStore]);
 
   // Promoting a candidate always lands it in the active project — the one
   // whose data is on screen when the analysis was run. Defined after `api`
@@ -485,11 +470,11 @@ export default function MineralXWorkspace() {
   const doUndo = useCallback(() => {
     const prev = undo(store);
     if (prev) setStore(prev);
-  }, [store]);
+  }, [store, setStore]);
   const doRedo = useCallback(() => {
     const next = redo(store);
     if (next) setStore(next);
-  }, [store]);
+  }, [store, setStore]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -647,7 +632,7 @@ export default function MineralXWorkspace() {
       const chipKey = `${p.id}:chips`;
       (groupMembers.current.get(chipKey) || new Set()).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
       const chipIds = new Set();
-      [...p.samples.filter(s => !s.holeId), ...(p.observations || []).map(o => ({ ...o, observation: true }))].forEach(s => {
+      [...p.samples.filter(s => !s.holeId && !s.archivedAt && !isControl(s) && validateCoordinates(s.lat,s.lng)), ...(p.observations || []).map(o => ({ ...o, observation: true }))].forEach(s => {
         const g = gradeOf(s, activeElement);
         const swatch = {
           width: `${gradeRadius(g) * 2}px`, height: `${gradeRadius(g) * 2}px`, borderRadius: '50%',
@@ -668,7 +653,7 @@ export default function MineralXWorkspace() {
       const holeKey = `${p.id}:holes`;
       (groupMembers.current.get(holeKey) || new Set()).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
       const holeIds = new Set();
-      p.collars.forEach(c => {
+      p.collars.filter(c=>!c.archivedAt&&validateCoordinates(c.lat,c.lng)).forEach(c => {
         const el = buildMarkerEl(
           { width: '12px', height: '12px', background: '#F3F1E9', border: '2px solid #211E1A', boxShadow: '0 1px 4px rgba(0,0,0,0.4)' },
           c.id,

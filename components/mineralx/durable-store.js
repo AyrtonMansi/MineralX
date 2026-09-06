@@ -22,6 +22,7 @@ export async function readWorkspace(){
     const tx=db.transaction(STORE,'readonly'), request=tx.objectStore(STORE).get('workspace');
     tx.oncomplete=()=>{db.close();resolve(request.result||null);};
     tx.onerror=()=>{db.close();reject(tx.error);};
+    tx.onabort=()=>{db.close();reject(tx.error||new Error('Local database read was interrupted.'));};
   });
 }
 // The read, revision comparison and write share one serializable IDB transaction.
