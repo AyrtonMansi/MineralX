@@ -1,0 +1,33 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> mineralx-resources@1.0.0 test:geology
+> node --import tsx --test tests/geology/*.test.ts tests/geology/*.test.mjs
+
+✔ large original files and photos round trip through checked private references (16.059368ms)
+✔ corrupted shared attachments fail integrity checks before a workspace can be replaced (2.807095ms)
+✔ failed upload throws and an already uploaded immutable hash is reused (1.831406ms)
+✔ explicit project creation establishes owner and durable audit; idempotent retry creates no duplicate (3994.55098ms)
+✔ membership and reads are isolated from other products and users; clients cannot bypass audit (46.716597ms)
+✔ collector capture works but stale devices and reused operation IDs cannot overwrite records (37.027001ms)
+✔ collector cannot import assays, select released results, alter QC rules or close material custody (33.719248ms)
+✔ reviewer can release and source versions remain in server audit; latest revision is required (30.664532ms)
+✔ direct RPC inputs require valid structure, unique IDs and meaningful change reason (15.973534ms)
+✔ only owners manage memberships and the last owner cannot be removed (10.313142ms)
+✔ extraction quota checks membership and cannot be raised by client RPC arguments (108.089367ms)
+✔ private attachments enforce membership and cannot be overwritten through direct storage writes (33.675836ms)
+✔ collector can import quarantined results but cannot authorize extra work or forge review fields (37.04545ms)
+✔ owners can revoke project access without affecting other authenticated accounts (10.567624ms)
+✔ daily user extraction quota persists across project changes (13.644129ms)
+✔ simultaneous stale tab writes cannot silently discard a committed sample (13.842438ms)
+✔ offline queue and metadata commit together, and newer edits survive an older sync acknowledgement (4.276246ms)
+✔ reopening database restores pending records and drafts after app termination (2.776353ms)
+✔ backup retains photos, source files and drafts; corrupt checksums cannot restore (8.134687ms)
+✔ viewer edits abort without partially updating records or queue (1.435754ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5072.492987

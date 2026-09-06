@@ -1,0 +1,105 @@
+{
+  "status": "PARTIAL_RECOVERY_NOT_COMPLETE_IMPLEMENTATION",
+  "original_base": "167d3728aa98e913d723d4d5b318af3b98a932ce",
+  "original_geological_source": "8918ded239aedb64a35d6d24690e9f91d750d170",
+  "lost_local_commit_prefix": "073a899",
+  "lost_full_commit_sha": null,
+  "lost_branch": "codex/geology-enterprise",
+  "preservation_branch": "preservation/geology-394df3e5da33-20260906",
+  "remote_main_observed_read_only": "5827a3f08fd4e227da4734f12c1663b8786140c5",
+  "other_session_branch": "codex/geology-release-20260906",
+  "other_session_sha": "ada7589a639b5891d258017697f558a3fdcc320a",
+  "original_paths": [
+    {
+      "path": "/workspace/scratch/394df3e5da33/mineralx",
+      "exists_at_checkpoint": false
+    },
+    {
+      "path": "/workspace/scratch/394df3e5da33/mineralx-geology-implementation",
+      "exists_at_checkpoint": false
+    },
+    {
+      "path": "/workspace/scratch/394df3e5da33/mineralx-geology-review",
+      "exists_at_checkpoint": false
+    }
+  ],
+  "subagent_workspaces": "All implementation agents used the same mineralx-geology-implementation worktree; no separate live agents or recoverable agent worktrees remain.",
+  "post_commit_changes_known_missing": [
+    "components/mineralx/useGeologyPersistence.js",
+    "lib/geology/offline-store.js",
+    "tests/geology/offline-store.test.mjs"
+  ],
+  "tests_historical_not_rerun": {
+    "unit": {
+      "passed": 212,
+      "failed": 0
+    },
+    "geology_database_offline_attachments": {
+      "passed": 20,
+      "failed": 0
+    },
+    "gic": {
+      "passed": 17,
+      "failed": 0
+    },
+    "production_build": "passed, warnings retained in log",
+    "browser_acceptance": "not executed"
+  },
+  "files": [
+    {
+      "path": "migration/202609060003_geology.sql",
+      "bytes": 18760,
+      "sha256": "8e181a3f3193dbe5c58594b85fa5ab519b106389192c1e6192a028c777f6088d"
+    },
+    {
+      "path": "source-fragments/mx-api.txt",
+      "bytes": 6930,
+      "sha256": "5187f42de605d7e3c3aea18eb0a68b856046d61595b18da58ca99179a3a91044"
+    },
+    {
+      "path": "source-fragments/mx-offline-contracts.mjs",
+      "bytes": 5270,
+      "sha256": "dc51703f2d5155d5d258acddaf3f30c694bd05aacc87c72c1e533be1b48e4b88"
+    },
+    {
+      "path": "source-fragments/mx-replace-parsers.py",
+      "bytes": 14024,
+      "sha256": "19b065bd0bd0ef861d3a68fa66d3fc219bcdb084b669d74eeba925541991fb23"
+    },
+    {
+      "path": "source-fragments/mx-ui.txt",
+      "bytes": 8862,
+      "sha256": "263b1bdc16bc3d1b75d7131d308597d0abbab2ce15b296a57223a8faecc6d1c8"
+    },
+    {
+      "path": "test-results/mx-confirmed-unit.log",
+      "bytes": 21454,
+      "sha256": "1bc2b8cf377d276ca1ffaf2181753316175e6db6261aff028b3a97fb63bed14f"
+    },
+    {
+      "path": "test-results/mx-final-unit.log",
+      "bytes": 27869,
+      "sha256": "8bbea976e78d224fb3532da7a751b4e1b7e978d2b9283b6ce6d49cfa762dea24"
+    },
+    {
+      "path": "test-results/mx-geology-tests.log",
+      "bytes": 2355,
+      "sha256": "338e8753daa4d6133ffbb984ebede7c649b6b2156bb1b178568e65eddff31f34"
+    },
+    {
+      "path": "test-results/mx-gic-tests.log",
+      "bytes": 1813,
+      "sha256": "6f29d6d815e1ef37a9ea0a444914aa71cc1f57f3d377e47b409c720437a0d271"
+    },
+    {
+      "path": "test-results/mx-release-build.log",
+      "bytes": 6414,
+      "sha256": "be7cce58281c208ad9f7a649ad3f3cad81d47290ec2f4ce8fa1c7da0b99bd3ba"
+    },
+    {
+      "path": "test-results/mx-store-test.log",
+      "bytes": 7713,
+      "sha256": "a5ad9aac48a8d0ea273054aea2b9242c31330df5021732ac678cd7203f06bcd3"
+    }
+  ]
+}

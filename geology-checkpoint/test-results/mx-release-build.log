@@ -1,0 +1,96 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> mineralx-resources@1.0.0 prebuild
+> node clothing/scripts/verify.mjs && node clothing/scripts/mount.mjs
+
+Static build verified: 8 products, 4 categories, 18 local assets, all entrypoint references and JS syntax valid.
+Clothing storefront staged at /clothing.
+
+> mineralx-resources@1.0.0 build
+> next build
+
+   ▲ Next.js 15.5.25
+
+   Creating an optimized production build ...
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (108kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (259kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ ✓ Compiled successfully in 14.9s
+   Linting and checking validity of types ...
+
+./components/mineralx/FieldDesk.jsx
+70:6  Warning: React Hook useEffect has missing dependencies: 'context', 'mode', and 'project'. Either include them or remove the dependency array. If 'setDrafts' needs the current value of 'project', you can also switch to useReducer instead of useState and read 'project' in the reducer.  react-hooks/exhaustive-deps
+218:589  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./components/mineralx/useFlowAnalysis.js
+270:6  Warning: React Hook useEffect has a missing dependency: 'syncFlowLayers'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/mineralx/useGeologyPersistence.js
+28:4  Warning: React Hook useEffect has missing dependencies: 'applyState', 'loadLegacy', 'refreshQueue', 'refreshSession', 'setStore', and 'syncNow'. Either include them or remove the dependency array. If 'loadLegacy' changes too often, find the parent component that defines it and wrap that definition in useCallback.  react-hooks/exhaustive-deps
+40:1138  Warning: React Hook useCallback has a missing dependency: 'syncNow'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/mineralx/useSampleMapLayer.js
+70:42  Warning: The ref value 'mounted.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'mounted.current' to a variable inside the effect, and use that variable in the cleanup function.  react-hooks/exhaustive-deps
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+ ⚠ Using edge runtime on a page currently disables static generation for that page
+   Generating static pages (0/20) ...
+   Generating static pages (5/20) 
+   Generating static pages (10/20) 
+   Generating static pages (15/20) 
+ ✓ Generating static pages (20/20)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                    Size  First Load JS
+┌ ○ /                                         172 B         106 kB
+├ ○ /_not-found                               184 B         103 kB
+├ ƒ /api/basemap/[...tile]                    184 B         103 kB
+├ ƒ /api/extract                              184 B         103 kB
+├ ƒ /api/geology/projects                     184 B         103 kB
+├ ƒ /api/geology/projects/[id]                184 B         103 kB
+├ ƒ /api/geology/projects/[id]/attachments    184 B         103 kB
+├ ƒ /api/geology/projects/[id]/audit          184 B         103 kB
+├ ƒ /api/geology/projects/[id]/members        184 B         103 kB
+├ ƒ /api/geology/session                      184 B         103 kB
+├ ƒ /api/historic-mines                       184 B         103 kB
+├ ƒ /api/mineral-occurrences                  184 B         103 kB
+├ ○ /company                                  186 B         106 kB
+├ ○ /contact                                  172 B         106 kB
+├ ○ /direction                                186 B         106 kB
+├ ƒ /gic                                    1.62 kB         138 kB
+├ ƒ /gic/access                               184 B         103 kB
+├ ƒ /gic/auth/callback                        184 B         103 kB
+├ ƒ /gic/auth/complete                      69.5 kB         176 kB
+├ ƒ /gic/export                               184 B         103 kB
+├ ƒ /gic/forgot-password                    1.06 kB         107 kB
+├ ƒ /gic/login                                964 B         107 kB
+├ ƒ /gic/password                           1.05 kB         104 kB
+├ ƒ /gic/reports                            4.47 kB         141 kB
+├ ƒ /gic/runs/[id]                            172 B         106 kB
+├ ƒ /gic/runs/[id]/edit                       136 B         140 kB
+├ ƒ /gic/runs/new                             136 B         140 kB
+├ ƒ /icon                                     184 B         103 kB
+├ ○ /mineralx                                141 kB         243 kB
+├ ƒ /mineralx/auth/callback                   184 B         103 kB
+├ ○ /mineralx/auth/complete                 1.18 kB         104 kB
+├ ○ /mineralx/login                         1.18 kB         104 kB
+├ ƒ /opengraph-image                          184 B         103 kB
+├ ○ /partnerships                             186 B         106 kB
+├ ○ /privacy                                  186 B         106 kB
+├ ○ /robots.txt                               184 B         103 kB
+├ ○ /sitemap.xml                              184 B         103 kB
+├ ○ /updates                                  186 B         106 kB
+└ ● /updates/[slug]                           186 B         106 kB
++ First Load JS shared by all                103 kB
+  ├ chunks/1255-7316b50163a428e6.js         46.4 kB
+  ├ chunks/4bd1b696-f785427dddbba9fb.js     54.2 kB
+  └ other shared chunks (total)             2.02 kB
+
+
+ƒ Middleware                                94.4 kB
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+

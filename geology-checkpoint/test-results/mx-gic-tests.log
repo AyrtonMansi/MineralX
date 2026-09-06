@@ -1,0 +1,30 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> mineralx-resources@1.0.0 test:gic
+> node --import tsx --test tests/gic/*.test.ts
+
+✔ owner creates durable run and immutable audit entry atomically (2978.48795ms)
+✔ anonymous and non-members cannot access run records (17.412565ms)
+✔ viewers can read but cannot mutate, and direct writes cannot bypass audit (13.385864ms)
+✔ cross-workspace mutation, missing values and duplicate identifiers fail (17.218079ms)
+✔ corrections preserve original values and reject stale updates (8.956063ms)
+✔ annual review binds to a processing revision; subsequent changes invalidate it (24.22053ms)
+✔ voiding retains the run and audit rather than deleting production history (16.035776ms)
+✔ annual storage rejects malformed rows even when bypassing the website (10.098938ms)
+✔ database rejects missing or reversed start/end times (11.812432ms)
+✔ four run metrics calculate contained gold without treating purity as recovery (6.737729ms)
+✔ Queensland financial-year boundary uses AEST, not UTC or browser zone (0.299399ms)
+✔ missing, negative, non-finite, impossible purity and future timestamps are rejected (2.977449ms)
+✔ annual aggregation excludes voided runs and preserves contained-gold mass (0.628355ms)
+✔ annual drafts permit partial work without inventing nil entries (2.959349ms)
+✔ component checks enforce period, leap-year days, domestic freight and unknown recovery (2.855067ms)
+✔ official CSV preserves headers and DD-MM-YYYY dates; cells cannot execute formulas (0.967549ms)
+✔ start and end times preserve overnight duration and reject reversed ranges (0.643197ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4118.693031

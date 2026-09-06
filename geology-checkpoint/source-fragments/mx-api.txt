@@ -1,0 +1,72 @@
+  const api = useMemo(() => {
+    const mutate = async (pid, fn, reason) => {
+      const project = storeRef.current.projects.find(p => p.id === pid);
+      if (!project) throw new Error('Choose an available project.');
+      return commitProject(fn(project), reason);
+    };
+    const importBatch = async (pid, kind, rows, source, crs, linkedSamples) => {
+      await mutate(pid, p => importProjectBatch(p,kind,rows,source,crs,linkedSamples), `Imported ${rows.length} ${kind}${source ? ` from ${source.name}` : ''}`);
+      return {accepted:rows.length,rejected:[]};
+    };
+    const methods = {
+      focusOn, importBatch,
+      addSamples:(pid,rows,name) => importBatch(pid,'samples',rows,name ? {name} : null),
+      addCollars:(pid,rows,name) => importBatch(pid,'collars',rows,name ? {name} : null),
+      addIntervals:(pid,rows,name) => importBatch(pid,'intervals',rows,name ? {name} : null),
+      addSurveys:(pid,rows,name) => importBatch(pid,'surveys',rows,name ? {name} : null),
+      addGeology:(pid,rows,name) => importBatch(pid,'geology',rows,name ? {name} : null),
+      applyAssays:() => { throw new Error('Open Review to stage the laboratory certificate and approve its results.'); },
+      setBoundary:(pid,name,coords,fileName) => importBatch(pid,'boundary',[{name,coords}],fileName ? {name:fileName} : null),
+      attachPhoto:(pid,id,photo) => mutate(pid,p=>({...p,samples:p.samples.map(s=>s.id===id?{...s,photo}:s)}),'Attached sample photograph'),
+      deleteSample:(pid,id) => mutate(pid,p=>({...p,samples:p.samples.map(s=>s.id===id?{...s,archivedAt:new Date().toISOString(),archiveReason:'Archived from sample register'}:s)}),`Archived sample ${id}; history retained`),
+      deleteCollar:(pid,id) => mutate(pid,p=>{
+        if (p.samples.some(s=>s.holeId===id&&!s.archivedAt)) throw new Error('This hole has active samples. Retain the hole and resolve its samples before archiving.');
+        return {...p,collars:p.collars.map(c=>c.id===id?{...c,archivedAt:new Date().toISOString()}:c)};
+      },`Archived drill hole ${id}; downhole history retained`),
+      updateSample:(pid,id,patch) => mutate(pid,p=>{
+        if (['id','recordId','assays','assayResults','assayHistory','assayReviewStatus'].some(k=>k in patch)) throw new Error('Use field capture for record corrections and Review for laboratory results. Identity and analytical history are protected.');
+        return {...p,samples:p.samples.map(s=>s.id===id?{...s,...patch}:s)};
+      },`Corrected sample ${id}`),
+      updateCollar:(pid,id,patch) => mutate(pid,p=>{
+        if ('id' in patch || 'recordId' in patch) throw new Error('The drill hole identity is immutable.');
+        return {...p,collars:p.collars.map(c=>c.id===id?{...c,...patch}:c)};
+      },`Corrected collar ${id}`),
+      promoteTarget:(pid,cand) => mutate(pid,p=>{
+        if ((p.targets||[]).some(t=>targetKey(t.lat,t.lng)===targetKey(cand.lat,cand.lng))) throw new Error('This location is already on the target worklist.');
+        if (!cand.provenance || cand.provenance.element !== 'Au') throw new Error('Run the supported gold analysis again to capture its source evidence.');
+        return {...p,targets:[...(p.targets||[]),{id:nextId(p.targets||[],targetPrefix(p.idPrefix)),recordId:newRecordId(),lat:cand.lat,lng:cand.lng,score:cand.score??0,status:'proposed',provenance:structuredClone(cand.provenance),linkedSampleIds:[],createdAt:new Date().toISOString()}]};
+      },'Promoted gold terrain hypothesis; source evidence retained'),
+      setTargetStatus:(pid,id,status) => mutate(pid,p=>{
+        if (!['proposed','planned','sampled','confirmed','barren'].includes(status)) throw new Error('Choose a supported target status.');
+        const target=p.targets.find(t=>t.id===id);
+        const linked=p.samples.filter(s=>target?.linkedSampleIds?.includes(s.id)&&!s.controlType&&!s.archivedAt);
+        if (status==='sampled'&&!linked.some(s=>s.collectionStatus==='collected')) throw new Error('Assign and collect a sample at this target before marking it sampled.');
+        if (['confirmed','barren'].includes(status)) throw new Error('A completed geological interpretation needs a reviewed evidence record. Keep this target sampled until that interpretation is recorded.');
+        return {...p,targets:p.targets.map(t=>t.id===id?{...t,status}:t)};
+      },`Changed target ${id} to ${status}`),
+      dismissTarget:(pid,id) => mutate(pid,p=>{
+        const target=p.targets.find(t=>t.id===id),key=target&&targetKey(target.lat,target.lng);
+        return {...p,targets:p.targets.map(t=>t.id===id?{...t,status:'dismissed',archivedAt:new Date().toISOString()}:t),dismissedTargets:[...new Set([...(p.dismissedTargets||[]),key].filter(Boolean))]};
+      },`Dismissed target ${id}; evidence retained`),
+      dismissCandidate:(pid,cand) => mutate(pid,p=>({...p,dismissedTargets:[...new Set([...(p.dismissedTargets||[]),targetKey(cand.lat,cand.lng)])]}),'Dismissed terrain candidate'),
+      unlinkSample:(pid,id,sid) => mutate(pid,p=>({...p,targets:p.targets.map(t=>t.id===id?{...t,linkedSampleIds:(t.linkedSampleIds||[]).filter(s=>s!==sid),status:'planned',reviewRequired:true}:t)}),`Removed sample ${sid} from target ${id}; reassessment required`),
+      renameProject:(pid,name) => mutate(pid,p=>({...p,name:name.trim()}),'Renamed project'),
+      deleteProject:async()=>{throw new Error('Project history is retained. Use workspace access to disconnect a shared project, and export a complete backup before changing device records.');},
+      createProject:async(name,kmlText)=>{
+        if (!name.trim()) throw new Error('Enter a project name.');
+        let boundary=null;
+        if(kmlText){const parsed=parseKmlBoundary(kmlText);if(parsed.error)return{boundaryError:parsed.error};boundary={name:`${name} boundary`,coords:parsed.coords};}
+        const current=storeRef.current,id=newRecordId();
+        const project={id,name:name.trim(),idPrefix:`${name.replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase()||'PX'}-S-`,color:PROJECT_COLORS[current.projects.length%PROJECT_COLORS.length],createdAt:new Date().toISOString(),boundary,samples:[],collars:[],intervals:[],surveys:[],geology:[],files:kmlText?[{id:newRecordId(),name:`${name}.kml`,rawText:kmlText,category:'boundary'}]:[],programs:[],observations:[],dispatches:[],labBatches:[],audit:[]};
+        const next=upgradeStore({...current,activeProjectId:id,projects:[...current.projects,project]});
+        await persistence.saveNow(next,'Created project');storeRef.current=next;
+        return{boundaryError:null};
+      },
+      exportProject:(project)=>{
+        downloadText(`${project.name.replace(/\s+/g,'_')}_samples.csv`,samplesToCsv(project.samples));
+        if(project.collars.length)downloadText(`${project.name}_collars.csv`,collarsToCsv(project.collars));
+        setLastExportAt(Date.now());setStaleDismissed(false);
+      },
+    };
+    return methods;
+  }, [commitProject,focusOn,persistence]);
