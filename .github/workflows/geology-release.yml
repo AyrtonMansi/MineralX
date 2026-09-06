@@ -45,9 +45,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm start > /tmp/mineralx-server.log 2>&1 &
+          node node_modules/next/dist/bin/next start > /tmp/mineralx-server.log 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" || true' EXIT
+          trap 'kill "$server_pid" || true; wait "$server_pid" || true' EXIT
           for attempt in $(seq 1 40); do
             if curl -fsS http://localhost:3000/api/mineralx-release > /tmp/release.json; then break; fi
             sleep 1
