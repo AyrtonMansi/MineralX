@@ -2,10 +2,9 @@
   "name": "mineralx-resources",
   "version": "1.0.0",
   "private": true,
-  "description": "MineralX corporate website — Australian resources, research and industrial development.",
-  "engines": {
-    "node": "22.x"
-  },
+  "type": "module",
+  "description": "MineralX corporate and operational workspaces",
+  "engines": { "node": "22.x" },
   "scripts": {
     "predev": "node clothing/scripts/mount.mjs",
     "dev": "next dev",
@@ -13,21 +12,29 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:gic": "node --import tsx --test tests/gic/*.test.ts"
+    "test:gic": "node --import tsx --test tests/gic/*.test.ts",
+    "test:geology": "node --test test/*.test.js",
+    "test:unit": "npm run test:geology && npm run test:gic",
+    "test:e2e": "playwright test",
+    "verify:endpoints": "node scripts/verify-endpoints.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.115.0",
     "@vercel/analytics": "^2.0.1",
+    "framer-motion": "^11.3.19",
     "gray-matter": "^4.0.3",
+    "maplibre-gl": "^5.24.0",
     "marked": "^18.0.5",
     "next": "15.5.25",
+    "proj4": "^2.20.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20.14.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -41,9 +48,5 @@
     "tsx": "^4.23.13",
     "typescript": "^5.5.4"
   },
-  "overrides": {
-    "next": {
-      "postcss": "^8.5.23"
-    }
-  }
+  "overrides": { "next": { "postcss": "^8.5.23" } }
 }

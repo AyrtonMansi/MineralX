@@ -1,0 +1,55 @@
+name: Geology release verification
+on:
+  push:
+    branches: [codex/geology-release-20260906]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: geology-release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install and reconcile combined lockfile
+        run: npm install --no-audit --no-fund
+      - name: Geology regression tests
+        run: npm run test:geology
+      - name: Existing operational regression tests
+        run: find tests -name '*.test.ts' -print0 | xargs -0 node --import tsx --test
+      - name: Production build
+        run: npm run build
+      - name: Production route smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm start > /tmp/mineralx-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://localhost:3000/api/mineralx-release > /tmp/release.json; then break; fi
+            sleep 1
+          done
+          for path in / /company /contact /clothing /gic/login /mineralx; do
+            curl -fsS "http://localhost:3000$path" > /dev/null
+            echo "PASS $path"
+          done
+          cat /tmp/release.json
+      - name: Preserve reconciled dependency lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geology-release-lock
+          path: package-lock.json
+          retention-days: 7
