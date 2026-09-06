@@ -1,0 +1,69 @@
+name: Geology release verification
+on:
+  push:
+    branches: [main, codex/geology-release-20260906]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: geology-release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Geology regression tests
+        run: npm run test:geology
+      - name: Existing operational regression tests
+        run: find tests -name '*.test.ts' -print0 | xargs -0 node --import tsx --test
+      - name: Production build
+        run: npm run build
+      - name: Production route smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          node node_modules/next/dist/bin/next start > /tmp/mineralx-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true; wait "$server_pid" || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://localhost:3000/api/mineralx-release > /tmp/release.json; then break; fi
+            sleep 1
+          done
+          for path in / /company /contact /clothing /gic/login /plant /mineralx; do
+            curl -fsS "http://localhost:3000$path" > /dev/null
+            echo "PASS $path"
+          done
+          cat /tmp/release.json
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser acceptance paths
+        run: npx playwright test --config=playwright.release.config.js
+      - name: Verify deployed production revision and browser shell
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/verify-geology-production.mjs
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geology-release-evidence
+          path: |
+            test-results
+            playwright-report
+            /tmp/mineralx-server.log
+          retention-days: 14
