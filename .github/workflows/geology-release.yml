@@ -1,11 +1,14 @@
 name: Geology release verification
 on:
   push:
-    branches: [main, codex/geology-release-20260906]
+    branches: [main, codex/geology-release-20260906, codex/geology-consolidated-20260907]
   pull_request:
     branches: [main]
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 concurrency:
   group: geology-release-${{ github.ref }}
   cancel-in-progress: true
@@ -27,13 +30,12 @@ jobs:
       - name: Install pinned dependencies
         run: npm ci --no-audit --no-fund
       - name: Geology regression tests
-        run: npm run test:geology
+        run: npm run test:geology | tee /tmp/geology-unit.log
       - name: Existing operational regression tests
-        run: find tests -name '*.test.ts' -print0 | xargs -0 node --import tsx --test
+        run: find tests -name '*.test.ts' -print0 | xargs -0 node --import tsx --test | tee /tmp/geology-operational.log
       - name: Production build
-        run: npm run build
+        run: npm run build | tee /tmp/geology-build.log
       - name: Production route smoke
-        shell: bash
         run: |
           set -euo pipefail
           node node_modules/next/dist/bin/next start > /tmp/mineralx-server.log 2>&1 &
@@ -50,13 +52,26 @@ jobs:
           cat /tmp/release.json
       - name: Install browser
         run: npx playwright install --with-deps chromium
-      - name: Browser acceptance paths
-        run: npx playwright test --config=playwright.release.config.js
+      - name: Browser acceptance paths against production build
+        run: |
+          npx playwright test --config=playwright.release.config.js
+          cp test-results/geology-release.json test-results/geology-local-acceptance.json
       - name: Verify deployed production revision and browser shell
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           EXPECTED_SHA: ${{ github.sha }}
         run: node scripts/verify-geology-production.mjs
+      - name: Repeat field workflows against delivered production JavaScript
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          MINERALX_TEST_URL: https://mineral-x.com.au
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          # Isolated synthetic browser contexts only: no shared records, paid extraction or database writes.
+          # The fixtures stub raster tiles; the application, storage and workflow logic are not mocked.
+          npx playwright test --config=playwright.release.config.js --output=test-results/live-runs
+          cp test-results/geology-release.json test-results/geology-production-acceptance.json
+          node --input-type=module -e "import assert from 'node:assert/strict';const r=await fetch(process.env.MINERALX_TEST_URL+'/api/mineralx-release',{cache:'no-store',signal:AbortSignal.timeout(20000)});assert.equal(r.status,200);const release=await r.json();assert.equal(release.commit,process.env.EXPECTED_SHA);console.log('Final production SHA verified:',release.commit);"
       - name: Upload release evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,4 +81,7 @@ jobs:
             test-results
             playwright-report
             /tmp/mineralx-server.log
+            /tmp/geology-unit.log
+            /tmp/geology-operational.log
+            /tmp/geology-build.log
           retention-days: 14
