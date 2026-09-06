@@ -5,6 +5,7 @@ import { requireAccess } from "@/lib/gic/server";
 import { WorkspaceNav } from "@/components/gic/WorkspaceNav";
 import {
   displayDate,
+  displayDuration,
   fineGold,
   grams,
   type Run,
@@ -37,7 +38,12 @@ export default async function RunPage({
     .limit(100);
   if (historyError) throw new Error("Could not load history");
   const facts: [string, string][] = [
-    ["Processed · AEST", displayDate(r.processed_at)],
+    [
+      "Start time · AEST",
+      r.started_at ? displayDate(r.started_at) : "Not recorded",
+    ],
+    ["End time · AEST", displayDate(r.processed_at)],
+    ["Run duration", displayDuration(r.started_at, r.processed_at)],
     ["Recorded · AEST", displayDate(run.created_at)],
     ["Tonnes input", `${grams(r.feed_tonnes)} t`],
     ["Process", "Gravity plant"],

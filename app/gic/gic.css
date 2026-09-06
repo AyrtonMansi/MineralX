@@ -672,3 +672,88 @@
     flex-wrap: wrap;
   }
 }
+
+.gic-wizard {
+  max-width: 680px;
+}
+.gic-steps {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0;
+  gap: 24px;
+}
+.gic-steps li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #777;
+  font-size: 12px;
+  flex: 1;
+}
+.gic-steps li > span {
+  display: inline-flex;
+  width: 25px;
+  height: 25px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #363636;
+  border-radius: 50%;
+  font-size: 11px;
+}
+.gic-steps .reached {
+  color: #ddd;
+}
+.gic-steps [aria-current="step"] > span {
+  background: #e8e8e8;
+  color: #111;
+  border-color: #e8e8e8;
+}
+.gic-step-panel > h2 {
+  margin: 6px 0 12px;
+  font-size: 19px;
+}
+.gic-step-panel > h2:focus {
+  outline: none;
+}
+.gic-step-panel > .gic-caption {
+  margin: 0;
+}
+.gic-review-values {
+  margin: 22px 0;
+}
+.gic-review-values > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid #272727;
+  font-size: 13px;
+}
+.gic-review-values dt {
+  color: #aaa;
+}
+.gic-review-values dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.gic-step-panel > details {
+  margin-top: 24px;
+}
+.gic-correction {
+  margin-top: 24px;
+  border-top: 1px solid #272727;
+}
+@media (max-width: 700px) {
+  .gic-steps {
+    gap: 12px;
+  }
+  .gic-steps li {
+    gap: 6px;
+    font-size: 11px;
+  }
+  .gic-review-values > div {
+    gap: 12px;
+    font-size: 12px;
+  }
+}

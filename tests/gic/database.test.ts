@@ -13,6 +13,7 @@ const workspace = "20000000-0000-4000-8000-000000000001",
   id = "30000000-0000-4000-8000-000000000001";
 const data = {
   reference: "TEST-001",
+  started_at: "2026-06-30T20:00:00+10:00",
   processed_at: "2026-06-30T23:59:00+10:00",
   feed_tonnes: 12.25,
   gross_grams: 125.5,
@@ -28,6 +29,15 @@ before(async () => {
     await readFile(
       new URL(
         "../../supabase/migrations/202609060001_gic.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../../supabase/migrations/202609060002_run_timing.sql",
         import.meta.url,
       ),
       "utf8",
@@ -263,4 +273,25 @@ test("annual storage rejects malformed rows even when bypassing the website", as
     ]),
     /Invalid review/,
   );
+});
+
+test("database rejects missing or reversed start/end times", async () => {
+  const badId = "30000000-0000-4000-8000-000000000009";
+  for (const started_at of [
+    undefined,
+    null,
+    "2026-07-01T00:00:00+10:00",
+    data.processed_at,
+  ]) {
+    await assert.rejects(
+      asUser(owner, save, [
+        workspace,
+        badId,
+        0,
+        JSON.stringify({ ...data, reference: "BAD-TIME", started_at }),
+        "",
+      ]),
+      /Start time|End time/,
+    );
+  }
 });

@@ -5,6 +5,13 @@ export const vocabulary = template.vocabulary;
 export const runSchema = z
   .object({
     reference: z.string().trim().min(1).max(80),
+    started_at: z
+      .string()
+      .datetime({ offset: true })
+      .refine(
+        (v) => Date.parse(v) >= Date.parse("2000-01-01"),
+        "Check the start time.",
+      ),
     processed_at: z
       .string()
       .datetime({ offset: true })
@@ -12,7 +19,7 @@ export const runSchema = z
         (v) =>
           Date.parse(v) <= Date.now() + 60_000 &&
           Date.parse(v) >= Date.parse("2000-01-01"),
-        "Check the processing timestamp.",
+        "Check the end time.",
       ),
     feed_tonnes: z.number().finite().min(0).max(9999999999),
     gross_grams: z.number().finite().min(0).max(9999999999),
@@ -20,7 +27,11 @@ export const runSchema = z
     notes: z.string().trim().max(2000),
     status: z.enum(["active", "void"]),
   })
-  .strict();
+  .strict()
+  .refine((v) => Date.parse(v.started_at) < Date.parse(v.processed_at), {
+    message: "End time must be after start time.",
+    path: ["processed_at"],
+  });
 
 export type RunInput = z.infer<typeof runSchema>;
 export type Run = {
@@ -40,6 +51,17 @@ export type Workspace = {
 };
 export function fineGold(run: RunInput) {
   return (run.gross_grams * run.gold_percent) / 100;
+}
+export function durationMinutes(start: string | undefined, end: string) {
+  if (!start) return null;
+  const minutes = (Date.parse(end) - Date.parse(start)) / 60000;
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : null;
+}
+export function displayDuration(start: string | undefined, end: string) {
+  const minutes = durationMinutes(start, end);
+  if (minutes === null) return "Not recorded";
+  const rounded = Math.round(minutes);
+  return `${Math.floor(rounded / 60)}h ${rounded % 60}m`;
 }
 export function financialYear(iso: string) {
   const date = new Date(new Date(iso).getTime() + 10 * 60 * 60 * 1000);

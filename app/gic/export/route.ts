@@ -5,6 +5,7 @@ import {
   componentCsv,
   csv,
   displayDate,
+  durationMinutes,
   fields,
   fineGold,
   processingRows,
@@ -75,8 +76,11 @@ export async function GET(request: NextRequest) {
     const search = (q.get("search") ?? "").toLowerCase();
     headers = [
       "Run reference",
-      "Processed at (ISO 8601)",
-      "Processed at (AEST)",
+      "Start time (ISO 8601)",
+      "Start time (AEST)",
+      "End time (ISO 8601)",
+      "End time (AEST)",
+      "Duration (minutes)",
       "Gold weight recovered (g)",
       "Gold percentage of bullion (%)",
       "Contained gold (g)",
@@ -100,8 +104,11 @@ export async function GET(request: NextRequest) {
             String(
               [
                 r.data.reference,
+                r.data.started_at ?? "",
+                r.data.started_at ? displayDate(r.data.started_at) : "",
                 r.data.processed_at,
                 displayDate(r.data.processed_at),
+                durationMinutes(r.data.started_at, r.data.processed_at) ?? "",
                 r.data.gross_grams,
                 r.data.gold_percent,
                 Number(fineGold(r.data).toFixed(5)),

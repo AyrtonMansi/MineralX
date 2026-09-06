@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import {
   displayDate,
+  displayDuration,
   financialYear,
   fineGold,
   fyLabel,
@@ -129,7 +130,7 @@ export function RunRegister({
           <p className="gic-muted">
             {runs.length
               ? "Try another period or search term."
-              : "Enter the recovered bullion weight, gold percentage, tonnes input and timestamp."}
+              : "Enter the recovered bullion weight, gold percentage, tonnes input, start and end times."}
           </p>
           {writable && !runs.length && (
             <Link href="/gic/runs/new" className="gic-button">
@@ -146,7 +147,7 @@ export function RunRegister({
             <thead>
               <tr>
                 <th>Run</th>
-                <th>Processed · AEST</th>
+                <th>Run timing · AEST</th>
                 <th className="number">Weight</th>
                 <th className="number">Gold</th>
                 <th className="number">Contained gold</th>
@@ -161,7 +162,14 @@ export function RunRegister({
                       {r.data.reference}
                     </Link>
                   </td>
-                  <td>{displayDate(r.data.processed_at)}</td>
+                  <td>
+                    {displayDate(r.data.processed_at)}
+                    <span className="gic-cell-note">
+                      {r.data.started_at
+                        ? `Started ${displayDate(r.data.started_at)} · ${displayDuration(r.data.started_at, r.data.processed_at)}`
+                        : "Start time not recorded"}
+                    </span>
+                  </td>
                   <td className="number">{grams(r.data.gross_grams)} g</td>
                   <td className="number">{grams(r.data.gold_percent)}%</td>
                   <td className="number">{grams(fineGold(r.data))} g</td>

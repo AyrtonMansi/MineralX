@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   annualSchema,
+  durationMinutes,
+  displayDuration,
   componentCsv,
   csv,
   emptyAnnual,
@@ -15,6 +17,7 @@ import {
 } from "../../lib/gic/model";
 const input: RunInput = {
   reference: "TEST-001",
+  started_at: "2026-06-30T20:00:00+10:00",
   processed_at: "2026-06-30T23:59:00+10:00",
   feed_tonnes: 12.25,
   gross_grams: 125.5,
@@ -156,4 +159,31 @@ test("official CSV preserves headers and DD-MM-YYYY dates; cells cannot execute 
     ),
     '"Notes"\r\n"\'=HYPERLINK(""bad"")"\r\n"\'\t+SUM(1,2)"\r\n"safe, ""quoted""\ntext"\r\n',
   );
+});
+
+test("start and end times preserve overnight duration and reject reversed ranges", () => {
+  const overnight = {
+    ...input,
+    started_at: "2026-06-30T23:00:00+10:00",
+    processed_at: "2026-07-01T01:30:00+10:00",
+  };
+  assert.equal(runSchema.safeParse(overnight).success, true);
+  assert.equal(
+    durationMinutes(overnight.started_at, overnight.processed_at),
+    150,
+  );
+  assert.equal(
+    displayDuration(overnight.started_at, overnight.processed_at),
+    "2h 30m",
+  );
+  assert.equal(financialYear(overnight.processed_at), 2027);
+  assert.equal(
+    runSchema.safeParse({ ...input, started_at: input.processed_at }).success,
+    false,
+  );
+  assert.equal(
+    runSchema.safeParse({ ...input, started_at: undefined }).success,
+    false,
+  );
+  assert.equal(displayDuration(undefined, input.processed_at), "Not recorded");
 });
