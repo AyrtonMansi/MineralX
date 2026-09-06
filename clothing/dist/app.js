@@ -1,3 +1,4 @@
+import {campaignHero,syncCampaignHeader} from './hero.js';
 import {brand,categories,products,fits,selectProducts,validateEdit} from './catalog.js';
 
 const main=document.querySelector('#main');
@@ -34,9 +35,9 @@ function categoryCard(c){return `<a class="category-card" href="${link({category
 function setTitle(title){document.title=`${title} — ${brand.name} | ${brand.endorsement}`;}
 function home(){
  setTitle('Utility. Movement. Everyday.');
- return `<section class="hero"><img src="${asset('weekend-campaign')}" alt="Two people in understated carbon and chalk clothing walking along a coastal headland" width="1672" height="941" fetchpriority="high"><div class="hero-copy"><p class="eyebrow">UTILITY. MOVEMENT. EVERYDAY.</p><h1>For the days<br>that go everywhere.</h1><p>Considered clothing. An open itinerary.</p><a class="button button-light" href="${link()}">Explore the collection ${arrow}</a></div><div class="hero-caption"><span>MINERAL / 01</span><span>A wardrobe without boundaries.</span></div></section>
+ return `${campaignHero()}
  <nav class="category-strip" aria-label="Shop by category">${categories.map(c=>`<a href="${link({category:c.name})}"><span>${c.number}</span>${c.name}${arrow}</a>`).join('')}</nav>
- <section class="section collection-section"><div class="section-heading"><div><p class="eyebrow">THE FIRST COLLECTION</p><h2>Meet your everyday rotation.</h2></div><a class="text-link" href="${link()}">View all pieces ${arrow}</a></div><div class="product-grid">${products.filter(p=>p.featured).map(card).join('')}</div></section>
+ <section id="collection-preview" class="section collection-section" tabindex="-1" aria-labelledby="collection-heading"><div class="section-heading"><div><p class="eyebrow">THE FIRST COLLECTION</p><h2 id="collection-heading">Meet your everyday rotation.</h2></div><a class="text-link" href="${link()}">View all pieces ${arrow}</a></div><div class="product-grid">${products.filter(p=>p.featured).map(card).join('')}</div></section>
  <section class="brand-statement"><p class="eyebrow">ONE SYSTEM. MANY SETTINGS.</p><h2>Early starts. Open roads.<br>Time well spent.</h2><div><p>A wardrobe shaped by work, movement and life outside. Refined fits. Mineral tones. Details with a reason to be there.</p><a class="text-link" href="#/world">The world of X ${arrow}</a></div></section>
  <section class="category-grid" aria-label="Explore the four categories">${categories.map(categoryCard).join('')}</section>
  <section class="fit-feature"><div class="fit-feature-images"><img src="${asset('essential-tee')}" alt="Chalk everyday tee with an easy silhouette" width="426" height="624" loading="lazy"><img src="${asset('training-tee')}" alt="Carbon training tee with a closer silhouette" width="426" height="624" loading="lazy"><span class="fit-label left">01 / OVERSIZED</span><span class="fit-label right">02 / FITTED</span></div><div class="fit-feature-copy"><p class="eyebrow">SAME OUTLOOK. YOUR FIT.</p><h2>Room to relax.<br>Form to move.</h2><p>A generous everyday tee. A closer training silhouette. Different proportions, the same considered approach.</p><a class="button button-dark" href="#/fits">Find your fit ${arrow}</a></div></section>
@@ -84,6 +85,7 @@ function route({focus=true}={}){
  const [path,query]=hash.split('?');const params=new URLSearchParams(query);
  if(dialog.open){navigating=true;closeOverlay();}
  main.innerHTML=path==='/'?home():path==='/collection'?collection(params):path.startsWith('/product/')?product(path.slice(9)):path==='/world'?world():path==='/fits'?fitPage():path==='/detail'?detailPage():path.startsWith('/information/')?information(path.slice(13)):notFound();
+ syncCampaignHeader(path==='/');
  document.querySelectorAll('.desktop-nav a').forEach(a=>{const active=a.hash===location.hash;a.toggleAttribute('aria-current',active);if(active)a.setAttribute('aria-current','page');});
  window.scrollTo({top:0,behavior:'instant'});if(focus)main.focus({preventScroll:true});
 }
@@ -103,6 +105,10 @@ document.addEventListener('click',async event=>{
  const el=event.target.closest('[data-action]');if(!el)return;
  const action=el.dataset.action;
  if(action==='close'||action==='navigate'){navigating=action==='navigate'&&el.hash!==location.hash;closeOverlay();}
+ else if(action==='explore-below'){
+  const collection=document.querySelector('#collection-preview');
+  if(collection){collection.focus({preventScroll:true});collection.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
+ }
  else if(action==='menu')menu();
  else if(action==='search')showSearch();
  else if(action==='edit')showEdit();

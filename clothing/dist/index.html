@@ -8,11 +8,12 @@
   <meta name="robots" content="noindex,nofollow">
   <title>X — By MineralX | Utility. Movement. Everyday.</title>
   <link rel="icon" type="image/svg+xml" href="./assets/x-mark.svg">
-  <link rel="preload" as="image" href="./assets/weekend-campaign.webp" fetchpriority="high">
+  <link rel="preload" as="image" href="./assets/hero-campaign-v2.webp" fetchpriority="high">
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./hero.css">
   <script type="module" src="./app.js"></script>
 </head>
-<body>
+<body class="home-view hero-in-view">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="announcement"><span>MINERAL / 01</span><span>A first look at what’s to come</span><a href="#/information/release">Collection preview <span aria-hidden="true">↗</span></a></div>
   <header class="header">
@@ -21,7 +22,20 @@
     <nav class="desktop-nav" aria-label="Main navigation"><a href="#/collection?wearer=Men">Men</a><a href="#/collection?wearer=Women">Women</a><a href="#/collection">The collection</a><a href="#/world">The world of X</a></nav>
     <div class="header-actions"><button class="icon-button" data-action="search" aria-label="Search collection"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button><button class="edit-toggle" data-action="edit" aria-label="Open your saved edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14l1 14H4L5 7ZM8 8V6a4 4 0 0 1 8 0v2"/></svg><span class="edit-label">Your edit</span><span id="edit-count">0</span></button></div>
   </header>
-  <main id="main" tabindex="-1"><section class="hero"><img src="./assets/weekend-campaign.webp" alt="Two people in understated carbon and chalk clothing walking along an Australian coastal headland" width="1672" height="941" fetchpriority="high"><div class="hero-copy"><p class="eyebrow">UTILITY. MOVEMENT. EVERYDAY.</p><h1>For the days<br>that go everywhere.</h1><p>Considered clothing. An open itinerary.</p><a class="button button-light" href="#/collection">Explore the collection <span aria-hidden="true">↗</span></a></div></section></main>
+  <main id="main" tabindex="-1"><section class="campaign-hero" aria-labelledby="campaign-title">
+    <img class="campaign-image" src="./assets/hero-campaign-v2.webp" alt="Two people in carbon training wear and a chalk utility layer on a dramatic basalt coastline" width="1672" height="941" fetchpriority="high">
+    <div class="campaign-copy">
+      <p class="eyebrow campaign-kicker"><span aria-hidden="true"></span> UTILITY. MOVEMENT. EVERYDAY.</p>
+      <h1 id="campaign-title">Built for <span>everything <span class="campaign-last-word">between.</span></span></h1>
+      <p class="campaign-description">A considered wardrobe for life in motion.</p>
+      <div class="campaign-actions"><a class="button campaign-cta" href="#/collection">Explore the collection <span aria-hidden="true">↗</span></a><a class="campaign-fit" href="#/fits">Find your fit <span aria-hidden="true">↗</span></a></div>
+    </div>
+    <div class="campaign-rail">
+      <a class="campaign-edition" href="#/information/release"><span>MINERAL / 01</span><span>THE FIRST COLLECTION</span></a>
+      <p class="campaign-settings">FIELD / TRAIN / EVERYDAY</p>
+      <button class="campaign-scroll" data-action="explore-below"><span>Explore below</span><span class="campaign-scroll-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v16m-6-6 6 6 6-6"/></svg></span></button>
+    </div>
+  </section></main>
   <footer class="footer"><div class="footer-top"><div class="footer-brand"><a class="brand" href="#/" aria-label="X by MineralX home"><img src="./assets/x-mark.svg" width="64" height="54" alt="X"><span>BY MINERALX</span></a><p>Utility. Movement. Everyday.</p></div><div class="footer-column"><p>Collection</p><a href="#/collection?category=Utility">Utility</a><a href="#/collection?category=Move">Move</a><a href="#/collection?category=Transit">Transit</a><a href="#/collection?category=Essentials">Essentials</a></div><div class="footer-column"><p>Explore</p><a href="#/collection?wearer=Men">Men</a><a href="#/collection?wearer=Women">Women</a><a href="#/world">The world of X</a><a href="#/fits">Find your fit</a><a href="#/detail">In the detail</a></div><div class="footer-column"><p>Information</p><a href="#/information/release">Release information</a><a href="#/information/product">Product development</a><a href="#/information/privacy">Privacy</a><a href="mailto:info@mineral-x.com.au?subject=X%20clothing%20enquiry">Contact</a><button data-action="edit">Your saved edit</button></div></div><div class="footer-bottom"><span>© <span id="year">2026</span> X — By MineralX</span><span>Collection in development. Imagery shows design concepts.</span><span>Australia</span></div></footer>
   <dialog id="overlay" aria-labelledby="overlay-title"><div class="dialog-heading"><h2 id="overlay-title"></h2><button class="icon-button" data-action="close" aria-label="Close panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 14 14M19 5 5 19"/></svg></button></div><div id="overlay-content"></div></dialog>
   <div id="announcement" class="toast" role="status" aria-live="polite"></div>
