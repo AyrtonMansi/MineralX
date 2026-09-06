@@ -1,0 +1,61 @@
+  const openRecords = (tab = 'chips', preset = '') => { closeSurfaces();setDataTab(tab);setDataPreset(preset);setDataOpen(true); };
+  const deskRole = (()=>{const link=persistence.connections?.[deskProject?.id];return link ? link.userId===persistence.session?.user?.id?link.role:'viewer':'owner';})();
+  const startDrawing = (callback,geometryType='Point') => {
+    if(!mapReady){setOperationError('The map is unavailable. Enter coordinates or use GPS in the field form.');return;}
+    drawingCallback.current=callback;setDrawPoints([]);setDrawing({type:geometryType});
+  };
+  const finishDrawing = () => {
+    const type=drawing?.type;
+    if((type==='Point'&&drawPoints.length<1)||(type==='LineString'&&drawPoints.length<2)||(type==='Polygon'&&drawPoints.length<3))return;
+    const geometry={type,coordinates:type==='Point'?drawPoints[0]:type==='Polygon'?[[...drawPoints,drawPoints[0]]]:drawPoints};
+    drawingCallback.current?.(geometry);drawingCallback.current=null;setDrawing(null);setDrawPoints([]);
+  };
+  const handoffLab = file => { setDesk({mode:'review',projectId:deskProject?.id||activeProject?.id,initialImportFile:file}); };
+  const changeProject = async p => {try{closeSurfaces();await persistence.saveNow({...storeRef.current,activeProjectId:p.id},'Selected project');}catch(e){setOperationError(e.message);} };
+  return (
+    <main id="main-content" className="mx-workspace">
+      <div ref={mapRef} className="mx-map" aria-label="Geological globe map" />
+      <div className="mx-topbar">
+        <button type="button" className="mx-topbar-brand" onClick={()=>{closeSurfaces();setActivePanel('home');}} aria-label="MineralX map overview"><div className="mx-diamond"/><span className="mx-brand-text">MineralX</span></button>
+        <div className="mx-topbar-sep" />
+        <div className="mx-topbar-program-wrap">
+          <button type="button" className="mx-topbar-program" onClick={()=>setProgramOpen(o=>!o)} aria-expanded={programOpen}><span className="mx-program-name">{activeProject?.name||'Choose project'}</span><span className="mx-program-caret">▾</span></button>
+          {programOpen&&<div className="mx-program-menu">{store.projects.filter(p=>!p.archivedAt).map(p=><button type="button" key={p.id} className={`mx-program-item ${p.id===store.activeProjectId?'active':''}`} onClick={()=>changeProject(p)}><span className="mx-program-swatch" style={{background:p.color}}/>{p.name}{p.demo&&<span className="mx-demo-tag">demo</span>}</button>)}<button type="button" className="mx-program-item" onClick={()=>{closeSurfaces();setManageTarget({type:'newProject'});}}>+ New project</button></div>}
+        </div>
+        <div className="mx-topbar-spacer"/>
+        <button type="button" className="mx-save-state" onClick={()=>{closeSurfaces();setAccessOpen(true);}} title="Access, synchronization and full backup">{persistence.status}{persistence.pendingCount?` · ${persistence.pendingCount} pending`:''}</button>
+        <button type="button" className="mx-topbar-add" disabled={!hydrated||projectRole==='viewer'} onClick={()=>openDesk('sample')}>+ Add sample</button>
+        <button type="button" className="mx-avatar" aria-label="Workspace access" onClick={()=>{closeSurfaces();setAccessOpen(true);}}>{persistence.session?.user?.email?.slice(0,1).toUpperCase()||'○'}</button>
+      </div>
+      <div className="mx-map-tools" aria-label="Map tools">
+        <button type="button" onClick={()=>{closeSurfaces();setActivePanel('layers');}}>Layers</button>
+        <button type="button" onClick={()=>openDesk('observation')}>+ Observation</button>
+        <button type="button" onClick={()=>openDesk('import')}>Import</button>
+        <button type="button" title="Undo field change" disabled={!canUndo} onClick={doUndo}>↶</button>
+        <button type="button" title="Redo field change" disabled={!canRedo} onClick={doRedo}>↷</button>
+      </div>
+      {(operationError||persistence.error)&&<div className="mx-operation-alert" role="alert"><span>{operationError||persistence.error}</span><button type="button" onClick={()=>setAccessOpen(true)}>Recovery</button><button type="button" aria-label="Dismiss message" onClick={()=>setOperationError('')}>×</button></div>}
+      {mapError&&<div className="mx-map-fallback" role="status"><span>{mapError} Field records remain available.</span><button type="button" onClick={()=>{setMapError('');setMapEpoch(e=>e+1);}}>Retry map</button></div>}
+      {!hydrated&&<div className="mx-map-fallback" role="status">Opening device records…</div>}
+      {drawing&&<div className="mx-drawing-bar" role="status"><span>{drawing.type==='Point'?'Tap the sample location':`Tap ${drawing.type==='Polygon'?'boundary':'line'} vertices`} · {drawPoints.length} placed</span><button type="button" onClick={()=>setDrawPoints(p=>p.slice(0,-1))}>Undo vertex</button><button type="button" onClick={finishDrawing} disabled={drawPoints.length<(drawing.type==='Polygon'?3:drawing.type==='LineString'?2:1)}>Use geometry</button><button type="button" onClick={()=>{setDrawing(null);setDrawPoints([]);drawingCallback.current=null;}}>Cancel</button></div>}
+      <div className="mx-panel">
+        {activePanel==='home'&&<HomePanel stats={stats} project={activeProject} onUpload={()=>openDesk('sample')} onLayers={()=>{closeSurfaces();setActivePanel('layers');}} onData={openRecords} onClose={()=>setActivePanel(null)}/>}
+        {activePanel==='layers'&&<><LayersPanel store={store} layerIndex={layerIndex} layerOn={layerOn} toggleLayerOn={toggleLayerOn} layerOpacity={layerOpacity} setLayerOpacity={setLayerOpacity} isExpanded={isExpanded} setExpanded={setLayerExpanded} wmsErrors={wmsErrors} basemap={basemap} setBasemap={setBasemap} activeElement={activeElement} setActiveElement={setActiveElement} availableElements={availableElements} flowState={flowState} onRerunFlow={runFlowAnalysis} onManage={target=>{if(target.type==='chips')openDesk('sample',{},target.projectId);else if(target.type==='holes')openDesk('drilling',{},target.projectId);else openDesk('import',{},target.projectId);}} onClose={()=>setActivePanel(null)}/><label className="mx-unreviewed-toggle"><input type="checkbox" checked={includeUnreviewed} onChange={e=>setIncludeUnreviewed(e.target.checked)}/> Show unreviewed assay values</label>{flowState.message&&<p className="mx-analysis-note">{flowState.message}</p>}</>}
+      </div>
+      {manageTarget?.type==='newProject'&&<ManageDrawer target={manageTarget} store={store} api={api} onClose={()=>setManageTarget(null)}/>}
+      {dataOpen&&<DataDrawer store={store} api={api} tab={dataTab} setTab={setDataTab} activeElement={activeElement} initialFilter={dataPreset} role={projectRole} onAdd={(type,pid,context)=>openDesk(type==='drilling'||type==='holes'?'drilling':'sample',context||{},pid)} onEdit={(type,pid,context)=>openDesk(type==='drilling'||type==='holes'?'drilling':'sample',typeof context==='string'?{sampleId:context,holeId:context}:context||{},pid)} onClose={()=>{setDataOpen(false);setDataPreset('');}}/>}
+      {desk&&deskProject&&['programs','sample','drilling','observation'].includes(desk.mode)&&<div style={{display:drawing?'none':undefined}}><FieldDesk key={`${desk.projectId}:${desk.mode}:${JSON.stringify(desk.context)}`} mode={desk.mode} project={deskProject} context={desk.context||{}} role={deskRole} onCommit={commitProject} onClose={()=>setDesk(null)} onLocate={startDrawing}/></div>}
+      {desk?.mode==='review'&&deskProject&&<ReviewDesk key={deskProject.id} project={deskProject} role={deskRole} actor={persistence.session?.user?.email||'Device reviewer'} onCommit={commitProject} onClose={()=>setDesk(null)} initialImportFile={desk.initialImportFile} onImport={()=>setDesk({mode:'import',projectId:deskProject.id})}/>}
+      {desk?.mode==='import'&&deskProject&&<ImportDesk project={deskProject} role={deskRole} api={api} sharedProjectId={persistence.connections?.[deskProject.id]?.remoteId} onClose={()=>setDesk(null)} onLabImport={handoffLab}/>}
+      {accessOpen&&<WorkspaceAccess persistence={persistence} activeProject={activeProject} onClose={()=>setAccessOpen(false)}/>}
+      <nav className="mx-dock mx-primary-nav" aria-label="Geological workspace">
+        <button type="button" className={activePanel==='home'?'active':''} onClick={()=>{closeSurfaces();setActivePanel('home');}}>Map</button>
+        <button type="button" className={desk?.mode==='programs'?'active':''} onClick={()=>openDesk('programs')}>Programs</button>
+        <button type="button" className={dataOpen&&dataTab==='chips'?'active':''} onClick={()=>openRecords('chips')}>Samples</button>
+        <button type="button" className={desk?.mode==='drilling'?'active':''} onClick={()=>openDesk('drilling')}>Drilling</button>
+        <button type="button" className={desk?.mode==='review'?'active':''} onClick={()=>openDesk('review')}>Review</button>
+      </nav>
+    </main>
+  );
+}
+
