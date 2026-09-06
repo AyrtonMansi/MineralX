@@ -1,4 +1,4 @@
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -31,7 +31,8 @@ try{
   await page.locator('.mxf-status[data-state="saved"]').waitFor({timeout:30000});
   const names=await page.getByRole('navigation',{name:'Geology workspace'}).getByRole('button').allTextContents();
   assert.deepEqual(names,['Map','Programs','Samples','Drilling','Review']);
-  assert.match(await page.locator('.mxf-release').innerText(),new RegExp(expected.slice(0,7)));
+  // The footer fetches release metadata after hydration; wait for that real response.
+  await expect(page.locator('.mxf-release')).toContainText(expected.slice(0,7),{timeout:30000});
   await page.screenshot({path:'test-results/geology-production-desktop.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:'test-results/geology-production-mobile.png',fullPage:true});
