@@ -7,7 +7,7 @@ export async function middleware(request: NextRequest) {
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (url && key) {
+  if (request.nextUrl.pathname.startsWith("/gic") && url && key) {
     const db = createServerClient(url, key, {
       cookies: {
         getAll: () => request.cookies.getAll(),
