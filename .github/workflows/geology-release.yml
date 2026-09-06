@@ -17,9 +17,16 @@ jobs:
       CI: 'true'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Include current production without replacing either history
+        run: |
+          git config user.name 'AyrtonMansi'
+          git config user.email '35603638+AyrtonMansi@users.noreply.github.com'
+          git merge --no-ff --no-commit origin/main
       - name: Verify and apply preserved source checkpoint
         shell: bash
         run: |
@@ -32,6 +39,7 @@ jobs:
             echo 'dd3f8e0d09cbbc4729189567119079278fb5c0ffc0e6d5ffe761e3ac96664555  /tmp/geology-release.patch' | sha256sum -c -
             git apply --check /tmp/geology-release.patch
             git apply /tmp/geology-release.patch
+            node .recovery/browser-fixes.mjs
           fi
       - name: Install and reconcile combined lockfile
         run: npm install --no-audit --no-fund
@@ -52,7 +60,7 @@ jobs:
             if curl -fsS http://localhost:3000/api/mineralx-release > /tmp/release.json; then break; fi
             sleep 1
           done
-          for path in / /company /contact /clothing /gic/login /mineralx; do
+          for path in / /company /contact /clothing /gic/login /plant /mineralx; do
             curl -fsS "http://localhost:3000$path" > /dev/null
             echo "PASS $path"
           done
@@ -85,11 +93,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f .recovery/geology-part-1.gzpart ]; then
-            rm .recovery/geology-part-*.gzpart
+            rm .recovery/geology-part-*.gzpart .recovery/browser-fixes.mjs
             git add app components docs e2e test playwright.release.config.js package-lock.json .recovery
             git diff --cached --check
-            git config user.name 'AyrtonMansi'
-            git config user.email '35603638+AyrtonMansi@users.noreply.github.com'
-            git commit -m 'Implement and verify geology field workflows, durable storage, reviewed assays and recovery'
+            git commit -m 'Implement and verify geology workflows alongside the latest production plant release'
             git push origin HEAD:refs/heads/codex/geology-release-20260906
           fi
