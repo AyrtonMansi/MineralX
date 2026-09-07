@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const OPS_RELEASE = '2026.09.07.3';
-export const OPS_SCHEMA = 4;
+export const OPS_SCHEMA = 5;
 export const permissionProfiles = {
   collector: ['geo.read', 'geo.capture', 'files.geo', 'work.read', 'work.write'],
   geologist: ['geo.read', 'geo.capture', 'geo.publish', 'files.geo', 'work.read', 'work.write'],
