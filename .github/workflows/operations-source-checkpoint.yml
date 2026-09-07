@@ -1,0 +1,32 @@
+name: Operations source checkpoint
+on:
+  push:
+    branches: [codex/operations-suite-20260907]
+    paths: [.github/workflows/operations-source-checkpoint.yml]
+permissions:
+  contents: read
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - name: Preserve exact source and pinned development dependencies
+        run: |
+          git archive --format=tar.gz HEAD > /tmp/mineralx-operations-baseline.tar.gz
+          tar -czf /tmp/mineralx-operations-dependencies.tar.gz node_modules
+          sha256sum /tmp/mineralx-operations-*.tar.gz > /tmp/mineralx-operations-checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operations-baseline
+          path: |
+            /tmp/mineralx-operations-baseline.tar.gz
+            /tmp/mineralx-operations-dependencies.tar.gz
+            /tmp/mineralx-operations-checksums.txt
+          retention-days: 7
