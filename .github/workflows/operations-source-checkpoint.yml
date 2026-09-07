@@ -17,16 +17,12 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --no-audit --no-fund
-      - name: Preserve exact source and pinned development dependencies
-        run: |
-          git archive --format=tar.gz HEAD > /tmp/mineralx-operations-baseline.tar.gz
-          tar -czf /tmp/mineralx-operations-dependencies.tar.gz node_modules
-          sha256sum /tmp/mineralx-operations-*.tar.gz > /tmp/mineralx-operations-checksums.txt
+      - name: Pin server XML parser
+        run: npm install --save-exact @xmldom/xmldom@0.9.10 --no-audit --no-fund
+      - name: Preserve parser and exact dependency lock
+        run: tar -czf /tmp/mineralx-xml-parser.tar.gz node_modules/@xmldom package.json package-lock.json
       - uses: actions/upload-artifact@v4
         with:
-          name: operations-baseline
-          path: |
-            /tmp/mineralx-operations-baseline.tar.gz
-            /tmp/mineralx-operations-dependencies.tar.gz
-            /tmp/mineralx-operations-checksums.txt
+          name: operations-xml-parser
+          path: /tmp/mineralx-xml-parser.tar.gz
           retention-days: 7
