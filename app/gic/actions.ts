@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { database, configured, requireAccess } from "@/lib/gic/server";
 import { annualSchema, runSchema } from "@/lib/gic/model";
 import { company } from "@/lib/content";
+import { signInFailureMessage, resetFailureMessage } from "@/lib/gic/login-routing";
 
 export async function signIn(form: FormData): Promise<{ error?: string }> {
   if (!configured())
@@ -12,19 +13,20 @@ export async function signIn(form: FormData): Promise<{ error?: string }> {
       error:
         "Secure access is awaiting activation. Please contact your MineralX administrator.",
     };
-  const email = z.string().email().max(254).safeParse(form.get("email"));
+  const email = z.string().trim().email().max(254).safeParse(form.get("email"));
   const password = z.string().min(1).max(256).safeParse(form.get("password"));
   if (!email.success || !password.success)
     return { error: "Enter your email and password." };
   const db = await database();
-  const { error } = await db.auth.signInWithPassword({
-    email: email.data,
-    password: password.data,
-  });
-  if (error)
-    return {
-      error: "Sign-in failed. Check your details or try again shortly.",
-    };
+  try {
+    const { error } = await db.auth.signInWithPassword({
+      email: email.data,
+      password: password.data,
+    });
+    if (error) return { error: signInFailureMessage(error) };
+  } catch (error) {
+    return { error: signInFailureMessage(error) };
+  }
   redirect(form.get("next") === "/plant" ? "/plant" : "/gic");
 }
 export async function signOut() {
@@ -36,13 +38,18 @@ export async function signOut() {
 }
 export async function requestPasswordReset(form: FormData) {
   if (!configured()) return { error: "Secure access is awaiting activation." };
-  const email = z.string().email().max(254).safeParse(form.get("email"));
+  const email = z.string().trim().email().max(254).safeParse(form.get("email"));
   if (!email.success) return { error: "Enter a valid email address." };
   const db = await database();
   // Supabase applies email and IP rate limits. Never expose whether an account exists.
-  await db.auth.resetPasswordForEmail(email.data, {
-    redirectTo: `${company.url}/gic/auth/callback`,
-  });
+  try {
+    const { error } = await db.auth.resetPasswordForEmail(email.data, {
+      redirectTo: `${company.url}/gic/auth/callback`,
+    });
+    if (error) return { error: resetFailureMessage(error) };
+  } catch (error) {
+    return { error: resetFailureMessage(error) };
+  }
   return {
     message:
       "If this account is eligible, you’ll receive a password reset link. Check your inbox and spam folder.",
