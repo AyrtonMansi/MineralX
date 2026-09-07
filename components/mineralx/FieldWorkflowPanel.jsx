@@ -14,7 +14,7 @@ function Label({children,wide=false}){return <label className={wide?'mxf-label m
 function Message({children,error=false}){return <p role={error?'alert':'status'} className={`mxf-message ${error?'mxf-error':''}`}>{children}</p>;}
 function stateLabel(sample){return sample.archivedAt?'archived':sample.lifecycle||((sample.assayHistory?.length||Object.keys(sample.assays||{}).length)?'legacy result':'collected');}
 
-export default function FieldWorkflowPanel({persistence,onNavigate,onTool,onFocus,getMapCenter,legacyOpen}){
+export default function FieldWorkflowPanel({persistence,onNavigate,onTool,onFocus,getMapCenter,legacyOpen,layerPreferences}){
   const {store,setStore,hydrated,status,error,recovery,restore,loadLatest}=persistence;
   const project=store.projects.find(p=>p.id===store.activeProjectId)||store.projects[0];
   const [stage,setStage]=useState('Map'),[capture,setCapture]=useState(null),[message,setMessage]=useState(''),[failure,setFailure]=useState('');
@@ -57,7 +57,7 @@ export default function FieldWorkflowPanel({persistence,onNavigate,onTool,onFocu
   const backup=async()=>{
     try{
       const drafts={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key?.startsWith('mx-field-draft-'))drafts[key]=localStorage.getItem(key);}
-      downloadText(`MineralX-workspace-${today()}.json`,await makeBackup(store,{view:loadLayerUiState(),drafts}),'application/json');
+      downloadText(`MineralX-workspace-${today()}.json`,await makeBackup(store,{view:layerPreferences||loadLayerUiState(),drafts}),'application/json');
       setMessage('Full workspace backup prepared, including stored photos, analytical history and drafts.');setFailure('');return true;
     }catch(err){setFailure(err.message);return false;}
   };

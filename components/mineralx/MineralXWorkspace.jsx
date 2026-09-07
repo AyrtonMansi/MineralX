@@ -42,7 +42,7 @@ export default function MineralXWorkspace() {
   // SSR renders the demo store; the persisted store loads after mount so
   // server and client markup match (avoids hydration mismatches).
   const persistence = useDurableStore();
-  const { store, setStore, hydrated } = persistence;
+  const { store, setStore, hydrated, flush } = persistence;
   // Layer UI state: one shape for every layer type (project markers/
   // boundary, WMS public layers, Target Analysis's own sub-layers),
   // replacing what used to be three separately-shaped, two-different-
@@ -209,7 +209,7 @@ export default function MineralXWorkspace() {
   // operations (focusOn, exportProject) don't snapshot.
   const api = useMemo(() => ({
     focusOn,
-    flush: persistence.flush,
+    flush: flush,
     openSpatialImport,
     fitSpatial,
     importSpatial: async (pid, rows) => {
@@ -221,13 +221,13 @@ export default function MineralXWorkspace() {
         for (const {layer} of rows) if (!files.some(f => f.sourceSha256 === layer.source.sha256)) files.unshift({name:layer.source.name, category:layer.source.format.toUpperCase(), meta:`${layer.data.features.length} reference features`, date:today(), sourceSha256:layer.source.sha256});
         return {...updated, files};
       });
-      await persistence.flush();
+      await flush();
       fitSpatial({type:'FeatureCollection',features:rows.flatMap(r => r.layer.data.features.filter((_,i) => !r.selectedIndexes || r.selectedIndexes.includes(i)))});
     },
     updateSpatial: async (pid, id, patch) => {
       pushUndo(store);
       updateProject(pid,p => ({...p,spatialLayers:(p.spatialLayers||[]).map(l => l.recordId===id ? {...l,...patch} : l)}));
-      await persistence.flush();
+      await flush();
     },
     exportSpatial: (pid,id,format) => {
       const layer = store.projects.find(p=>p.id===pid)?.spatialLayers?.find(l=>l.recordId===id);
@@ -242,7 +242,7 @@ export default function MineralXWorkspace() {
       if(boundary)downloadText(`${boundary.name.replace(/[^a-z0-9._-]/gi,'_')}.kml`,dataToKml(boundary.name,boundaryData(boundary)),'application/vnd.google-earth.kml+xml');
     },
     renameBoundary: async (pid,name) => {
-      pushUndo(store);updateProject(pid,p=>({...p,boundary:p.boundary?{...p.boundary,name}:null}));await persistence.flush();
+      pushUndo(store);updateProject(pid,p=>({...p,boundary:p.boundary?{...p.boundary,name}:null}));await flush();
     },
     fitProjectLayer: (pid,node) => {
       const p=store.projects.find(p=>p.id===pid); if(!p)return;
@@ -439,7 +439,7 @@ export default function MineralXWorkspace() {
       if(spatialLayer)project=commitSpatialImports(project,[{layer:spatialLayer,role:'boundary',acknowledged:false}]);
       project=upgradeStore({version:8,projects:[project]}).projects[0];
       pushUndo(store);setStore(prev=>({...prev,activeProjectId:id,projects:[...prev.projects,project]}));
-      await persistence.flush();if(project.boundary)fitSpatial(boundaryData(project.boundary));
+      await flush();if(project.boundary)fitSpatial(boundaryData(project.boundary));
       return {boundaryError:null};
     },
     exportProject: (project) => {
@@ -471,7 +471,7 @@ export default function MineralXWorkspace() {
     // `store` (not `store.projects`) in deps: pushUndo snapshots the whole
     // store, so a stale closure would capture an out-of-date activeProjectId.
     // activeElement: promoteTarget freezes it into the target's provenance.
-  }), [store, updateProject, addFile, focusOn, activeElement, persistence.flush, setStore, openSpatialImport, fitSpatial]);
+  }), [store, updateProject, addFile, focusOn, activeElement, flush, setStore, openSpatialImport, fitSpatial]);
 
   // Promoting a candidate always lands it in the active project — the one
   // whose data is on screen when the analysis was run. Defined after `api`
@@ -554,6 +554,7 @@ export default function MineralXWorkspace() {
       const maplibregl = (await import('maplibre-gl')).default;
       if (cancelled) return;
       mgl.current = maplibregl;
+      flownToProject.current = false;
       const map = new maplibregl.Map({
         container: mapRef.current,
         style: {
@@ -643,8 +644,11 @@ export default function MineralXWorkspace() {
     if (!mapReady || !hydrated || flownToProject.current) return;
     flownToProject.current = true;
     const map = mapInstance.current;
-    map.flyTo({ center: [initialCenter.lng, initialCenter.lat], zoom: 13, duration: 2600, curve: 1.4 });
-  }, [mapReady, hydrated, initialCenter]);
+    const extent = activeProject?.boundary ? boundaryData(activeProject.boundary) : {type:'FeatureCollection',features:(activeProject?.spatialLayers||[]).filter(layer=>!layer.archivedAt).flatMap(layer=>layer.data.features)};
+    const bounds = spatialBounds(extent);
+    if (bounds) map.fitBounds(bounds, {padding:70, maxZoom:14, duration:1200});
+    else map.flyTo({ center: [initialCenter.lng, initialCenter.lat], zoom: 13, duration: 2600, curve: 1.4 });
+  }, [mapReady, hydrated, initialCenter, activeProject]);
 
   // ── Rebuild project layers when data changes ────────────────────────
   useEffect(() => {
@@ -964,6 +968,7 @@ export default function MineralXWorkspace() {
 
       <FieldWorkflowPanel
         persistence={persistence}
+        layerPreferences={{layerOn, layerOpacity, layerExpanded, basemap, activeElement}}
         legacyOpen={!!activePanel || !!manageTarget || dataOpen}
         onNavigate={() => { if (setActivePanel(null) === false) return false; setManageTarget(null); setDataOpen(false); return true; }}
         onTool={(name) => {

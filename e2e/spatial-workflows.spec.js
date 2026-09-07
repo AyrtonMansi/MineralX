@@ -34,6 +34,7 @@ test('tenement KML retains every polygon and interior ring through save, reload 
  expect(project.spatialLayers[0].data.features[0].properties.extendedData.tenement_id).toBe('ML-1');
  expect(project.spatialLayers[0].data.features[0].properties.folderPath).toEqual(['GIS export','Tenements']);
  await page.reload();await saved(page);await page.getByRole('button',{name:'Map layers',exact:true}).click();
+ await page.screenshot({path:'test-results/geology-spatial-overview-desktop.png',fullPage:true});
  const row=layers(page).locator(`[data-layer-id="spatial:${project.id}:${sourceId}"]`);
  await row.getByText('Layer details',{exact:true}).click();
  const original=await downloadFile(page,row.getByRole('button',{name:'Export original KML',exact:true}));expect(original.bytes.toString()).toBe(KML);
@@ -113,4 +114,14 @@ test('unsaved spatial preview cannot be discarded by workspace navigation withou
  page.once('dialog',dismiss);await importer(page).getByRole('button',{name:'Back to map',exact:true}).click();await expect(importer(page)).toBeVisible();
  expect((await db(page)).data.projects[0].spatialLayers||[]).toHaveLength(0);
  await saveImport(page);await nav(page,'Samples');await expect(page.getByRole('region',{name:'Samples workspace'})).toBeVisible();expect((await db(page)).data.projects[0].spatialLayers).toHaveLength(1);
+});
+
+
+test('a layer-preference quota error stays visible and the full backup retains the open view',async({page})=>{
+ await start(page,'Preference recovery');await importFiles(page,[{name:'Reference.geojson',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(collection([polygon])))}]);await saveImport(page);
+ const p=(await db(page)).data.projects[0],id=`spatial:${p.id}:${p.spatialLayers[0].recordId}`;
+ await page.evaluate(()=>{const original=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='mx-layers-v1')throw new DOMException('Injected preference quota','QuotaExceededError');return original.call(this,key,value);};});
+ await layers(page).getByRole('checkbox',{name:'Show Reference',exact:true}).uncheck();await expect(layers(page).getByRole('alert')).toContainText('preferences could not be saved');
+ await nav(page,'Review');const backup=await downloadFile(page,page.getByRole('button',{name:'Download full backup',exact:true}));
+ const payload=JSON.parse(JSON.parse(backup.bytes.toString()).payload);expect(payload.layerUi.view.layerOn[id]).toBe(false);expect(payload.store.projects[0].spatialLayers[0].source).toEqual(p.spatialLayers[0].source);
 });
