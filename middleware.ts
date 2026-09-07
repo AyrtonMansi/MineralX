@@ -7,7 +7,7 @@ export async function middleware(request: NextRequest) {
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (request.nextUrl.pathname.startsWith("/gic") && url && key) {
+  if ((request.nextUrl.pathname.startsWith("/gic") || request.nextUrl.pathname.startsWith("/ops") || request.nextUrl.pathname.startsWith("/api/ops")) && url && key) {
     const db = createServerClient(url, key, {
       cookies: {
         getAll: () => request.cookies.getAll(),
@@ -26,4 +26,4 @@ export async function middleware(request: NextRequest) {
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   return response;
 }
-export const config = { matcher: ["/gic/:path*", "/plant/:path*"] };
+export const config = { matcher: ["/gic/:path*", "/plant/:path*", "/ops/:path*", "/api/ops/:path*"] };
