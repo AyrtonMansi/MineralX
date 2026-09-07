@@ -19,7 +19,7 @@ export default function Geology(){
  const {data,error,loading}=useResource(scope?.kind==='project'?`geology?scope=${scope.id}`:null),{data:files}=useResource(scope?.kind==='project'?`files?scope=${scope.id}`:null);
  const local=pack&&pack.scope.id===scope?.id?pack.geology:null,snapshot=local&&(offlineMode||!online||pack?.outbox.length)?local:data,project=snapshot?.project;
  const kind=view==='lab'||view==='assayBatches'?'assayBatches':view==='map'?'spatialLayers':view,record=project?.[kind]?.find((r:any)=>r.recordId===item);
- const open=useCallback((k:string,id:string)=>{if(!mayNavigate())return;setForm(null);const path=`/ops/${offlineMode?'field':'geology'}?scope=${scope?.id}&view=${k==='assayBatches'?'lab':k==='spatialLayers'?'map':k}&item=${id}`;if(offlineMode)window.history.pushState(null,'',path);else router.push(path);},[router,scope?.id,offlineMode]);
+ const open=useCallback((k:string,id:string)=>{if(!mayNavigate())return;setForm(null);const path=`/ops/${offlineMode?'field':'geology'}?scope=${scope?.id}&view=${k==='assayBatches'?'lab':k==='spatialLayers'||k==='boundary'?'map':k}&item=${id}`;if(offlineMode)window.history.pushState(null,'',path);else router.push(path);},[router,scope?.id,offlineMode]);
  useEffect(()=>{if(query.get('action')==='sample')setForm({key:'sample'});},[query]);
  if(!scope||scope.kind!=='project')return <><Heading title="Geology"/><Empty title="Choose a geological project">Select your assigned project. A processing facility is a separate operational boundary.</Empty></>;
  if(!scope.permissions.includes('geo.read'))return <><Heading title="Geology"/><Empty title="Geological access is not assigned">Project administration does not automatically grant access to field records.</Empty></>;
