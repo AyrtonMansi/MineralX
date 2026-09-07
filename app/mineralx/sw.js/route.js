@@ -1,5 +1,5 @@
 const worker = `
-const CACHE='mineralx-geology-shell-20260907-v2';
+const CACHE='mineralx-geology-shell-20260907-v3';
 const isAsset=url=>url.origin===self.location.origin && url.pathname.startsWith('/_next/static/') && /\\.(js|css|woff2?)(?:$)/.test(url.pathname);
 self.addEventListener('install',event=>event.waitUntil((async()=>{
   const cache=await caches.open(CACHE);

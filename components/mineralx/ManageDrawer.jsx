@@ -1,4 +1,5 @@
 'use client';
+import { boundaryData, spatialStats } from './spatial-import.js';
 import { useRef, useState } from 'react';
 import { MxIcons } from './MineralXIcons';
 import {
@@ -56,54 +57,12 @@ export default function ManageDrawer({ target, store, api, onClose }) {
 
 // ── New project ────────────────────────────────────────────────────────
 function NewProjectManager({ api, onClose }) {
-  const [name, setName] = useState('');
-  const [kmlText, setKmlText] = useState(null);
-  const [kmlName, setKmlName] = useState(null);
-  const [error, setError] = useState(null);
-  const fileInput = useRef(null);
-
-  const readKml = (file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-      const { error: err } = parseKmlBoundary(String(reader.result));
-      if (err) { setError(err); setKmlText(null); setKmlName(null); return; }
-      setError(null);
-      setKmlText(String(reader.result));
-      setKmlName(file.name);
-      }catch(err){setImportMsg({error:true,text:err.message});}
-    };
-    reader.readAsText(file);
+  const [name,setName]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const create=async()=>{
+    if(busy)return;setBusy(true);setError('');
+    try{await api.createProject(name);onClose();}catch(err){setError(err.message);}finally{setBusy(false);}
   };
-
-  const create = () => {
-    if (!name.trim()) { setError('Give the project a name.'); return; }
-    const { boundaryError } = api.createProject(name.trim(), kmlText);
-    if (boundaryError) { setError(boundaryError); return; }
-    onClose();
-  };
-
-  return (
-    <div className="mx-manage-sections">
-      <div className="mx-manage-form">
-        <ManageField label="Project name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ravenswood South" />
-        <div
-          className="mx-drop-area mx-drop-area-sm"
-          onClick={() => fileInput.current?.click()}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { e.preventDefault(); readKml(e.dataTransfer.files?.[0]); }}
-        >
-          <div className="mx-drop-icon">&#8593;</div>
-          <div className="mx-drop-text">{kmlName ? kmlName : <>Tenement KML (optional) — drop or <span className="mx-drop-browse">browse</span></>}</div>
-          <div className="mx-drop-hint">{kmlName ? 'Boundary ready — will zoom to it' : 'You can add or replace it later'}</div>
-          <input ref={fileInput} type="file" accept=".kml" style={{ display: 'none' }} onChange={(e) => { readKml(e.target.files?.[0]); e.target.value = ''; }} />
-        </div>
-        {error && <div className="mx-import-msg mx-import-err">{error}</div>}
-        <button type="button" className="mx-btn-primary mx-btn-full" onClick={create}>Create project</button>
-      </div>
-    </div>
-  );
+  return <div className="mx-manage-sections"><div className="mx-manage-form"><ManageField label="Project name" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ravenswood South"/><p>Create the project, then import KML, KMZ or GeoJSON using Map layers → Import map files. Tenements are reviewed before replacing any boundary.</p>{error&&<p role="alert">{error}</p>}<button type="button" className="mx-btn-primary mx-btn-full" disabled={busy||!name.trim()} onClick={create}>{busy?'Saving project…':'Create project'}</button></div></div>;
 }
 
 // ── Project settings ───────────────────────────────────────────────────
@@ -617,69 +576,9 @@ function DrillHoleManager({ project, api, onClose, editId }) {
 
 // ── Boundary manager ───────────────────────────────────────────────────
 function BoundaryManager({ project, api }) {
-  const [name, setName] = useState(project.boundary?.name || '');
-  const [msg, setMsg] = useState(null);
-  const fileInput = useRef(null);
-
-  const replaceKml = (file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-      const { coords, error } = parseKmlBoundary(String(reader.result));
-      if (error) { setMsg({ error: true, text: error }); return; }
-      const boundaryName = name.trim() || file.name.replace(/\.kml$/i, '');
-      api.setBoundary(project.id, boundaryName, coords, file.name);
-      setName(boundaryName);
-      setMsg({ error: false, text: 'Boundary updated — zoomed to it.' });
-      }catch(err){setMsg({error:true,text:err.message});}
-    };
-    reader.readAsText(file);
-  };
-
-  return (
-    <div className="mx-manage-sections">
-      <div className="mx-manage-form">
-        <ManageField
-          label="Boundary name" value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => {
-            if (project.boundary && name.trim() && name !== project.boundary.name) {
-              api.setBoundary(project.id, name.trim(), project.boundary.coords);
-            }
-          }}
-          placeholder="e.g. EPM 27780"
-        />
-        <div className="mx-drop-area mx-drop-area-sm" onClick={() => fileInput.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); replaceKml(e.dataTransfer.files?.[0]); }}>
-          <div className="mx-drop-icon">&#8593;</div>
-          <div className="mx-drop-text">{project.boundary ? 'Replace KML' : 'Upload KML'} — drop or <span className="mx-drop-browse">browse</span></div>
-          <div className="mx-drop-hint">First polygon in the file becomes the boundary</div>
-          <input ref={fileInput} type="file" accept=".kml" style={{ display: 'none' }} onChange={(e) => { replaceKml(e.target.files?.[0]); e.target.value = ''; }} />
-        </div>
-        {msg && <div className={`mx-import-msg ${msg.error ? 'mx-import-err' : 'mx-import-ok'}`}>{msg.text}</div>}
-      </div>
-      <div className="mx-manage-actions">
-        <button
-          type="button" className="mx-btn-secondary mx-btn-sm"
-          disabled={!project.boundary}
-          onClick={() => {
-            const b = project.boundary;
-            if (b) {
-              const L = b.coords;
-              const lat = L.reduce((a, c) => a + c[0], 0) / L.length;
-              const lng = L.reduce((a, c) => a + c[1], 0) / L.length;
-              api.focusOn(lat, lng);
-            }
-          }}
-        >Zoom to boundary</button>
-        <button
-          type="button" className="mx-btn-secondary mx-btn-sm"
-          disabled={!project.boundary}
-          onClick={() => project.boundary && downloadText(`${project.boundary.name.replace(/\s+/g, '_')}.kml`, boundaryToKml(project.boundary.name, project.boundary.coords), 'application/vnd.google-earth.kml+xml')}
-        >{MxIcons.download} Export KML</button>
-      </div>
-    </div>
-  );
+  const [name,setName]=useState(project.boundary?.name||''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+  const rename=async()=>{setBusy(true);try{await api.renameBoundary(project.id,name.trim());setMessage('Boundary name saved. All polygons and interior rings retained.');}catch(error){setMessage(error.message);}finally{setBusy(false);}};
+  return <div className="mx-manage-sections"><div className="mx-manage-form"><ManageField label="Boundary name" value={name} onChange={e=>setName(e.target.value)}/><button type="button" disabled={busy||!project.boundary||!name.trim()} onClick={rename}>Save boundary name</button><p>{project.boundary?`${spatialStats(boundaryData(project.boundary)).polygons} polygons · all exterior and interior rings retained`:'No boundary imported yet.'}</p><button type="button" className="mx-btn-primary" onClick={()=>api.openSpatialImport(project.id,[],'boundary')}>Import KML / KMZ / GeoJSON boundary</button><p>Review every tenement before saving. Adding polygons and replacing the current boundary are separate choices. Source files and previous boundaries remain in backups.</p>{message&&<p role="status">{message}</p>}</div><div className="mx-manage-actions"><button type="button" disabled={!project.boundary} onClick={()=>api.fitSpatial(boundaryData(project.boundary))}>Zoom to all tenements</button><button type="button" disabled={!project.boundary} onClick={()=>api.exportBoundary(project.id)}>Export boundary KML</button></div></div>;
 }
 
 // Reconstructs AssayInputs' editable row shape from a stored sample/

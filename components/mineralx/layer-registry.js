@@ -133,6 +133,7 @@ export function buildLayerIndex(store, commodities = []) {
   const index = new Map(STATIC_LAYERS_BY_ID);
   (store?.projects || []).forEach(p => {
     projectLayerDescriptors(p).forEach(d => index.set(d.id, d));
+    (p.spatialLayers || []).filter(l=>!l.archivedAt).forEach(l=>index.set(`spatial:${p.id}:${l.recordId}`,{id:`spatial:${p.id}:${l.recordId}`,label:l.name,parent:`proj:${p.id}`,group:'project',engine:'project-vector',defaultOn:true,supportsOpacity:true,defaultOpacity:1}));
   });
   occurrenceLayerDescriptors(commodities).forEach(d => index.set(d.id, d));
   return index;
