@@ -1,0 +1,15 @@
+import { deflateRawSync } from 'node:zlib';
+import { crc32 } from '../../components/mineralx/spatial-import.js';
+export const KML = `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>GIS export</name><Style id="tenement"><LineStyle><color>ff336699</color><width>3</width></LineStyle></Style><Folder><name>Tenements</name><Placemark id="ML-1"><name>Lease &amp; One</name><styleUrl>#tenement</styleUrl><ExtendedData><Data name="tenement_id"><value>ML-1</value></Data></ExtendedData><Polygon><outerBoundaryIs><LinearRing><coordinates>145,-21 145.1,-21 145.1,-20.9 145,-20.9 145,-21</coordinates></LinearRing></outerBoundaryIs><innerBoundaryIs><LinearRing><coordinates>145.02,-20.98 145.04,-20.98 145.04,-20.96 145.02,-20.96 145.02,-20.98</coordinates></LinearRing></innerBoundaryIs></Polygon></Placemark><Placemark><name>Lease Two</name><Polygon><outerBoundaryIs><LinearRing><coordinates>145.2,-21 145.3,-21 145.3,-20.9 145.2,-20.9 145.2,-21</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Folder><Folder><name>Geological reference</name><Placemark><name>Fault trace</name><LineString><coordinates>145,-21,3 145.3,-20.9,4</coordinates></LineString></Placemark><Placemark><name>Historic location</name><description><![CDATA[<img src=x onerror="window.__unsafeImport=1">]]></description><Point><coordinates>145.15,-20.95,20</coordinates></Point></Placemark></Folder></Document></kml>`;
+export const polygon = { type: 'Feature', properties: { name: 'Synthetic lease', source: 'fixture' }, geometry: { type: 'Polygon', coordinates: [[[145,-21],[145.1,-21],[145.1,-20.9],[145,-20.9],[145,-21]],[[145.02,-20.98],[145.04,-20.98],[145.04,-20.96],[145.02,-20.96],[145.02,-20.98]]] } };
+export function makeZip(entries, { method = 8, expandedOverride } = {}) {
+  const chunks = [], directory = []; let offset = 0;
+  for (const [name, text] of Object.entries(entries)) {
+    const raw = Buffer.from(text), compressed = method === 0 ? raw : deflateRawSync(raw), filename = Buffer.from(name), checksum = crc32(raw);
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50); local.writeUInt16LE(20,4); local.writeUInt16LE(method,8); local.writeUInt32LE(checksum,14); local.writeUInt32LE(compressed.length,18); local.writeUInt32LE(raw.length,22); local.writeUInt16LE(filename.length,26);
+    const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50); central.writeUInt16LE(20,4); central.writeUInt16LE(20,6); central.writeUInt16LE(method,10); central.writeUInt32LE(checksum,16); central.writeUInt32LE(compressed.length,20); central.writeUInt32LE(expandedOverride ?? raw.length,24); central.writeUInt16LE(filename.length,28); central.writeUInt32LE(offset,42);
+    chunks.push(local,filename,compressed); directory.push(central,filename); offset += local.length + filename.length + compressed.length;
+  }
+  const end = Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(directory.length/2,8);end.writeUInt16LE(directory.length/2,10);end.writeUInt32LE(directory.reduce((n,c)=>n+c.length,0),12);end.writeUInt32LE(offset,16);
+  return Buffer.concat([...chunks,...directory,end]);
+}

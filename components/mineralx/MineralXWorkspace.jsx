@@ -1,17 +1,16 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { PUBLIC_DATA_CATALOG, BASEMAP_TILES, THEME_LABELS, THEME_ORDER } from './layer-data';
+import { PUBLIC_DATA_CATALOG, BASEMAP_TILES } from './layer-data';
 import {
-  WMS_LAYERS_BY_THEME, buildLayerIndex, isLayerOn, effectiveOn, layerOpacityOf,
-  projectLayerDescriptors,
+  buildLayerIndex, isLayerOn, effectiveOn, layerOpacityOf,
 } from './layer-registry';
 import { loadLayerUiState, saveLayerUiState } from './layer-ui-store';
 import {
   createDemoStore, loadStore, saveStore, today, gradeOf, GRADE_COLORS, PROJECT_COLORS,
   elementInfo, elementsInStore, formatAssay, detectCsvKind, validateCoordinates,
   parseSampleCsv, parseCollarCsv, parseAssayCsv, parseIntervalCsv,
-  samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, geologyToCsv, targetsToCsv, downloadText, parseKmlBoundary, boundaryToKml,
+  samplesToCsv, collarsToCsv, intervalsToCsv, surveysToCsv, geologyToCsv, targetsToCsv, downloadText,
   pushUndo, undo, redo, undoAvailable, redoAvailable, clearUndo,
   nextId, targetKey, targetPrefix, targetHitRate, crsLabel,
 } from './project-store';
@@ -33,6 +32,10 @@ import FieldWorkflowPanel from './FieldWorkflowPanel';
 import { useDurableStore } from './useDurableStore';
 import { assertUniqueIds, assertCollar, assertInterval, stageAssays, addAssayBatch, upgradeStore, collectSample } from './field-workflows.js';
 import { parseCsv } from './csv.js';
+import MapLayersPanel from './MapLayersPanel.jsx';
+import SpatialImportPanel from './SpatialImportPanel.jsx';
+import useSpatialLayers from './useSpatialLayers.js';
+import { boundaryData, commitSpatialImports, dataToKml, downloadSpatialSource, spatialBounds } from './spatial-import.js';
 
 // ── Main component ─────────────────────────────────────────────────────
 export default function MineralXWorkspace() {
@@ -53,7 +56,18 @@ export default function MineralXWorkspace() {
   const [layerExpanded, setLayerExpanded] = useState({}); // nodeId -> bool (defaults below)
   const [wmsErrors, setWmsErrors] = useState({});    // layerId -> true when tiles fail
 
-  const [activePanel, setActivePanel] = useState(null);
+  const [activePanel, applyActivePanel] = useState(null);
+  const navigationGuard = useRef(null);
+  const registerNavigationGuard = useCallback(guard => { navigationGuard.current = guard; }, []);
+  const setActivePanel = useCallback(panel => {
+    if (navigationGuard.current?.() === false) return false;
+    applyActivePanel(panel);
+    return true;
+  }, []);
+  const [spatialRequest, setSpatialRequest] = useState(null);
+  const [spatialError, setSpatialError] = useState('');
+  const [preferencesSaved, setPreferencesSaved] = useState(true);
+  const [layerHydrated, setLayerHydrated] = useState(false);
   const [manageTarget, setManageTarget] = useState(null); // {type, projectId}
   const [dataOpen, setDataOpen] = useState(false);
   const [dataTab, setDataTab] = useState('chips');
@@ -75,7 +89,6 @@ export default function MineralXWorkspace() {
   const resizeObs = useRef(null); // ResizeObserver keeping the canvas matched to its container
   const markers = useRef(new Map());       // featureId -> maplibregl.Marker (samples + collars)
   const groupMembers = useRef(new Map());  // `${pid}:chips|holes` -> Set of feature ids currently added to the map
-  const boundaryLayers = useRef(new Map()); // pid -> { sourceId, fillLayerId, lineLayerId }
   const wmsLayers = useRef(new Set());     // public layerId -> currently-added (source+layer exist)
   const flownToProject = useRef(false); // guards the one-time auto fly-in on initial load
   const recoveryAttempts = useRef(0); // caps auto-recovery from a crashed render loop (see error listener below)
@@ -86,12 +99,8 @@ export default function MineralXWorkspace() {
   // project's boundary (if drawn) or its samples/collars, else a wide
   // North QLD default — this app's own regional focus, not an arbitrary 0,0.
   const initialCenter = useMemo(() => {
-    const coords = activeProject?.boundary?.coords;
-    if (coords?.length) {
-      const lat = coords.reduce((s, c) => s + c[0], 0) / coords.length;
-      const lng = coords.reduce((s, c) => s + c[1], 0) / coords.length;
-      return { lat, lng };
-    }
+    const bounds = activeProject?.boundary ? spatialBounds(boundaryData(activeProject.boundary)) : null;
+    if (bounds) return { lat: (bounds[0][1] + bounds[1][1]) / 2, lng: (bounds[0][0] + bounds[1][0]) / 2 };
     const pts = [...(activeProject?.samples || []), ...(activeProject?.collars || [])].filter(p=>!p.archivedAt&&!isControl(p)&&validateCoordinates(p.lat,p.lng));
     if (pts.length) {
       const lat = pts.reduce((s, p) => s + p.lat, 0) / pts.length;
@@ -102,21 +111,20 @@ export default function MineralXWorkspace() {
   }, [activeProject]);
 
   useEffect(() => {
-    const savedLayerUi = loadLayerUiState();
-    setLayerOn(savedLayerUi.layerOn);
-    setLayerOpacity(savedLayerUi.layerOpacity);
-    setLayerExpanded(savedLayerUi.layerExpanded);
-    setLastExportAt(Date.now()); // staleness clock starts from app open, not epoch 0
+    const load = () => {
+      const saved = loadLayerUiState();
+      setLayerOn(saved.layerOn); setLayerOpacity(saved.layerOpacity); setLayerExpanded(saved.layerExpanded);
+      setBasemap(saved.basemap || 'satellite'); setActiveElement(saved.activeElement || 'Au');
+      setLayerHydrated(true);
+    };
+    load(); setLastExportAt(Date.now());
+    window.addEventListener('mineralx-layer-settings-restored', load);
+    return () => window.removeEventListener('mineralx-layer-settings-restored', load);
   }, []);
-
-  // Layer-tree UI state persists under its own key (layer-ui-store.js),
-  // separate from the project-data store above — see that file for why.
-  // Guarded by `hydrated` the same way, so the pre-load empty state never
-  // overwrites what was actually saved.
   useEffect(() => {
-    if (!hydrated) return;
-    saveLayerUiState({ layerOn, layerOpacity, layerExpanded });
-  }, [layerOn, layerOpacity, layerExpanded, hydrated]);
+    if (!layerHydrated) return;
+    setPreferencesSaved(saveLayerUiState({ layerOn, layerOpacity, layerExpanded, basemap, activeElement }));
+  }, [layerOn, layerOpacity, layerExpanded, basemap, activeElement, layerHydrated]);
 
   useEffect(() => {
     setSaveFailed(['blocked', 'conflict'].includes(persistence.status));
@@ -184,6 +192,17 @@ export default function MineralXWorkspace() {
     }
   }, []);
 
+  const openSpatialImport = useCallback((projectId, files = [], role = 'reference') => {
+    if (setActivePanel('spatial') === false) return false;
+    setManageTarget(null); setDataOpen(false);
+    setSpatialRequest({ projectId, files: Array.from(files), role, key: crypto.randomUUID() });
+    return true;
+  }, [setActivePanel]);
+  const fitSpatial = useCallback(data => {
+    const bounds = spatialBounds(data), map = mapInstance.current;
+    if (bounds && map) map.fitBounds(bounds, { padding: 70, maxZoom: 16, duration: 500 });
+  }, []);
+
   // Every data mutation snapshots the store first (pushUndo) so the
   // change is reversible with Ctrl/Cmd+Z — field data entered on a phone
   // with a fat-fingered delete is otherwise gone for good. Read-only
@@ -191,6 +210,46 @@ export default function MineralXWorkspace() {
   const api = useMemo(() => ({
     focusOn,
     flush: persistence.flush,
+    openSpatialImport,
+    fitSpatial,
+    importSpatial: async (pid, rows) => {
+      if (!store.projects.some(p => p.id === pid)) throw new Error('The destination project is no longer available.');
+      pushUndo(store);
+      updateProject(pid, p => {
+        const updated = commitSpatialImports(p, rows);
+        const files = [...p.files];
+        for (const {layer} of rows) if (!files.some(f => f.sourceSha256 === layer.source.sha256)) files.unshift({name:layer.source.name, category:layer.source.format.toUpperCase(), meta:`${layer.data.features.length} reference features`, date:today(), sourceSha256:layer.source.sha256});
+        return {...updated, files};
+      });
+      await persistence.flush();
+      fitSpatial({type:'FeatureCollection',features:rows.flatMap(r => r.layer.data.features.filter((_,i) => !r.selectedIndexes || r.selectedIndexes.includes(i)))});
+    },
+    updateSpatial: async (pid, id, patch) => {
+      pushUndo(store);
+      updateProject(pid,p => ({...p,spatialLayers:(p.spatialLayers||[]).map(l => l.recordId===id ? {...l,...patch} : l)}));
+      await persistence.flush();
+    },
+    exportSpatial: (pid,id,format) => {
+      const layer = store.projects.find(p=>p.id===pid)?.spatialLayers?.find(l=>l.recordId===id);
+      if (!layer) throw new Error('Layer not found.');
+      const stem = layer.name.replace(/[^a-z0-9._-]/gi,'_');
+      if(format==='original') downloadSpatialSource(layer);
+      else if(format==='geojson') downloadText(`${stem}.geojson`,JSON.stringify(layer.data,null,2),'application/geo+json');
+      else downloadText(`${stem}.kml`,dataToKml(layer.name,layer.data),'application/vnd.google-earth.kml+xml');
+    },
+    exportBoundary: pid => {
+      const boundary=store.projects.find(p=>p.id===pid)?.boundary;
+      if(boundary)downloadText(`${boundary.name.replace(/[^a-z0-9._-]/gi,'_')}.kml`,dataToKml(boundary.name,boundaryData(boundary)),'application/vnd.google-earth.kml+xml');
+    },
+    renameBoundary: async (pid,name) => {
+      pushUndo(store);updateProject(pid,p=>({...p,boundary:p.boundary?{...p.boundary,name}:null}));await persistence.flush();
+    },
+    fitProjectLayer: (pid,node) => {
+      const p=store.projects.find(p=>p.id===pid); if(!p)return;
+      if(node.startsWith('bnd:'))return fitSpatial(boundaryData(p.boundary));
+      const points=node.startsWith('holes:')?p.collars:node.startsWith('targets:')?p.targets:[...p.samples,...(p.observations||[])];
+      fitSpatial({type:'FeatureCollection',features:(points||[]).filter(s=>!s.archivedAt&&validateCoordinates(s.lat,s.lng)).map(s=>({type:'Feature',properties:{},geometry:{type:'Point',coordinates:[s.lng,s.lat]}}))});
+    },
     addSamples: (pid, samples, fileName) => {
       pushUndo(store);
       updateProject(pid, p => {
@@ -245,7 +304,7 @@ export default function MineralXWorkspace() {
     },
     setBoundary: (pid, name, coords, fileName) => {
       pushUndo(store);
-      updateProject(pid, p => ({ ...p, boundary: { name, coords } }));
+      updateProject(pid, p => ({ ...p, boundaryHistory:p.boundary?[...(p.boundaryHistory||[]),{...p.boundary,supersededAt:new Date().toISOString()}]:p.boundaryHistory||[], boundary: { name, coords, data: boundaryData({name,coords}) } }));
       if (fileName) addFile(pid, fileName, 'KML', '1 boundary polygon');
       const map = mapInstance.current;
       if (map && mgl.current) map.fitBounds(boundsOfCoords(mgl.current, coords), { padding: 60, duration: 800 });
@@ -373,33 +432,15 @@ export default function MineralXWorkspace() {
         return { ...prev, projects, archivedProjects:[...(prev.archivedProjects||[]),{...project,archivedAt:new Date().toISOString(),archiveReason:reason.trim()}], activeProjectId: projects[0]?.id || null };
       });
     },
-    createProject: (name, kmlText) => {
-      pushUndo(store);
-      const id = `proj-${Date.now()}`;
-      let boundary = null;
-      let boundaryError = null;
-      if (kmlText) {
-        const { coords, error } = parseKmlBoundary(kmlText);
-        if (coords) boundary = { name: `${name} boundary`, coords };
-        else boundaryError = error;
-      }
-      const prefixBase = name.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'PX';
-      setStore(prev => ({
-        ...prev,
-        activeProjectId: id,
-        projects: [...prev.projects, {
-          id, name,
-          color: PROJECT_COLORS[prev.projects.length % PROJECT_COLORS.length],
-          idPrefix: `${prefixBase}-RC-`,
-          createdAt: today(),
-          boundary, samples: [], collars: [], intervals: [], surveys: [], geology: [], files: [],
-        }],
-      }));
-      if (boundary) {
-        const map = mapInstance.current;
-        if (map && mgl.current) setTimeout(() => map.fitBounds(boundsOfCoords(mgl.current, boundary.coords), { padding: 60, duration: 800 }), 50);
-      }
-      return { boundaryError };
+    createProject: async (name, spatialLayer) => {
+      const clean = name.trim(); if(!clean)throw new Error('Enter a project name.');
+      const id=crypto.randomUUID(),prefixBase=clean.replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase()||'PX';
+      let project={id,name:clean,color:PROJECT_COLORS[store.projects.length%PROJECT_COLORS.length],idPrefix:`${prefixBase}-RC-`,createdAt:today(),boundary:null,samples:[],collars:[],intervals:[],surveys:[],geology:[],files:[],spatialLayers:[]};
+      if(spatialLayer)project=commitSpatialImports(project,[{layer:spatialLayer,role:'boundary',acknowledged:false}]);
+      project=upgradeStore({version:8,projects:[project]}).projects[0];
+      pushUndo(store);setStore(prev=>({...prev,activeProjectId:id,projects:[...prev.projects,project]}));
+      await persistence.flush();if(project.boundary)fitSpatial(boundaryData(project.boundary));
+      return {boundaryError:null};
     },
     exportProject: (project) => {
       const stem = project.name.replace(/\s+/g, '_');
@@ -420,15 +461,17 @@ export default function MineralXWorkspace() {
         downloadText(`${stem}_targets.csv`, targetsToCsv(project.targets));
       }
       if (project.boundary) {
-        downloadText(`${stem}_boundary.kml`, boundaryToKml(project.boundary.name, project.boundary.coords), 'application/vnd.google-earth.kml+xml');
+        downloadText(`${stem}_boundary.kml`, dataToKml(project.boundary.name, boundaryData(project.boundary)), 'application/vnd.google-earth.kml+xml');
       }
+      const spatialFeatures=(project.spatialLayers||[]).filter(l=>!l.archivedAt).flatMap(l=>l.data.features.map(f=>({...f,properties:{...f.properties,mineralxLayer:l.name,mineralxSource:l.source.name,mineralxSourceSha256:l.source.sha256}})));
+      if(spatialFeatures.length)downloadText(`${stem}_reference_layers.geojson`,JSON.stringify({type:'FeatureCollection',features:spatialFeatures},null,2),'application/geo+json');
       setLastExportAt(Date.now());
       setStaleDismissed(false);
     },
     // `store` (not `store.projects`) in deps: pushUndo snapshots the whole
     // store, so a stale closure would capture an out-of-date activeProjectId.
     // activeElement: promoteTarget freezes it into the target's provenance.
-  }), [store, updateProject, addFile, focusOn, activeElement, persistence.flush, setStore]);
+  }), [store, updateProject, addFile, focusOn, activeElement, persistence.flush, setStore, openSpatialImport, fitSpatial]);
 
   // Promoting a candidate always lands it in the active project — the one
   // whose data is on screen when the analysis was run. Defined after `api`
@@ -453,6 +496,7 @@ export default function MineralXWorkspace() {
   // Target Analysis has found in the current viewport) — the single index
   // every layer-aware effect/toggle below reads through.
   const layerIndex = useMemo(() => buildLayerIndex(store, flowState.commodities), [store, flowState.commodities]);
+  useSpatialLayers({mapInstance,mgl,mapReady,mapEpoch,projects:store.projects,layerOn,layerOpacity,layerIndex,onError:setSpatialError});
 
   // One toggle for every layer type: flips the row's own on/off state
   // (falling back through the registry's default, same as isLayerOn reads
@@ -579,7 +623,6 @@ export default function MineralXWorkspace() {
       markers.current.forEach(m => { try { m.remove(); } catch { /* noop */ } });
       markers.current.clear();
       groupMembers.current.clear();
-      boundaryLayers.current.clear();
       wmsLayers.current.clear();
       flowLayerRefs.current = {};
       setMapReady(false);
@@ -615,15 +658,6 @@ export default function MineralXWorkspace() {
       if (!validPids.has(pid)) {
         groupMembers.current.get(key).forEach(id => { markers.current.get(id)?.remove(); markers.current.delete(id); });
         groupMembers.current.delete(key);
-      }
-    });
-    [...boundaryLayers.current.keys()].forEach(pid => {
-      if (!validPids.has(pid)) {
-        const { sourceId, fillLayerId, lineLayerId } = boundaryLayers.current.get(pid);
-        if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
-        if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
-        boundaryLayers.current.delete(pid);
       }
     });
 
@@ -684,33 +718,6 @@ export default function MineralXWorkspace() {
       });
       groupMembers.current.set(tgtKey, tgtIds);
 
-      // Boundary polygon.
-      const existingBnd = boundaryLayers.current.get(p.id);
-      if (existingBnd) {
-        if (map.getLayer(existingBnd.fillLayerId)) map.removeLayer(existingBnd.fillLayerId);
-        if (map.getLayer(existingBnd.lineLayerId)) map.removeLayer(existingBnd.lineLayerId);
-        if (map.getSource(existingBnd.sourceId)) map.removeSource(existingBnd.sourceId);
-        boundaryLayers.current.delete(p.id);
-      }
-      if (p.boundary) {
-        const sourceId = `bnd-src-${p.id}`;
-        const fillLayerId = `bnd-fill-${p.id}`;
-        const lineLayerId = `bnd-line-${p.id}`;
-        map.addSource(sourceId, {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            properties: { name: p.boundary.name },
-            geometry: { type: 'Polygon', coordinates: [p.boundary.coords.map(([lat, lng]) => [lng, lat])] },
-          },
-        });
-        map.addLayer({ id: fillLayerId, type: 'fill', source: sourceId, paint: { 'fill-color': p.color, 'fill-opacity': 0.06 } });
-        map.addLayer({ id: lineLayerId, type: 'line', source: sourceId, paint: { 'line-color': '#F6F3EC', 'line-width': 2, 'line-dasharray': [3, 3] } });
-        const bndPopup = new mgl.current.Popup({ className: 'mx-popup', closeButton: false });
-        map.on('mousemove', fillLayerId, (e) => bndPopup.setLngLat(e.lngLat).setHTML(`<div class="mx-pop-row">${esc(p.boundary.name)}</div>`).addTo(map));
-        map.on('mouseleave', fillLayerId, () => bndPopup.remove());
-        boundaryLayers.current.set(p.id, { sourceId, fillLayerId, lineLayerId });
-      }
     });
   }, [store, mapReady, activeElement]);
 
@@ -734,13 +741,6 @@ export default function MineralXWorkspace() {
           el.style.display = show ? '' : 'none';
         });
       });
-      const bnd = boundaryLayers.current.get(p.id);
-      if (bnd) {
-        const show = effectiveOn(layerOn, layerIndex, `bnd:${p.id}`);
-        const vis = show ? 'visible' : 'none';
-        map.setLayoutProperty(bnd.fillLayerId, 'visibility', vis);
-        map.setLayoutProperty(bnd.lineLayerId, 'visibility', vis);
-      }
     });
   }, [layerOn, layerIndex, store, mapReady]);
 
@@ -784,7 +784,7 @@ export default function MineralXWorkspace() {
       // user toggles the layer off (which clears it), so off→on is the retry.
       if (on && !existing && !wmsErrors[layer.id]) {
         map.addSource(sourceId, { type: 'raster', tiles: [wmsTileUrl(layer)], tileSize: 256, attribution: layer.attribution });
-        map.addLayer({ id: layerRenderId, type: 'raster', source: sourceId, paint: { 'raster-opacity': opacity } });
+        map.addLayer({ id: layerRenderId, type: 'raster', source: sourceId, paint: { 'raster-opacity': opacity } }, map.getStyle().layers.find(layer => layer.id.startsWith('mx-vector:'))?.id);
         wmsLayers.current.add(layer.id);
       } else if (!on) {
         if (map.getLayer(layerRenderId)) map.removeLayer(layerRenderId);
@@ -844,7 +844,7 @@ export default function MineralXWorkspace() {
             const map = mapInstance.current;
             if (!map || !mgl.current || !activeProject) return;
             if (activeProject.boundary) {
-              map.fitBounds(boundsOfCoords(mgl.current, activeProject.boundary.coords), { padding: 60, duration: 800 });
+              fitSpatial(boundaryData(activeProject.boundary));
             } else {
               const pts = [...activeProject.samples, ...activeProject.collars].map(f => [f.lat, f.lng]);
               if (pts.length) map.fitBounds(boundsOfCoords(mgl.current, pts), { padding: 80, duration: 800 });
@@ -869,11 +869,12 @@ export default function MineralXWorkspace() {
                   type="button"
                   className={`mx-program-item ${p.id === store.activeProjectId ? 'active' : ''}`}
                   onClick={() => {
+                    if (setActivePanel(null) === false) return;
                     setStore(prev => ({ ...prev, activeProjectId: p.id }));
                     setProgramOpen(false);
                     if (p.boundary) {
                       const map = mapInstance.current;
-                      if (map && mgl.current) map.fitBounds(boundsOfCoords(mgl.current, p.boundary.coords), { padding: 60, duration: 800 });
+                      if (map && mgl.current) fitSpatial(boundaryData(p.boundary));
                     }
                   }}
                 >
@@ -882,7 +883,7 @@ export default function MineralXWorkspace() {
                   {p.demo && <span className="mx-demo-tag">demo</span>}
                 </button>
               ))}
-              <button type="button" className="mx-program-item mx-program-new" onClick={() => { setProgramOpen(false); setManageTarget({ type: 'newProject' }); }}>
+              <button type="button" className="mx-program-item mx-program-new" onClick={() => { if (setActivePanel(null) === false) return; setProgramOpen(false); setManageTarget({ type: 'newProject' }); }}>
                 + New project
               </button>
             </div>
@@ -964,11 +965,13 @@ export default function MineralXWorkspace() {
       <FieldWorkflowPanel
         persistence={persistence}
         legacyOpen={!!activePanel || !!manageTarget || dataOpen}
-        onNavigate={() => { setActivePanel(null); setManageTarget(null); setDataOpen(false); }}
+        onNavigate={() => { if (setActivePanel(null) === false) return false; setManageTarget(null); setDataOpen(false); return true; }}
         onTool={(name) => {
+          if (name === 'spatial') return activeProject ? openSpatialImport(activeProject.id) : false;
+          if (setActivePanel(name === 'targets' || name === 'holes' ? null : name) === false) return false;
           setManageTarget(null); setDataOpen(false);
-          if (name === 'targets' || name === 'holes') { setActivePanel(null); setDataTab(name); setDataOpen(true); }
-          else setActivePanel(name);
+          if (name === 'targets' || name === 'holes') { setDataTab(name); setDataOpen(true); }
+          return true;
         }}
         onFocus={focusOn}
         getMapCenter={() => mapInstance.current?.getCenter() || null}
@@ -977,7 +980,7 @@ export default function MineralXWorkspace() {
       {/* STORAGE BANNERS */}
       {saveFailed && (
         <div className="mx-storage-banner mx-import-err">
-          Your last change didn&apos;t save — storage is full.
+          Your last change could not be saved. {persistence.error}
           <button
             type="button" className="mx-storage-banner-btn"
             onClick={() => { store.projects.forEach(p => api.exportProject(p)); }}
@@ -1007,11 +1010,19 @@ export default function MineralXWorkspace() {
             onClose={() => setActivePanel(null)}
           />
         )}
+        {activePanel === 'spatial' && spatialRequest && store.projects.some(p=>p.id===spatialRequest.projectId) && (
+          <SpatialImportPanel registerNavigationGuard={registerNavigationGuard} key={spatialRequest.key} project={store.projects.find(p=>p.id===spatialRequest.projectId)} api={api} initialFiles={spatialRequest.files} initialRole={spatialRequest.role} locked={!hydrated || ['blocked','conflict'].includes(persistence.status)} onClose={()=>setActivePanel('layers')} />
+        )}
         {activePanel === 'upload' && (
           <UploadPanel onClose={() => setActivePanel(null)} project={activeProject} api={api} />
         )}
         {activePanel === 'layers' && (
-          <LayersPanel
+          <MapLayersPanel
+            api={api}
+            removePublicLayer={id=>setLayerOn(prev=>{const next={...prev};delete next[id];return next;})}
+            preferencesSaved={preferencesSaved}
+            spatialError={spatialError}
+            locked={!hydrated || ['blocked','conflict'].includes(persistence.status)}
             store={store}
             layerIndex={layerIndex}
             layerOn={layerOn}
@@ -1028,7 +1039,7 @@ export default function MineralXWorkspace() {
             availableElements={availableElements}
             flowState={flowState}
             onRerunFlow={runFlowAnalysis}
-            onManage={setManageTarget}
+            onManage={target => { if (setActivePanel(null) !== false) { setDataOpen(false); setManageTarget(target); } }}
             onClose={() => setActivePanel(null)}
           />
         )}
@@ -1061,9 +1072,9 @@ export default function MineralXWorkspace() {
           holes open the Data drawer on that tab), map layers, capture. */}
       <div className="mx-dock">
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L19 11 L11 19 L3 11 Z" /></svg>} title="Program" active={activePanel === 'home'} onClick={() => setActivePanel(activePanel === 'home' ? null : 'home')} />
-        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22"><circle cx="11" cy="11" r="5.5" fill="currentColor" /></svg>} title="Rock chips" active={dataOpen && dataTab === 'chips'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'chips') { setDataOpen(false); } else { setDataTab('chips'); setDataOpen(true); } }} />
-        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="7.5" y="4" width="7" height="5" rx="1" /><path d="M11 9 L11 19" /></svg>} title="Drill holes" active={dataOpen && dataTab === 'holes'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'holes') { setDataOpen(false); } else { setDataTab('holes'); setDataOpen(true); } }} />
-        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L18 11 L11 19 L4 11 Z" /></svg>} title="Targets" active={dataOpen && dataTab === 'targets'} onClick={() => { setManageTarget(null); if (dataOpen && dataTab === 'targets') { setDataOpen(false); } else { setDataTab('targets'); setDataOpen(true); } }} />
+        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22"><circle cx="11" cy="11" r="5.5" fill="currentColor" /></svg>} title="Rock chips" active={dataOpen && dataTab === 'chips'} onClick={() => { if (setActivePanel(null) === false) return; setManageTarget(null); if (dataOpen && dataTab === 'chips') { setDataOpen(false); } else { setDataTab('chips'); setDataOpen(true); } }} />
+        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="7.5" y="4" width="7" height="5" rx="1" /><path d="M11 9 L11 19" /></svg>} title="Drill holes" active={dataOpen && dataTab === 'holes'} onClick={() => { if (setActivePanel(null) === false) return; setManageTarget(null); if (dataOpen && dataTab === 'holes') { setDataOpen(false); } else { setDataTab('holes'); setDataOpen(true); } }} />
+        <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L18 11 L11 19 L4 11 Z" /></svg>} title="Targets" active={dataOpen && dataTab === 'targets'} onClick={() => { if (setActivePanel(null) === false) return; setManageTarget(null); if (dataOpen && dataTab === 'targets') { setDataOpen(false); } else { setDataTab('targets'); setDataOpen(true); } }} />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M11 3 L19 7.5 L11 12 L3 7.5 Z" /><path d="M3 12 L11 16.5 L19 12" /></svg>} title="Layers" active={activePanel === 'layers'} onClick={() => setActivePanel(activePanel === 'layers' ? null : 'layers')} />
         <div className="mx-dock-sep" />
         <DockBtn icon={<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4 L11 13" /><path d="M7 8 L11 4 L15 8" /><path d="M5 17 H17" /></svg>} title="Add data" active={activePanel === 'upload'} onClick={() => setActivePanel(activePanel === 'upload' ? null : 'upload')} />
@@ -1141,13 +1152,13 @@ function HomePanel({ stats, project, onUpload, onLayers, onData, onClose }) {
 // ── Upload panel ───────────────────────────────────────────────────────
 // Drop anything: the file's own content decides what it is. Category
 // chips are an override for ambiguous files, not a prerequisite.
-const UPLOAD_CATS = ['Auto', 'Rock chips', 'Drill collars', 'Assays', 'KML', 'Photos'];
+const UPLOAD_CATS = ['Auto', 'Rock chips', 'Drill collars', 'Assays', 'Map files', 'Photos'];
 const UPLOAD_HINTS = {
-  Auto: 'Drop any CSV, KML or photo — the type is read from the file',
+  Auto: 'Drop CSV, KML, KMZ, GeoJSON or a photo',
   'Rock chips': 'CSV: sample_id, lat, lng, lith + element columns (au, ag, cu…)',
   'Drill collars': 'CSV: hole_id, lat, lng, azimuth, dip, depth',
   Assays: 'Lab CSV: sample_id + element columns — links to chips by ID',
-  KML: 'Boundary polygon for the active project',
+  'Map files': 'KML / KMZ / GeoJSON — review as a reference layer or tenement boundary',
   Photos: 'JPG named after the sample, e.g. CT-RC-0448.jpg',
 };
 
@@ -1160,11 +1171,12 @@ function UploadPanel({ onClose, project, api }) {
   const [extractOpen, setExtractOpen] = useState(false); // AI report-text extraction flow
   const fileInput = useRef(null);
 
-  const accept = cat === 'KML' ? '.kml' : cat === 'Photos' ? 'image/*' : cat === 'Auto' ? '.csv,text/csv,.kml,image/*' : '.csv,text/csv';
+  const accept = cat === 'Map files' ? '.kml,.kmz,.geojson,.json' : cat === 'Photos' ? 'image/*' : cat === 'Auto' ? '.csv,text/csv,.kml,.kmz,.geojson,.json,image/*' : '.csv,text/csv';
 
   const handleFile = useCallback((file) => {
     if (!file || !project) return;
     setMsg(null);
+    if(/\.(kml|kmz|geojson|json)$/i.test(file.name)||cat==='Map files'){api.openSpatialImport(project.id,[file]);return;}
 
     const importPhoto = () => {
       const sampleId = file.name.replace(/\.[^.]+$/, '');
@@ -1192,12 +1204,7 @@ function UploadPanel({ onClose, project, api }) {
       const detected = (kind) => (cat === 'Auto' ? `Detected ${KIND_LABELS[kind]} — ` : '');
 
       const importKind = {
-        kml: () => {
-          const { coords, error } = parseKmlBoundary(text);
-          if (error) return setMsg({ error: true, text: error });
-          api.setBoundary(project.id, file.name.replace(/\.kml$/i, ''), coords, file.name);
-          setMsg({ error: false, text: `${detected('kml')}boundary updated, zoomed to it.` });
-        },
+        kml: () => api.openSpatialImport(project.id, [file]),
         chips: () => {
           const r = parseSampleCsv(text, project.samples, project.idPrefix);
           if (r.needsProjection) return setPendingProjection({ text, kind: 'chips', fileName: file.name, easting: r.easting, northing: r.northing });
@@ -1236,7 +1243,7 @@ function UploadPanel({ onClose, project, api }) {
         if (!kind) return setMsg({ error: true, text: 'Couldn’t tell what this file is — pick a category and drop it again.' });
         return importKind[kind]();
       }
-      if (cat === 'KML') return importKind.kml();
+      if (cat === 'Map files') return importKind.kml();
       if (cat === 'Rock chips') return importKind.chips();
       if (cat === 'Drill collars') return importKind.collars();
       if (cat === 'Assays') return importKind.assays();
@@ -1314,367 +1321,5 @@ function UploadPanel({ onClose, project, api }) {
         </div>
       </div>
     </div>
-  );
-}
-
-// ── Layers panel ───────────────────────────────────────────────────────
-function LayersPanel({ store, layerIndex, layerOn, toggleLayerOn, layerOpacity, setLayerOpacity, isExpanded, setExpanded, wmsErrors, basemap, setBasemap, activeElement, setActiveElement, availableElements, flowState, onRerunFlow, onManage, onClose }) {
-  const toggleExpanded = (id, dflt) => setExpanded(prev => ({ ...prev, [id]: !(prev[id] ?? dflt) }));
-  const setOpacity = (id, v) => setLayerOpacity(prev => ({ ...prev, [id]: v }));
-
-  return (
-    <div className="mx-glass-panel mx-anim-rise">
-      <div className="mx-panel-header mx-panel-header-compact">
-        <span className="mx-panel-title-sm">Layers</span>
-        <button type="button" className="mx-close-btn" onClick={onClose}>&times;</button>
-      </div>
-      <div className="mx-tree-scroll">
-        {store.projects.map(p => (
-          <ProjectTree
-            key={p.id}
-            project={p}
-            layerOn={layerOn}
-            layerIndex={layerIndex}
-            toggleLayerOn={toggleLayerOn}
-            expanded={isExpanded(`proj:${p.id}`, true)}
-            toggleExpanded={() => toggleExpanded(`proj:${p.id}`, true)}
-            onManage={onManage}
-          />
-        ))}
-
-        {/* GeoResGlobe: raw QLD open-data catalog, organized by GeoResGlobe's */}
-        {/* own official themes — everything here is published data, not */}
-        {/* computed by this app (see Target Analysis below for that). */}
-        <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
-          <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('pub', false)}>
-            {isExpanded('pub', false) ? MxIcons.chevronDown : MxIcons.chevronRight}
-          </button>
-          <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 11, height: 11 }} />
-          <span className="mx-tree-name mx-tree-name-bold">GeoResGlobe</span>
-        </div>
-        {isExpanded('pub', false) && (
-          <>
-            {THEME_ORDER.map(theme => {
-              const layers = WMS_LAYERS_BY_THEME.get(theme) || [];
-              if (!layers.length) return null;
-              return (
-                <div key={theme}>
-                  <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-                    <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-                    <div className="mx-tree-swatch" style={{ background: '#95A5A6', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                    <span className="mx-tree-subheading">{THEME_LABELS[theme]}</span>
-                  </div>
-                  {layers.map(layer => {
-                    const on = isLayerOn(layerOn, layerIndex, layer.id);
-                    return (
-                      <div key={layer.id}>
-                        <FlowSubRow
-                          depth={1}
-                          label={layer.label}
-                          swatch={{ background: '#95A5A6', borderRadius: '50%', width: 7, height: 7 }}
-                          on={on}
-                          onToggle={() => toggleLayerOn(layer.id)}
-                          opacity={on ? layerOpacityOf(layerOpacity, layerIndex, layer.id) : undefined}
-                          onOpacity={(v) => setOpacity(layer.id, v)}
-                          error={wmsErrors[layer.id] && on}
-                          title={layer.wms.attribution}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-
-            {/* Mineral Occurrences: raw GEORES vector data, one toggleable */}
-            {/* row per commodity, populated from whatever the current view */}
-            {/* actually returns. Fetched by Target Analysis below (shared */}
-            {/* cache) — this is only where the toggle lives. */}
-            {flowState.status !== 'idle' && (
-              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-                <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                <span className="mx-tree-subheading">Mineral Occurrences</span>
-                {flowState.occurrencesError && <ErrorBadge title="Occurrence service unavailable for this view" />}
-                {!flowState.occurrencesError && flowState.commodities.length === 0 && flowState.status === 'ready' && (
-                  <span className="mx-tree-attribution">none in view</span>
-                )}
-              </div>
-            )}
-            {flowState.commodities.map((commodity, idx) => (
-              <FlowSubRow
-                key={commodity}
-                depth={1}
-                label={commodity}
-                swatch={{ background: commodity === 'Gold' ? '#B08A3E' : PROJECT_COLORS[(idx + 1) % PROJECT_COLORS.length], borderRadius: '50%', width: 7, height: 7 }}
-                on={isLayerOn(layerOn, layerIndex, `occ:${commodity}`)} onToggle={() => toggleLayerOn(`occ:${commodity}`)}
-              />
-            ))}
-            {flowState.status === 'idle' && (
-              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-                <div className="mx-tree-swatch" style={{ background: '#7F8C8D', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                <span className="mx-tree-subheading">Mineral Occurrences</span>
-                <span className="mx-tree-attribution">turn on Target Analysis to load</span>
-              </div>
-            )}
-
-            {/* Historic Mines: same live-fetch pattern as Mineral Occurrences, */}
-            {/* separate GEORES service and its own error/empty states. */}
-            {flowState.status !== 'idle' && (
-              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-                <div className="mx-tree-swatch" style={{ background: '#5E6E7A', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                <span className="mx-tree-subheading">Historic Mines</span>
-                {flowState.historicMinesError && <ErrorBadge title="Historic mines service unavailable for this view" />}
-                {!flowState.historicMinesError && flowState.historicMinesCount === 0 && flowState.status === 'ready' && (
-                  <span className="mx-tree-attribution">none in view</span>
-                )}
-              </div>
-            )}
-            {flowState.status === 'ready' && !flowState.historicMinesError && flowState.historicMinesCount > 0 && (
-              <FlowSubRow
-                depth={1}
-                label={`Historic mine sites`}
-                swatch={{ background: '#5E6E7A', borderRadius: '50%', width: 7, height: 7 }}
-                on={isLayerOn(layerOn, layerIndex, 'historicMines')} onToggle={() => toggleLayerOn('historicMines')}
-              />
-            )}
-            {flowState.status === 'idle' && (
-              <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-                <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-                <div className="mx-tree-swatch" style={{ background: '#5E6E7A', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-                <span className="mx-tree-subheading">Historic Mines</span>
-                <span className="mx-tree-attribution">turn on Target Analysis to load</span>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Target Analysis: this app's own computed hydrology/correlation */}
-        {/* engine — seeded by (not itself) the GeoResGlobe data above. */}
-        <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
-          <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('flow', true)}>
-            {isExpanded('flow', true) ? MxIcons.chevronDown : MxIcons.chevronRight}
-          </button>
-          <div className="mx-tree-swatch" style={{ background: '#3E6C8C', transform: 'rotate(45deg)', width: 11, height: 11 }} />
-          <span className="mx-tree-name mx-tree-name-bold">Target Analysis</span>
-          {flowState.status === 'running' && <span className="mx-tree-attribution">computing…</span>}
-          {flowState.status === 'ready' && <span className="mx-tree-count">{flowState.targets} targets</span>}
-          {flowState.status === 'error' && <ErrorBadge text="failed" title="Elevation tiles unreachable — try again" />}
-        </div>
-        {isExpanded('flow', true) && (
-          <>
-            {/* Hydraulics / Metal Concentration: the water-physics layers */}
-            <div className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-              <button type="button" className="mx-tree-caret" onClick={() => toggleExpanded('flow:hydraulics', true)}>
-                {isExpanded('flow:hydraulics', true) ? MxIcons.chevronDown : MxIcons.chevronRight}
-              </button>
-              <div className="mx-tree-swatch" style={{ background: '#3E6C8C', transform: 'rotate(45deg)', width: 8, height: 8 }} />
-              <span className="mx-tree-subheading">Hydraulics / Metal Concentration</span>
-            </div>
-            {isExpanded('flow:hydraulics', true) && (
-              <>
-                <FlowSubRow
-                  depth={1}
-                  label="Drainage channels" swatch={{ background: '#3E6C8C', borderRadius: '50%', width: 8, height: 8 }}
-                  on={isLayerOn(layerOn, layerIndex, 'drainage')} onToggle={() => toggleLayerOn('drainage')}
-                  opacity={layerOpacityOf(layerOpacity, layerIndex, 'drainage')} onOpacity={(v) => setOpacity('drainage', v)}
-                />
-                <FlowSubRow
-                  depth={1}
-                  label="Water concentration heatmap" swatch={{ background: 'linear-gradient(90deg,#F3F1E9,#B08A3E,#C15F3C)', borderRadius: '50%', width: 8, height: 8 }}
-                  on={isLayerOn(layerOn, layerIndex, 'heatmap')} onToggle={() => toggleLayerOn('heatmap')}
-                  opacity={layerOpacityOf(layerOpacity, layerIndex, 'heatmap')} onOpacity={(v) => setOpacity('heatmap', v)}
-                />
-              </>
-            )}
-
-            <FlowSubRow
-              label="Metal Concentration Zones" swatch={{ background: 'transparent', border: '2px solid #8A6A3E', borderRadius: '50%', width: 8, height: 8 }}
-              on={isLayerOn(layerOn, layerIndex, 'targets')} onToggle={() => toggleLayerOn('targets')}
-            />
-            <FlowSubRow
-              label="Correlated Targets" swatch={{ background: '#C15F3C', border: `2px solid ${PROJECT_COLORS[4]}`, width: 9, height: 9, borderRadius: '50%' }}
-              on={isLayerOn(layerOn, layerIndex, 'correlated')} onToggle={() => toggleLayerOn('correlated')}
-            />
-
-            <div className="mx-flow-note">
-              Uses Mineral Occurrences &amp; Historic Mines from GeoResGlobe above as seed data.
-            </div>
-
-            {flowState.status === 'ready' && (
-              <div className="mx-flow-note">
-                Analysed for the current view — pan, then
-                <button type="button" className="mx-flow-rerun" onClick={onRerunFlow}>re-run</button>.
-                Heuristic terrain model: field-check targets.
-              </div>
-            )}
-
-            {/* Model calibration: real hit-rate from the user's own assessed */}
-            {/* targets — closes the exploration loop. Never a seeded number. */}
-            {(() => {
-              const hr = targetHitRate(store);
-              if (!hr.assessed) return null;
-              return (
-                <div className="mx-flow-note mx-hitrate">
-                  Model calibration · {hr.assessed} target{hr.assessed === 1 ? '' : 's'} assessed:
-                  {' '}<strong>{hr.confirmed} confirmed</strong>, {hr.barren} barren
-                </div>
-              );
-            })()}
-          </>
-        )}
-
-        <button type="button" className="mx-add-project-row" onClick={() => onManage({ type: 'newProject' })}>
-          <span className="mx-add-icon">+</span>
-          <span className="mx-add-label">Add project · import KML</span>
-        </button>
-      </div>
-      <div className="mx-basemap-section">
-        <div className="mx-section-label">COLOUR BY</div>
-        <div className="mx-element-row">
-          {availableElements.map(el => (
-            <button
-              key={el}
-              type="button"
-              className={`mx-cat-chip mx-element-chip ${activeElement === el ? 'active' : ''}`}
-              onClick={() => setActiveElement(el)}
-            >{el}</button>
-          ))}
-        </div>
-        {(() => {
-          const t = elementInfo(activeElement);
-          const unit = t.unit ? ` ${t.unit}` : '';
-          return (
-            <div className="mx-legend">
-              <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.high }} /><span>&gt;{t.high}</span></div>
-              <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.anom }} /><span>{t.anom}–{t.high}</span></div>
-              <div className="mx-legend-item"><div className="mx-legend-dot" style={{ background: GRADE_COLORS.bg }} /><span>&lt;{t.anom} {activeElement}{unit}</span></div>
-              <div className="mx-legend-item"><div className="mx-legend-dot mx-legend-pending" /><span>Pending</span></div>
-              <div className="mx-legend-item"><div className="mx-legend-collar" /><span>Collar</span></div>
-            </div>
-          );
-        })()}
-        <div className="mx-section-label" style={{ paddingLeft: 0, paddingTop: 14 }}>BASEMAP</div>
-        <div className="mx-basemap-toggle">
-          <button type="button" className={`mx-basemap-btn ${basemap === 'satellite' ? 'active' : ''}`} onClick={() => setBasemap('satellite')}>Satellite</button>
-          <button type="button" className={`mx-basemap-btn ${basemap === 'topo' ? 'active' : ''}`} onClick={() => setBasemap('topo')}>Topographic</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// The "unavailable"/"failed" status badge — one shared element instead of
-// four hand-rolled `<span className="mx-tree-error">` blocks (WMS rows via
-// FlowSubRow's `error` prop, plus three inline ones for Occurrences/
-// Historic-Mines/Target-Analysis-group errors) that previously duplicated
-// the same markup with slightly different copy.
-function ErrorBadge({ text = 'unavailable', title }) {
-  return <span className="mx-tree-error" title={title}>{text}</span>;
-}
-
-// One toggleable terrain sub-layer row: eye + optional opacity slider,
-// same visual language as the WMS public-layer rows above.
-function FlowSubRow({ label, swatch, on, onToggle, opacity, onOpacity, depth = 0, error, title }) {
-  return (
-    <>
-      <div className="mx-tree-row" style={{ paddingLeft: `${30 + depth * 20}px` }}>
-        <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-        <div className="mx-tree-swatch" style={swatch} />
-        <span className={`mx-tree-name ${on ? '' : 'mx-tree-name-off'}`} title={title}>{label}</span>
-        {error && <ErrorBadge title="Service not responding — check the layer or your connection" />}
-        <button type="button" className={`mx-tree-eye ${on ? 'on' : ''}`} onClick={onToggle} title={on ? 'Hide' : 'Show'}>
-          <div className="mx-eye-dot" />
-        </button>
-      </div>
-      {on && onOpacity && (
-        <div className="mx-opacity-row">
-          <input
-            type="range" min="10" max="100"
-            value={Math.round((opacity ?? 0.5) * 100)}
-            onChange={(e) => onOpacity(Number(e.target.value) / 100)}
-            className="mx-opacity-slider"
-            title="Opacity"
-          />
-        </div>
-      )}
-    </>
-  );
-}
-
-function ProjectTree({ project, layerOn, layerIndex, toggleLayerOn, expanded, toggleExpanded, onManage }) {
-  const p = project;
-  const projNodeId = `proj:${p.id}`;
-  // Targets row fixes a previously dead/half-wired feature: the visibility
-  // effect already checked `targets:${pid}` (so promoted targets DID
-  // respect a hide toggle if one existed) but this row was never rendered,
-  // so there was no way to actually hide them. Managed via the Targets
-  // worklist tab, not this dialog's manage(+) button — omitted here since
-  // it's a different kind of thing from chips/holes/boundary.
-  //
-  // Structural fields (nodeId, label, manage) come straight from
-  // `projectLayerDescriptors()` rather than being re-hardcoded here — that
-  // registry function is the declared single source of truth for what
-  // rows a project has (CLAUDE.md hard rule 5). Only count/swatch stay
-  // local: genuinely presentational, and not something the data registry
-  // should know about.
-  const SWATCH_BY_KIND = {
-    chips: { background: '#C15F3C', borderRadius: '50%', width: 10, height: 10 },
-    holes: { background: '#F3F1E9', border: '2px solid #211E1A', width: 10, height: 10 },
-    bnd: { border: '1.5px dashed #8A857A', borderRadius: 2, width: 11, height: 11 },
-    targets: { background: 'transparent', border: '2px solid #B08A3E', transform: 'rotate(45deg)', width: 9, height: 9 },
-  };
-  const COUNT_BY_KIND = {
-    chips: p.samples.length,
-    holes: p.collars.length,
-    bnd: null,
-    targets: (p.targets || []).length,
-  };
-  const rows = projectLayerDescriptors(p)
-    .filter(d => d.parent === projNodeId)
-    .map(d => {
-      const kind = d.id.split(':')[0];
-      return { nodeId: d.id, name: d.label, count: COUNT_BY_KIND[kind], manage: d.manage, swatch: SWATCH_BY_KIND[kind] };
-    });
-  const projOn = isLayerOn(layerOn, layerIndex, projNodeId);
-  return (
-    <>
-      <div className="mx-tree-row mx-tree-row-group" style={{ paddingLeft: '8px' }}>
-        <button type="button" className="mx-tree-caret" onClick={toggleExpanded}>
-          {expanded ? MxIcons.chevronDown : MxIcons.chevronRight}
-        </button>
-        <div className="mx-tree-swatch" style={{ background: p.color, transform: 'rotate(45deg)', width: 11, height: 11 }} />
-        <span className={`mx-tree-name mx-tree-name-bold ${projOn ? '' : 'mx-tree-name-off'}`}>{p.name}</span>
-        {p.demo && <span className="mx-demo-tag">demo</span>}
-        <button type="button" className={`mx-tree-eye ${projOn ? 'on' : ''}`} onClick={() => toggleLayerOn(projNodeId)} title={projOn ? 'Hide' : 'Show'}>
-          <div className="mx-eye-dot" />
-        </button>
-        <button type="button" className="mx-tree-manage" onClick={() => onManage({ type: 'project', projectId: p.id })} title="Project settings">
-          {MxIcons.plus}
-        </button>
-      </div>
-      {expanded && rows.map(r => {
-        const rowOn = isLayerOn(layerOn, layerIndex, r.nodeId);
-        const rowEffectiveOn = effectiveOn(layerOn, layerIndex, r.nodeId);
-        return (
-          <div key={r.nodeId} className="mx-tree-row" style={{ paddingLeft: '30px' }}>
-            <span className="mx-tree-caret" style={{ visibility: 'hidden' }} />
-            <div className="mx-tree-swatch" style={r.swatch} />
-            <span className={`mx-tree-name ${rowEffectiveOn ? '' : 'mx-tree-name-off'}`}>{r.name}</span>
-            {r.count != null && r.count > 0 && <span className="mx-tree-count">{r.count}</span>}
-            <button type="button" className={`mx-tree-eye ${rowOn ? 'on' : ''}`} onClick={() => toggleLayerOn(r.nodeId)} title={rowOn ? 'Hide' : 'Show'}>
-              <div className="mx-eye-dot" />
-            </button>
-            {r.manage && (
-              <button type="button" className="mx-tree-manage" onClick={() => onManage({ type: r.manage, projectId: p.id })} title="Manage">
-                {MxIcons.plus}
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </>
   );
 }

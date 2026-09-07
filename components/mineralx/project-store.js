@@ -1,3 +1,4 @@
+import { parseKml, polygonData, dataToKml, boundaryData } from './spatial-import.js';
 // ── MineralX project store ─────────────────────────────────────────────
 // Single source of truth for all user data. Persisted to localStorage
 // now; the API surface (load/save/mutators below) is the seam where a
@@ -1115,38 +1116,18 @@ export function downloadText(filename, text, mime = 'text/csv') {
 }
 
 // ── KML ────────────────────────────────────────────────────────────────
-// First polygon's outer ring → [[lat,lng], ...]. GDA2020/WGS84 lat-lng
-// only — deliberately no projection support (this is not a GIS).
+// Compatibility wrapper: callers needing the complete geometry use data, not coords.
+// Interactive imports always use the reviewed multi-feature spatial pipeline.
 export function parseKmlBoundary(text) {
   try {
-    const doc = new DOMParser().parseFromString(text, 'text/xml');
-    if (doc.querySelector('parsererror')) return { coords: null, error: 'Not a valid KML file.' };
-    const coordsEl =
-      doc.querySelector('Polygon outerBoundaryIs coordinates') ||
-      doc.querySelector('Polygon coordinates') ||
-      doc.querySelector('LinearRing coordinates') ||
-      doc.querySelector('coordinates');
-    if (!coordsEl) return { coords: null, error: 'No polygon coordinates found in this KML.' };
-    const coords = coordsEl.textContent.trim().split(/\s+/).map(tuple => {
-      const [lng, lat] = tuple.split(',').map(parseFloat);
-      return [lat, lng];
-    }).filter(([lat, lng]) => !Number.isNaN(lat) && !Number.isNaN(lng));
-    if (coords.length < 3) return { coords: null, error: 'Polygon has fewer than 3 valid points.' };
-    return { coords, error: null };
-  } catch {
-    return { coords: null, error: 'Could not read this KML file.' };
-  }
+    const parsed=parseKml(text),data=polygonData(parsed.data);
+    if(!data.features.length)return {coords:null,error:'No polygon found. Lines and points cannot define a tenement boundary.'};
+    const first=data.features[0].geometry;
+    return {coords:(first.type==='Polygon'?first.coordinates[0]:first.coordinates[0][0]).map(([lng,lat])=>[lat,lng]),data,warnings:parsed.warnings,error:null};
+  } catch(error) {return {coords:null,error:error.message};}
 }
-
 export function boundaryToKml(name, coords) {
-  const ring = [...coords, coords[0]].map(([lat, lng]) => `${lng},${lat},0`).join(' ');
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Placemark>
-    <name>${name}</name>
-    <Polygon><outerBoundaryIs><LinearRing><coordinates>${ring}</coordinates></LinearRing></outerBoundaryIs></Polygon>
-  </Placemark>
-</kml>`;
+  return dataToKml(name, Array.isArray(coords)?boundaryData({name,coords}):coords);
 }
 
 // ── Photos ─────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ while(Date.now()<deadline){
   await delay(10000);
 }
 assert.equal(release?.commit,expected,'Production did not serve the intended source revision');
-assert.equal(release.release,'2026.09.07.1');
+assert.equal(release.release,'2026.09.07.2');
 assert.equal(release.cloudSync,false);
 const routes=[];
 for(const path of ['/','/company','/contact','/clothing','/gic/login','/plant','/mineralx']){

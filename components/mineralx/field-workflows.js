@@ -3,7 +3,7 @@ import { nextId, today, validateCoordinates, parseAssayCell, elementInfo, ELEMEN
 import { parseCsv } from './csv.js';
 import {idKey,isControl,isReferenceControl,validDate,finiteInput,appendAudit} from './record-rules.js';
 
-export const FIELD_RELEASE = '2026.09.07.1';
+export const FIELD_RELEASE = '2026.09.07.2';
 export const newRecordId = () => globalThis.crypto.randomUUID();
 export const emptyStore = () => ({ version: 8, workflowVersion: 1, activeProjectId: null, projects: [] });
 export function upgradeStore(input) {
@@ -12,8 +12,9 @@ export function upgradeStore(input) {
   const projects = input.projects.map(p => {
     if (!p?.id || ids.has(p.id)) throw new Error('Missing or duplicate project identity. Restore requires review.');
     ids.add(p.id);
-    const result = { ...p };
-    for (const key of ['samples','collars','intervals','surveys','geology','files','targets','programs','dispatches','assayBatches','observations']) {
+    if (p.spatialVersion != null && p.spatialVersion !== 1) throw new Error('Unsupported spatial layer version. Original data is retained.');
+    const result = { ...p, spatialVersion: 1 };
+    for (const key of ['samples','collars','intervals','surveys','geology','files','targets','programs','dispatches','assayBatches','observations','spatialLayers']) {
       if (p[key] != null && !Array.isArray(p[key])) throw new Error(`Invalid ${key} in ${p.name || p.id}.`);
       result[key] = (p[key] || []).map(row => ({ ...row, recordId: row.recordId || newRecordId() }));
     }
