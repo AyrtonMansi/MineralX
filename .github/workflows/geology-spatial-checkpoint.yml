@@ -1,0 +1,92 @@
+name: Verify spatial imports and map layer workflows
+on:
+  push:
+    branches: [codex/geology-spatial-imports-20260907]
+permissions:
+  contents: write
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: geology-spatial-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'AyrtonMansi/MineralX' && github.ref == 'refs/heads/codex/geology-spatial-imports-20260907'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify current production base
+        run: test "$(git rev-parse origin/main)" = 773996a6d4e98ce910ee8b50202163c4278c52d3
+      - name: Expand and verify the preserved source
+        run: python3 .spatial-checkpoint/apply.py
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Geology regression tests
+        run: npm run test:geology | tee /tmp/geology-unit.log
+      - name: Existing operational regression tests
+        run: find tests -name '*.test.ts' -print0 | xargs -0 node --import tsx --test | tee /tmp/geology-operational.log
+      - name: Production build
+        run: npm run build | tee /tmp/geology-build.log
+      - name: Production route smoke
+        run: |
+          set -euo pipefail
+          node node_modules/next/dist/bin/next start > /tmp/mineralx-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true; wait "$server_pid" || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://localhost:3000/api/mineralx-release > /tmp/release.json; then break; fi
+            sleep 1
+          done
+          for path in / /company /contact /clothing /gic/login /plant /mineralx; do
+            curl -fsS "http://localhost:3000$path" > /dev/null
+            echo "PASS $path"
+          done
+          cat /tmp/release.json
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser field and spatial workflows
+        run: npx playwright test --config=playwright.release.config.js
+      - name: Preserve complete source delta
+        if: always()
+        run: |
+          git add app components test e2e playwright.release.config.js scripts/verify-geology-production.mjs
+          git diff --cached --binary > /tmp/geology-spatial-source.patch
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geology-spatial-evidence
+          path: |
+            /tmp/geology-spatial-source.patch
+            /tmp/geology-unit.log
+            /tmp/geology-operational.log
+            /tmp/geology-build.log
+            /tmp/mineralx-server.log
+            test-results
+            playwright-report
+          retention-days: 14
+      - name: Publish verified application source only
+        if: success()
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = 773996a6d4e98ce910ee8b50202163c4278c52d3
+          test -z "$(git diff --cached --name-only -- .github/workflows)"
+          rm -r .spatial-checkpoint
+          git add .spatial-checkpoint
+          git diff --cached --check
+          git config user.name 'AyrtonMansi'
+          git config user.email '35603638+AyrtonMansi@users.noreply.github.com'
+          git commit -m 'Preserve KML and KMZ project geology, render multipart boundaries and simplify map layers'
+          git push origin HEAD:refs/heads/codex/geology-spatial-imports-20260907
