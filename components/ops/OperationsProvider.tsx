@@ -1,4 +1,5 @@
 'use client';
+import {mayNavigate} from './navigation';
 import React,{createContext,useCallback,useContext,useEffect,useRef,useState} from 'react';
 import {useSearchParams,useRouter} from 'next/navigation';
 import {api,authClient} from '@/lib/ops/client';
@@ -56,34 +57,39 @@ export default function OperationsProvider({children}:{children:React.ReactNode}
  try{const result=await api('command',item.command);await persist(p=>acknowledge(p,item.command.requestId,result));}
  catch(e){const message=e instanceof Error?e.message:'Sync failed';if(e instanceof OpsError&&['conflict','validation','forbidden','mfa_required'].includes(e.code))await persist(p=>({...p,outbox:p.outbox.map(q=>q.command.requestId===item.command.requestId?{...q,state:'blocked',error:message}:q)}));throw e;}
  }
- const shared=await api(`geology?scope=${active.pack.scope.id}`);await persist(p=>({...p,geology:shared,context:c,scope:c.scopes.find(s=>s.id===p.scope.id)!,leaseUntil:new Date(Date.now()+8*36e5).toISOString(),lastSyncedAt:new Date().toISOString()}));
- contextRef.current=c;setContext(c);setOfflineMode(false);bump(n=>n+1);setSaveState('Synced to MineralX');
- }finally{setSyncing(false);}})();syncRef.current=task;try{await task;}finally{syncRef.current=null;}
+ const shared=await api(`geology?scope=${active.pack.scope.id}`);const final=await persist(p=>({...p,geology:p.outbox.length?p.geology:shared,context:c,scope:c.scopes.find(s=>s.id===p.scope.id)!,leaseUntil:new Date(Date.now()+8*36e5).toISOString(),lastSyncedAt:new Date().toISOString()}));
+ contextRef.current=c;setContext(c);setOfflineMode(false);bump(n=>n+1);setSaveState(final.outbox.length?`Saved on this device · ${final.outbox.length} changes waiting`:'Synced to MineralX');
+ }catch(e){setSaveState(`Sync not confirmed · ${(e as Error).message}`);throw e;}finally{setSyncing(false);}})();syncRef.current=task;try{await task;}finally{syncRef.current=null;}
  },[persist]);
  useEffect(()=>{const foreground=()=>{if(document.visibilityState==='visible'&&navigator.onLine&&vault.current?.pack.outbox.length&&!vault.current.pack.outbox.some(q=>q.state==='blocked'))sync().catch(e=>setFailure(new OpsError('unavailable',e.message)));};window.addEventListener('online',foreground);document.addEventListener('visibilitychange',foreground);return()=>{window.removeEventListener('online',foreground);document.removeEventListener('visibilitychange',foreground);};},[sync]);
  const send=useCallback(async(command:Command)=>{
  command={...command,expectedActorId:command.expectedActorId||contextRef.current?.userId};
  if(!scope||command.scopeId!==scope.id)throw new Error('This entry belongs to another workspace.');
+ const v=vault.current,fieldAction=OFFLINE_GEO_ACTIONS.has(command.action);
+ if(v&&v.pack.scope.id===scope.id&&fieldAction){
+  if(Date.now()>Date.parse(v.pack.leaseUntil))throw new Error('The eight-hour offline work window expired. Reconnect and refresh the field pack; retained work remains intact.');
+  if(command.expectedActorId!==v.pack.userId)throw new Error('This field change belongs to a different account.');
+  await persist(async p=>{
+   if(p.receipts[command.requestId])return p;
+   if(p.outbox.some(q=>q.command.requestId===command.requestId))return enqueue(p,command);
+   if(!p.scope.permissions.includes('geo.capture'))throw new Error('Field capture was not assigned when this pack was prepared.');
+   const targetKind=command.action.includes('.sample.')?'samples':command.action.includes('.collar.')?'collars':command.action.includes('.program.')?'programs':'targets';
+   if((p.geology.versions[`${targetKind}:${command.id}`]||0)!==command.expectedVersion)throw new Error('The device record changed. Reopen it before adding another correction.');
+   const next=await applyGeoCommand(p.geology.project,command,p.userId);
+   const differences=changeSet(p.geology.project,next,p.geology.versions),versions={...p.geology.versions};
+   for(const row of differences)versions[`${row.kind}:${row.id}`]=row.expectedVersion+1;
+   return enqueue(p,command,{...p.geology,project:next,versions});
+  });bump(n=>n+1);
+  if(navigator.onLine&&!offlineMode){try{await sync();}catch{/* The durable outbox and sync status retain the unconfirmed change. */}}
+  return vault.current?.pack.receipts[command.requestId]||{id:command.id,version:command.expectedVersion+1,localOnly:true};
+ }
  if(navigator.onLine&&!offlineMode){if(vault.current?.pack.outbox.length)await sync();const result=await api('command',command);bump(n=>n+1);setSaveState('Synced to MineralX');return result;}
- if(!OFFLINE_GEO_ACTIONS.has(command.action))throw new Error('This accountable action requires a live authorised session. Keep the observation as a draft until connected.');
- const v=vault.current;if(!v||v.pack.scope.id!==scope.id)throw new Error('Prepare this project for field use while connected before offline capture.');
- if(Date.now()>Date.parse(v.pack.leaseUntil))throw new Error('The eight-hour offline work window expired. Reconnect to confirm access; existing work and recovery remain intact.');
- if(command.expectedActorId!==v.pack.userId)throw new Error('This field change belongs to a different account.');
- await persist(async p=>{
-  if(p.outbox.some(q=>q.command.requestId===command.requestId))return enqueue(p,command);
-  if(!p.scope.permissions.includes('geo.capture'))throw new Error('Field capture was not assigned when this pack was prepared.');
-  const targetKind=command.action.includes('.sample.')?'samples':command.action.includes('.collar.')?'collars':command.action.includes('.program.')?'programs':'targets';
-  if((p.geology.versions[`${targetKind}:${command.id}`]||0)!==command.expectedVersion)throw new Error('The device record changed. Reopen it before adding another correction.');
-  const next=await applyGeoCommand(p.geology.project,command,p.userId);
-  const differences=changeSet(p.geology.project,next,p.geology.versions),versions={...p.geology.versions};
-  for(const row of differences)versions[`${row.kind}:${row.id}`]=row.expectedVersion+1;
-  return enqueue(p,command,{...p.geology,project:next,versions});
- });bump(n=>n+1);return {id:command.id,version:command.expectedVersion+1,localOnly:true};
+ throw new Error(fieldAction?'Prepare this project for field use while connected before offline capture.':'This accountable action requires a live authorised session. Keep the observation as a draft until connected.');
  },[scope,offlineMode,persist,sync]);
  const saveDraft=useCallback(async(key:string,value:unknown)=>{if(vault.current&&vault.current.pack.scope.id===scope?.id)await persist(p=>({...p,drafts:{...p.drafts,[key]:value}}));},[persist,scope?.id]);
  const resolveConflict=useCallback(async(requestId:string,expectedVersion:number,reason:string)=>{if(reason.trim().length<10)throw new Error('Explain the explicit conflict decision.');await persist(p=>({...p,receipts:{...p.receipts,[requestId]:{localDisposition:'superseded after explicit comparison',reason,command:p.outbox.find(q=>q.command.requestId===requestId)?.command}},outbox:p.outbox.map(q=>q.command.requestId!==requestId?q:{...q,state:'queued',error:undefined,command:{...q.command,requestId:crypto.randomUUID(),expectedVersion,payload:{...q.command.payload,reason}}})}));},[persist]);
  const retryBlocked=useCallback(async(requestId:string)=>{await persist(p=>({...p,outbox:p.outbox.map(q=>q.command.requestId===requestId?{...q,state:'queued',error:undefined}:q)}));},[persist]);
- const selectScope=useCallback((id:string)=>{if(vault.current?.pack.outbox.length&&id!==scope?.id&&!window.confirm('Pending field changes remain safely on this device. Switch workspace without synchronising now?'))return;router.push(`/ops?scope=${encodeURIComponent(id)}`);},[router,scope?.id]);
+ const selectScope=useCallback((id:string)=>{if(!mayNavigate())return;if(vault.current?.pack.outbox.length&&id!==scope?.id&&!window.confirm('Pending field changes remain safely on this device. Switch workspace without synchronising now?'))return;router.push(`/ops?scope=${encodeURIComponent(id)}`);},[router,scope?.id]);
  const exportVault=useCallback(async()=>{await queue.current.catch(()=>{});return vault.current?.envelope||null;},[]);
  useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(vault.current?.pack.outbox.length){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  return <OperationsContext.Provider value={{context,scope,loading,failure,online,offlineMode,pack,revision,syncing,saveState,refresh,selectScope,send,prepare,unlock,sync,saveDraft,exportVault,resolveConflict,retryBlocked}}>{children}</OperationsContext.Provider>;

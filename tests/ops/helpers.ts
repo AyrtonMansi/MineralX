@@ -8,7 +8,7 @@ export async function setup(extra=true){
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
  create function auth.jwt() returns jsonb language sql stable as $$ select jsonb_build_object('sub',current_setting('request.jwt.claim.sub',true),'aal',coalesce(nullif(current_setting('request.jwt.claim.aal',true),''),'aal1')) $$;
  grant usage on schema auth to authenticated,anon,service_role;`);
- for(const name of ['202609060001_gic.sql','202609060002_run_timing.sql','20260907010000_operations_core.sql','20260907011000_operations_gold.sql',...(extra?['20260907012000_operations_geology.sql','20260907013000_operations_reads.sql','20260907073020_operations_acceptance_fixes.sql']:[])]) {
+ for(const name of ['202609060001_gic.sql','202609060002_run_timing.sql','20260907010000_operations_core.sql','20260907011000_operations_gold.sql',...(extra?['20260907012000_operations_geology.sql','20260907013000_operations_reads.sql','20260907073020_operations_acceptance_fixes.sql','20260907090000_operations_reconciliation.sql']:[])]) {
   try{await db.exec(await readFile(new URL('../../supabase/migrations/'+name,import.meta.url),'utf8'));}catch(e){console.error('MIGRATION FAILED',name);throw e;}
  }
  for(const [k,v] of Object.entries(ids).filter(([k])=>!['workspace','org','facility','project','otherFacility'].includes(k)))await db.query('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now())',[v,k+'@example.invalid']);
