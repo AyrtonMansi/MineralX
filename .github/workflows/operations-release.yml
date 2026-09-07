@@ -1,0 +1,23 @@
+name: Operations acceptance
+on:
+  pull_request:
+    paths: ['app/ops/**', 'app/api/ops/**', 'components/ops/**', 'lib/ops/**', 'supabase/migrations/**', 'tests/ops/**', 'package*.json', '.github/workflows/operations-release.yml']
+  push:
+    branches: [main, implementation/mineralx-operations-integrated-20260907]
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run test:ops
+      - run: npm run test:unit
+      - run: npm run build

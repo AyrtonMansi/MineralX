@@ -1,5 +1,11 @@
 import {requireOperations,requireSession,rpc,trustedDatabase} from '@/lib/ops/server';import {OpsError} from '@/lib/ops/contracts';import {body,noStore,failure,uuid} from '@/lib/ops/http';
 export const dynamic='force-dynamic';
+export async function GET(request:Request){try{const {db,user}=await requireSession(),org=new URL(request.url).searchParams.get('org');
+ if(org)return noStore(await rpc(db,'mx_ops_admin_state',{p_org:uuid.parse(org)}));
+ const {data,error}=await db.from('gic_members').select('workspace_id,gic_workspaces(id,name)').eq('user_id',user.id).eq('role','owner');
+ if(error)throw new OpsError('unavailable','The existing operation ownership could not be loaded.');
+ return noStore({legacyWorkspaces:(data||[]).map(m=>m.gic_workspaces)});
+}catch(e){return failure(e);}}
 export async function POST(request:Request){try{const p=await body(request,16000);const {db,user}=await requireSession();
  if(p.action==='organisation.bootstrap')return noStore({id:await rpc(db,'mx_ops_bootstrap',{p_workspace:uuid.parse(p.workspaceId),p_name:p.name})});
  const {context}=await requireOperations();if(!context.organisations.some(o=>o.id===p.orgId&&o.admin))throw new OpsError('forbidden','Organisation administration is not assigned to this account.');

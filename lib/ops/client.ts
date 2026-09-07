@@ -10,7 +10,7 @@ export async function api<T=any>(path:string,data?:unknown):Promise<T>{
 }
 export function newCommand(scopeId:string,action:string,payload:Record<string,unknown>,id=crypto.randomUUID(),expectedVersion=0):Command{return {scopeId,action,payload,id,expectedVersion,requestId:crypto.randomUUID()};}
 export async function uploadEvidence(scopeId:string,family:string,file:File,identity?:{id:string;requestId:string}){
- const bytes=await file.arrayBuffer();if(!bytes.byteLength||bytes.byteLength>10485760)throw new Error('Choose a non-empty source file up to 10 MiB.');
+ if(!file.size||file.size>10485760)throw new Error('Choose a non-empty source file up to 10 MiB.');const bytes=await file.arrayBuffer();if(!bytes.byteLength||bytes.byteLength>10485760)throw new Error('Choose a non-empty source file up to 10 MiB.');
  const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
  const ids=identity||{id:crypto.randomUUID(),requestId:crypto.randomUUID()};
  const ext=file.name.split('.').pop()?.toLowerCase();const media_type=ext==='kml'?'application/vnd.google-earth.kml+xml':ext==='kmz'?'application/vnd.google-earth.kmz':ext==='geojson'?'application/geo+json':ext==='csv'?'text/csv':file.type||'application/octet-stream';

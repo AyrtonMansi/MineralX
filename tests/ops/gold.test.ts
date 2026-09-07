@@ -5,7 +5,7 @@ import {fineGold,dryTonnes,balance} from '../../lib/ops/decimal';
 let db:Awaited<ReturnType<typeof setup>>;
 const feed=crypto.randomUUID(),campaign=crypto.randomUUID(),run=crypto.randomUUID(),run2=crypto.randomUUID(),lot=crypto.randomUUID(),weight=crypto.randomUUID(),assay=crypto.randomUUID();
 const at='2026-09-01T12:00:00+10:00';let source:string,receiptSource:string,lotVersion=1;
-before(async()=>{db=await setup(false);source=await evidence(db);receiptSource=await evidence(db,'custody');});after(async()=>db.close());
+before(async()=>{db=await setup();source=await evidence(db);receiptSource=await evidence(db,'custody');});after(async()=>db.close());
 test('decimal previews preserve pending values and distinguish dry-basis quantity',()=>{
  assert.equal(fineGold('125.5','82.4'),'103.412');assert.equal(fineGold('125',null),null);
  assert.equal(dryTonnes('10','wet',null),null);assert.equal(dryTonnes('10','wet','10'),'9');assert.equal(balance('10','50','40','10'),'10');

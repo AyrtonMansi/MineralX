@@ -1,0 +1,17 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {boundaryData} from '@/components/mineralx/spatial-import.js';
+export default function ProjectMap({project,onOpen}:{project:any;onOpen:(kind:string,id:string)=>void}){
+ const container=useRef<HTMLDivElement>(null),map=useRef<any>(null),[error,setError]=useState('');
+ useEffect(()=>{let stopped=false;let active:any;async function load(){try{const {default:maplibre}=await import('maplibre-gl');if(stopped||!container.current)return;
+ const features:any[]=[];
+ for(const [kind,rows] of [['samples',project.samples],['collars',project.collars],['targets',project.targets]] as [string,any[]][]){for(const r of rows||[])if(!r.archivedAt&&Number.isFinite(r.lng)&&Number.isFinite(r.lat))features.push({type:'Feature',geometry:{type:'Point',coordinates:[r.lng,r.lat]},properties:{kind,id:r.recordId,label:r.id||r.name}});}
+ for(const l of project.spatialLayers||[])if(!l.archivedAt)for(const f of l.data?.features||[])features.push({...f,properties:{kind:'spatialLayers',id:l.recordId,label:l.name}});
+ if(project.boundary)for(const f of boundaryData(project.boundary).features)features.push({...f,properties:{kind:'boundary',label:'Project boundary'}});
+ active=new maplibre.Map({container:container.current,style:{version:8,sources:{records:{type:'geojson',data:{type:'FeatureCollection',features}}},layers:[{id:'paper',type:'background',paint:{'background-color':'#edf1ea'}},{id:'polygons',type:'fill',source:'records',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':'#5b8069','fill-opacity':0.16}},{id:'lines',type:'line',source:'records',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':'#54725e','line-width':2}},{id:'points',type:'circle',source:'records',filter:['==',['geometry-type'],'Point'],paint:{'circle-color':['match',['get','kind'],'samples','#ad722c','collars','#365f78','#326754'],'circle-radius':6,'circle-stroke-width':2,'circle-stroke-color':'#fff'}}]},center:[134,-25],zoom:3,attributionControl:false});map.current=active;active.addControl(new maplibre.NavigationControl());
+ const bounds=new maplibre.LngLatBounds();const walk=(c:any)=>{if(Array.isArray(c)&&typeof c[0]==='number'){if(Math.abs(c[0])<=180&&Math.abs(c[1])<=90)bounds.extend([c[0],c[1]]);}else if(Array.isArray(c))c.forEach(walk);};features.forEach(f=>{if(f.geometry?.type==='GeometryCollection')f.geometry.geometries.forEach((g:any)=>walk(g.coordinates));else walk(f.geometry?.coordinates);});if(!bounds.isEmpty())active.fitBounds(bounds,{padding:45,maxZoom:17,duration:0});
+ active.on('click','points',(event:any)=>{const p=event.features?.[0]?.properties;if(p?.id)onOpen(p.kind,p.id);});
+ active.on('error',()=>setError('Map rendering is unavailable. All records and coordinates remain accessible in the registers.'));
+ }catch{setError('This device could not open the map. Use the coordinate registers below.');}}load();return()=>{stopped=true;active?.remove();map.current=null;};},[project,onOpen]);
+ return <section className="ops-card ops-map-card"><div className="ops-section-heading"><h2>Project context</h2><span className="ops-muted">WGS84 · retained project geometry</span></div><div ref={container} className="ops-map" aria-label="Shared project geometry and sample locations" role="region"/>{error&&<p role="status">{error}</p>}<p className="ops-muted">Sample points are gold; drillholes are blue. Select a point to open its record. Background imagery is not part of this field pack.</p></section>;
+}
