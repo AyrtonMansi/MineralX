@@ -1,0 +1,62 @@
+name: Verify Operations staff checkpoint
+on:
+  push:
+    branches: [codex/operations-suite-20260907]
+    paths: [.staff-checkpoint/**, .github/workflows/operations-staff-checkpoint.yml]
+permissions:
+  contents: write
+defaults:
+  run:
+    shell: bash
+jobs:
+  verify:
+    if: github.repository == 'AyrtonMansi/MineralX' && github.ref == 'refs/heads/codex/operations-suite-20260907'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Expand checksummed application source
+        run: |
+          cat .staff-checkpoint/part-{1..5}.xzpart | xz -dc > /tmp/operations-staff.patch
+          echo 'ae385278a7c8b6a5f75e6c25b3372608eb845c8f4f10c9b0674e49307abab660  /tmp/operations-staff.patch' | sha256sum -c -
+          git apply --check /tmp/operations-staff.patch
+          git apply /tmp/operations-staff.patch
+      - run: npm ci --no-audit --no-fund
+      - name: Type check
+        run: npx tsc --noEmit --pretty false
+      - name: Operations database and integrity tests
+        run: node --import tsx --test tests/ops/*.test.ts | tee /tmp/operations-staff-tests.log
+      - name: Existing geology and GIC plant regression tests
+        run: |
+          npm run test:geology | tee /tmp/operations-geology-tests.log
+          find tests/gic tests/plant -name '*.test.ts' -print0 | xargs -0 node --import tsx --test | tee /tmp/operations-legacy-tests.log
+      - name: Production build
+        run: npm run build | tee /tmp/operations-staff-build.log
+      - name: Preserve source and verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: operations-staff-checkpoint
+          path: |
+            /tmp/operations-staff.patch
+            /tmp/operations-*-tests.log
+            /tmp/operations-staff-build.log
+          retention-days: 14
+      - name: Commit normal application source without workflow changes
+        if: success()
+        run: |
+          git add app/ops app/api/ops components/ops lib/ops/contracts.ts middleware.ts supabase/migrations/20260907014000_operations_hardening.sql tests/ops
+          rm -r .staff-checkpoint
+          git add .staff-checkpoint
+          test -z "$(git diff --cached --name-only -- .github/workflows)"
+          git diff --cached --check
+          git config user.name 'AyrtonMansi'
+          git config user.email '35603638+AyrtonMansi@users.noreply.github.com'
+          git commit -m 'Connect Operations staff portal, scoped field workflows, gold custody, evidence and account recovery'
+          git push origin HEAD:refs/heads/codex/operations-suite-20260907
