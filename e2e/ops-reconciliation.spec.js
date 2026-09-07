@@ -34,6 +34,6 @@ test('expired invitation completion is reachable without Operations membership',
  await page.route('**/api/ops/**',r=>r.fulfill({status:401,json:{error:{code:'unauthenticated',message:'Sign in with your invited MineralX account.'}}}));
  await page.goto('/ops/auth/complete#error=access_denied');
  await expect(page.getByRole('heading',{name:'Complete staff access'})).toBeVisible();
- await expect(page.getByRole('alert')).toContainText('expired');
+ await expect(page.locator('.ops-message[role=alert]')).toContainText('expired');
  await expect(page).toHaveURL(/\/ops\/auth\/complete$/);
 });
