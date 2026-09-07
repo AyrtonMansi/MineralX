@@ -71,8 +71,17 @@ test('period needs independent measured categories and preserves closed/reopened
  await command(db,ids.otherReviewer,'period.review',period,{reason:'Compared measurement sources'},2);
  const closed=await command(db,ids.otherReviewer,'period.close',period,{},3);assert.equal(closed.record.status,'closed');
  await assert.rejects(command(db,ids.otherReviewer,'gold.recognize',lot,{reason:'Change basis'},lotVersion),/closed account/);
+ await assert.rejects(command(db,ids.otherReviewer,'gold.review',lot,{weight_id:weight,assay_id:assay,reason:'Review revised accepted basis'},lotVersion),/closed account/);
  await command(db,ids.otherReviewer,'period.reopen',period,{reason:'Received new evidence; reopening account'},4);
  assert.equal((await db.query('select * from mx_ops.period_history')).rows.length,1);
+});
+test('held production is excluded consistently from current totals and daily trend',async()=>{
+ const dashboard=async()=>(await asUser(db,ids.manager,'select public.mx_ops_dashboard($1,$2,$3) result',[ids.facility,'2026-08-31T00:00:00Z','2026-09-03T00:00:00Z']))[0].result;
+ const before=await dashboard();assert.equal(before.gold.confirmed_lots,1);assert.equal(before.trend.length,1);
+ await command(db,ids.otherReviewer,'gold.hold',lot,{reason:'Review a source discrepancy'},lotVersion++);
+ const held=await dashboard();assert.equal(held.gold.confirmed_lots,0);assert.equal(held.gold.confirmed_fine_au_g,null);assert.equal(held.trend.length,0);assert.equal(held.productionBasisIssues,1);
+ assert.equal((await db.query('select * from mx_ops.production')).rows.length,1,'The historical recognition is preserved');
+ assert.equal((await db.query('select * from mx_ops.period_history')).rows.length,1,'The closed account snapshot is preserved');
 });
 test('a role revoked after token issue cannot read or retry its previous successful command',async()=>{
  const request=crypto.randomUUID(),p={reference:'REVOKE-TEST'},id=crypto.randomUUID();await command(db,ids.operator,'feed.create',id,p,0,ids.facility,request);

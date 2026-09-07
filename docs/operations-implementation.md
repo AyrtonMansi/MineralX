@@ -31,9 +31,9 @@ Passing these checks does not prove live Supabase Auth, private Storage, deploym
 The site can deploy without changing the existing GIC, public plant plan, corporate pages, clothing store or local geology store. Operations fails closed with a clear activation message if its schema is missing.
 
 1. Identify the existing production Supabase project and inspect its migration ledger and backups. Do not replay the historical geology/plant migration-prefix collision.
-2. Apply only the four saved `2026090701*` Operations migrations, followed by `20260907073020_operations_acceptance_fixes.sql`, in order, after checking which are already recorded. The required Operations schema version is 5.
+2. Apply only the four original Operations migrations (`20260907010000` through `20260907013000`), followed by `20260907073020_operations_acceptance_fixes.sql`, in order, after checking which are already recorded. Then apply `20260907090000_operations_reconciliation.sql`. The required Operations schema version is 6.
 3. Confirm `NEXT_PUBLIC_SUPABASE_URL`, the existing public publishable/anon key, and server-only `SUPABASE_SERVICE_ROLE_KEY` on the actual MineralX Vercel project. Do not expose the service key in client configuration.
-4. Configure identity invitation/recovery redirects for `/ops/auth/complete`. Existing verified accounts can claim prepared workspace invitations without sending email from the portal. New account invitations remain with the identity provider.
+4. Configure identity invitation/recovery redirects for `/ops/auth/complete` and `/ops/auth/callback`. Both PKCE codes and provider invitation/recovery fragments are supported. Existing verified accounts can claim prepared workspace invitations without sending email from the portal. New account invitations remain with the identity provider.
 5. The existing GIC owner verifies MFA, bootstraps the organisation, creates explicit project/facility scopes and grants named responsibility profiles. Confirm the facility recognition point before recognising production.
 6. Run an invited-user walkthrough, separate recorder/reviewer and custodian/recipient journeys, revoke access and verify stale sessions fail, exercise original-byte upload/download, then run offline/reload/reconnect checks on the actual field iPhones. Verify separate object backup and a restore drill before a live field pilot.
 
@@ -44,3 +44,23 @@ The site can deploy without changing the existing GIC, public plant plan, corpor
 - Advanced reported recovery requires a representative, reviewed measurement basis and remains explicitly unestablished in summaries. Production, ownership, custody and booked settlements remain distinct.
 - Recovery of complex conflicting or invalid dependent queues may require retaining an encrypted export and an authorised reconciliation. No automatic merge or silent discard occurs.
 - Independent object backup is not configured by this change. Real-device acceptance and named production role mapping remain deployment/pilot work, not synthetic test results.
+
+## Final cross-conversation reconciliation
+
+After the first production merge (`1ca3b31`), a fresh branch audit found two additional commits on `codex/operations-suite-20260907`: `47b971369319539c13c63e111b37a5b7f74ac986` and `5ab14a03a851fe3941111a9fe68d549d0246ef0d`. This reconciliation merges that head with the deployed main as separate parents, preserving both complete commit histories. The original `ddee5a9` checkpoint was already an ancestor of main. No source was inferred from the malformed screenshot checkpoint.
+
+| Recovered work | Integrated outcome |
+| --- | --- |
+| Staff routes, account/MFA, administration, Work, Files, reporting and geology screens | One existing `/ops` portal retained; overlapping implementations reconciled. Existing transformations, source previews, document fork protection and closed snapshots remain. |
+| Invitation callback and browser completion | Unified PKCE/token-hash callback plus fragment completion; completion stays reachable without Operations membership. |
+| Map display, original source and GeoJSON exports | Shared map retains personal layer visibility, opacity, zoom and source links, including physical samples, drillholes and targets. Original geometry remains authoritative. |
+| Entry navigation guard and register refresh | Unsaved entries require a decision before link/workspace navigation; register refresh clears stale rows. |
+| Field outbox refinements | Prepared capture persists before transmission, retains concurrent queued work during refresh, and reports unconfirmed sync. Existing actor checks, local versions, retry identity and blocked recovery remain. |
+| Evidence and gold hardening | Single verification audit on retry, integer assay support, operator staging with independent review, closed-period basis protection and consistent exclusion of held/changed production from current totals and trend. |
+| Independent integrity tests | All three recovered tests are included, with consolidated message expectations. Added finalisation audit, closed-period review and held-production checks. |
+| Temporary staff source-expansion workflow | Retired after recovering normal source files; read-only acceptance CI is authoritative. |
+| Parallel version-5 hardening migration | Unique behavior ported into the additive version-6 reconciliation migration. The two original version-5 migration candidates must not both be replayed; the discarded candidate remains in the recovered commit history. |
+
+The release browser suite includes three clearly labelled UI fixture tests for unsaved navigation, mobile map preferences and unauthenticated recovery completion, alongside the existing geological workflows. Fixture tests are not evidence of live Supabase authorization or database activation.
+
+This audit covers all committed work on the recovered Operations branch through `5ab14a03`. Unsaved files in inaccessible conversations cannot be certified. Production database activation and real-device acceptance remain the explicit boundaries above.

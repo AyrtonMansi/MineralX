@@ -13,6 +13,7 @@ test('verified evidence requires exact uploaded bytes, original actor and curren
  await assert.rejects(finalize(ids.reviewer),/Only the uploading/);
  assert.equal((await finalize(ids.operator))[0].result.status,'verified');
  assert.equal((await finalize(ids.operator))[0].result.id,file,'Repeated finalisation recovers the same source');
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from mx_ops.audit where entity_id=$1 and action='file.verified'",[file])).rows[0].n,1,'Finalisation replay must not append another verification audit');
  await assert.rejects(asUser(db,ids.operator,'select public.mx_ops_file_finalize($1,$2,$3,$4,4)',[ids.operator,ids.facility,file,hash]),/permission denied/);
 });
 test('controlled document revisions cannot cross workspaces or fork a previous revision',async()=>{
