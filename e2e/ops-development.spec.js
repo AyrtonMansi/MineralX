@@ -1,6 +1,8 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 const facility='de000000-0000-4000-8000-000000000003',project='de000000-0000-4000-8000-000000000004';
+// These synthetic observations are entered in the facility's wall-clock time, not UTC.
+function plantTime(ms){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ms)).map(p=>[p.type,p.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;}
 const TILE=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==','base64');
 async function open(page,path='/ops'){
  const forbidden=[];page.on('request',r=>{const u=new URL(r.url());if(u.pathname.startsWith('/api/ops/')||u.hostname.endsWith('.supabase.co'))forbidden.push(r.url());});
@@ -25,6 +27,7 @@ async function run(page){
  const form=page.getByRole('region',{name:'Processing run',exact:true});
  await expect(form.getByLabel('Feed lot', {exact:false}).locator('option')).toHaveCount(2);
  await form.getByLabel('Feed lot',{exact:false}).selectOption({index:1});await form.getByLabel('Measured tonnes').fill('2.5');
+ const now=Date.now();await form.getByLabel('Actual start').fill(plantTime(now-2*3600000));await form.getByLabel('Actual end').fill(plantTime(now-3600000));
  await form.getByLabel('Shift notes / handover').fill('Development browser run — synthetic measurement');
  await form.getByRole('button',{name:'Save run draft'}).click();await expect(form).toHaveCount(0);
  const row=page.locator('tbody tr').first();await expect(row).toBeVisible();return (await row.locator('td').first().innerText()).trim();
@@ -38,8 +41,13 @@ test('no-login suite uses real local save/reload and never requests protected se
  await page.getByRole('button',{name:'Record clean-up / physical gold lot',exact:true}).click();
  const lot=page.getByRole('region',{name:'Record clean-up / physical gold lot',exact:true});
  await lot.getByLabel('Lot / clean-up reference').fill('DEV-CLEANUP-ONLY');
- const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,19);
+ const yesterday=plantTime(Date.now()-86400000);
  await lot.getByLabel('Actual clean-up time').fill(yesterday);await lot.getByRole('checkbox',{name:new RegExp(reference)}).check();
+ // A clean-up cannot precede the run it covers. Preserve this real validation assertion.
+ await lot.getByRole('button',{name:'Record physical lot'}).click();
+ await expect(lot.getByRole('alert')).toContainText('A linked run is outside the clean-up facility/campaign or follows the clean-up');
+ await expect(lot.getByLabel('Lot / clean-up reference')).toHaveValue('DEV-CLEANUP-ONLY');
+ await lot.getByLabel('Actual clean-up time').fill(plantTime(Date.now()-30*60000));
  await lot.getByRole('button',{name:'Record physical lot'}).click();await expect(lot).toHaveCount(0);
  await page.getByRole('button',{name:'Open DEV-CLEANUP-ONLY'}).click();
  await expect(page.getByText('Not recognised',{exact:true})).toBeVisible();
@@ -100,7 +108,7 @@ test('development choice never authorises live APIs and switching to staff stays
  await expect(page.getByRole('heading',{name:'Development workspace',exact:true})).toBeVisible();expect(calls).toEqual([]);
  const response=await request.get('/api/ops/context?mode=development',{headers:{'x-mineralx-ops-mode':'development'}});
  expect([401,503]).toContain(response.status());expect(await response.text()).not.toContain('Development facility');
- const write=await request.post('/api/ops/command?mode=development',{data:{scopeId:facility,id:crypto.randomUUID(),requestId:crypto.randomUUID(),expectedVersion:0,action:'campaign.create',payload:{name:'Must not write production'}},headers:{'x-mineralx-ops-mode':'development'}});
+ const write=await request.post('/api/ops/command?mode=development',{data:{scopeId:facility,id:crypto.randomUUID(),requestId:crypto.randomUUID(),expectedVersion:0,action:'campaign.create',payload:{name:'Must not write production'}},headers:{'x-mineralx-ops-mode':'development'});
  expect([401,403,503]).toContain(write.status());
  await page.getByRole('link',{name:'Open protected staff sign-in',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();
