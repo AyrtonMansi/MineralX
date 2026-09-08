@@ -1,0 +1,29 @@
+name: Development access source snapshot
+on:
+  push:
+    branches: [fix/suite-development-access-20260908]
+    paths: [.github/workflows/development-access-source.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Exact source and pinned dependencies for isolated verification
+        run: |
+          git archive --format=tar.gz HEAD > /tmp/mineralx-current-source.tar.gz
+          tar -czf /tmp/mineralx-current-dependencies.tar.gz node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mineralx-development-baseline
+          path: /tmp/mineralx-current-*.tar.gz
+          retention-days: 3
