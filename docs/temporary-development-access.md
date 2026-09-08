@@ -12,7 +12,7 @@ Open `/ops?mode=development` without an account. New browser contexts also defau
 
 ## Durability and navigation
 
-PostgreSQL runs from the pinned installed PGlite package, with WASM/data assets self-hosted by the application. IndexedDB flush is awaited, not relaxed. One tab exclusively holds a Web Lock; a second writer is rejected rather than overwriting the first tab's data. Browser storage failure is not a successful save; the open form and stable retry request must remain available. Backups are downloadable data-directory archives, labelled DEVELOPMENT; they are not production import packages.
+PostgreSQL runs from the pinned installed PGlite package, with WASM/data assets self-hosted by the application. Each mutation checkpoints PostgreSQL and commits a complete compressed snapshot in one IndexedDB transaction before reporting Saved. A failed transaction preserves the last committed snapshot and the original retry identity; the in-memory change remains recoverable. This intentionally favours simple, reliable temporary-workspace durability over large-dataset throughput. One tab exclusively holds a Web Lock; a second writer is rejected rather than overwriting the first tab's data. Browser storage failure is not a successful save; the open form and stable retry request must remain available. Backups are downloadable data-directory archives, labelled DEVELOPMENT; they are not production import packages.
 
 Staff sign-in uses a full document navigation to avoid mixing retained development UI and authenticated transport. The document's mode is stable even if another tab changes the preference cookie. The existing encrypted staff field service worker explicitly prepares a staff-mode shell, never the development application.
 
@@ -25,3 +25,7 @@ Set the server environment variable `MINERALX_DEVELOPMENT_ACCESS=off` and redepl
 ## Verification scope
 
 The regression suite applies the actual eight consolidated SQL migrations to isolated PostgreSQL, tests local request replay/conflicts, exact source bytes, cross-scope/actor rejection, critical-action denial and backup restoration. Browser tests cover the real self-hosted WASM, IndexedDB persistence, processing and geological forms, source import/export, failed-save retry, exclusive tab ownership, independent browser contexts and protected API denial. Only public raster tiles are stubbed; application and local database logic are not. These tests do not certify live staff identity or replace production commissioning.
+
+The first browser run (34227091495) passed 27/29 scenarios and identified two actual defects: upstream form choices did not refresh after a new record, and filesystem flushing could acknowledge a local mutation before a failed storage operation surfaced. The selection hook now refreshes on a committed revision. Explicit atomic snapshots replace the unsafe acknowledgement path; the original failing browser tests are retained, with two additional database durability tests. Local Operations total after correction: 29/29 passed. Final PR and deployed-source acceptance must still be observed before release completion.
+
+Temporary source-transport files and write-permission bootstrap workflows are removed from this release tree. Normal CI is read-only, and the original production Vercel configuration is restored unchanged.
