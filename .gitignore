@@ -37,3 +37,10 @@ next-env.d.ts
 
 # Supabase
 .supabase
+
+/public/ops-development-assets/
+/lib/ops/development-schema.generated.ts
+
+/playwright.local-dev.config.js
+/test-results/
+/playwright-report/

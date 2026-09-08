@@ -49,6 +49,7 @@ export default function Login(){
  </form>
  <button className="ops-link" disabled={busy} onClick={()=>{setMode(mode==='signin'?'reset':'signin');setMessage('');setError('');}}>{mode==='signin'?'Forgot password?':'Return to sign in'}</button>
  <Link href="/gic/login">Existing processing / admin sign-in</Link>
+ <a href="/ops?mode=development">Continue without sign-in — development workspace</a>
  <Link href="/ops/field">Unlock prepared field records</Link>
  </main>;
 }

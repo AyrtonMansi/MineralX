@@ -9,10 +9,10 @@ import {applyGeoCommand,OFFLINE_GEO_ACTIONS,changeSet} from '@/lib/ops/geology.j
 
 type Context=OpsContext&{capabilities:Record<string,any>};
 type Vault={key:CryptoKey;pack:FieldPack;envelope:VaultEnvelope};
-type Value={context:Context|null;scope:Scope|undefined;loading:boolean;failure:OpsError|null;online:boolean;offlineMode:boolean;pack:FieldPack|null;revision:number;syncing:boolean;saveState:string;refresh:()=>Promise<void>;selectScope:(id:string)=>void;send:(command:Command)=>Promise<any>;prepare:(passphrase:string,geology:any)=>Promise<void>;unlock:(envelope:VaultEnvelope,passphrase:string,offline?:boolean)=>Promise<void>;sync:()=>Promise<void>;saveDraft:(key:string,value:unknown)=>Promise<void>;exportVault:()=>Promise<VaultEnvelope|null>;resolveConflict:(requestId:string,expectedVersion:number,reason:string)=>Promise<void>;retryBlocked:(requestId:string)=>Promise<void>};
+type Value={development:boolean;context:Context|null;scope:Scope|undefined;loading:boolean;failure:OpsError|null;online:boolean;offlineMode:boolean;pack:FieldPack|null;revision:number;syncing:boolean;saveState:string;refresh:()=>Promise<void>;selectScope:(id:string)=>void;send:(command:Command)=>Promise<any>;prepare:(passphrase:string,geology:any)=>Promise<void>;unlock:(envelope:VaultEnvelope,passphrase:string,offline?:boolean)=>Promise<void>;sync:()=>Promise<void>;saveDraft:(key:string,value:unknown)=>Promise<void>;exportVault:()=>Promise<VaultEnvelope|null>;resolveConflict:(requestId:string,expectedVersion:number,reason:string)=>Promise<void>;retryBlocked:(requestId:string)=>Promise<void>};
 const OperationsContext=createContext<Value|null>(null);
 export function useOperations(){const v=useContext(OperationsContext);if(!v)throw new Error('Operations context is missing');return v;}
-export default function OperationsProvider({children}:{children:React.ReactNode}){
+export default function OperationsProvider({children,development=false}:{children:React.ReactNode;development?:boolean}){
  const router=useRouter(),query=useSearchParams();const [context,setContext]=useState<Context|null>(null),[loading,setLoading]=useState(true),[failure,setFailure]=useState<OpsError|null>(null),[online,setOnline]=useState(true),[offlineMode,setOfflineMode]=useState(false),[pack,setPack]=useState<FieldPack|null>(null),[revision,bump]=useState(0),[syncing,setSyncing]=useState(false),[saveState,setSaveState]=useState('');
  const vault=useRef<Vault|null>(null),queue=useRef<Promise<unknown>>(Promise.resolve()),contextRef=useRef<Context|null>(null),syncRef=useRef<Promise<void>|null>(null);
  const scope=query.get('scope')?context?.scopes.find(s=>s.id===query.get('scope')):context?.scopes[0];
@@ -22,7 +22,7 @@ export default function OperationsProvider({children}:{children:React.ReactNode}
  }catch(e){setFailure(e as OpsError);if((e as OpsError).code==='unauthenticated'||(e as OpsError).code==='forbidden'){setContext(null);contextRef.current=null;vault.current=null;setPack(null);}}
  finally{setLoading(false);}},[]);
  useEffect(()=>{refresh();const change=()=>setOnline(navigator.onLine);change();window.addEventListener('online',change);window.addEventListener('offline',change);return()=>{window.removeEventListener('online',change);window.removeEventListener('offline',change);};},[refresh]);
- useEffect(()=>{let stop=()=>{};try{const {data}=authClient().auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'||session?.user.id&&contextRef.current?.userId&&session.user.id!==contextRef.current.userId){vault.current=null;setPack(null);setContext(null);contextRef.current=null;setOfflineMode(false);setTimeout(()=>void refresh(),0);}});stop=()=>data.subscription.unsubscribe();}catch{}return stop;},[refresh]);
+ useEffect(()=>{if(development)return;let stop=()=>{};try{const {data}=authClient().auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'||session?.user.id&&contextRef.current?.userId&&session.user.id!==contextRef.current.userId){vault.current=null;setPack(null);setContext(null);contextRef.current=null;setOfflineMode(false);setTimeout(()=>void refresh(),0);}});stop=()=>data.subscription.unsubscribe();}catch{}return stop;},[refresh,development]);
  const persist=useCallback(async(update:(p:FieldPack)=>FieldPack|Promise<FieldPack>)=>{
  const identity=vault.current?`${vault.current.pack.userId}:${vault.current.pack.scope.id}`:null;
  const task=queue.current.catch(()=>{}).then(async()=>{const current=vault.current;if(!current||identity!==`${current.pack.userId}:${current.pack.scope.id}`)throw new Error('Unlock or prepare this device workspace before saving offline.');
@@ -40,6 +40,7 @@ export default function OperationsProvider({children}:{children:React.ReactNode}
  if(offline)window.history.replaceState(null,'',`/ops/field?scope=${loaded.scope.id}`);else router.push(`/ops/geology?scope=${loaded.scope.id}`);setSaveState(`Device workspace unlocked · ${loaded.outbox.length} pending changes`);
  },[router]);
  const prepare=useCallback(async(passphrase:string,geology:any)=>{
+ if(development)throw new Error('Development records already save locally. Use the development backup; real field preparation requires staff sign-in.');
  const c=contextRef.current;if(!c||!scope)throw new Error('Sign in and choose the project first.');
  const existing=await readVault(c.userId,scope.id);if(existing&&(!vault.current||vault.current.pack.scope.id!==scope.id))throw new Error('A device workspace already exists. Unlock it before refreshing; it will not be overwritten.');
  if(vault.current&&vault.current.pack.scope.id===scope.id){if(vault.current.pack.outbox.length)throw new Error('Sync or resolve pending changes before refreshing the field pack.');await persist(old=>({...old,geology,scope,context:c,preparedAt:new Date().toISOString(),leaseUntil:new Date(Date.now()+8*36e5).toISOString()}));return;}
@@ -47,7 +48,7 @@ export default function OperationsProvider({children}:{children:React.ReactNode}
  const p:FieldPack={version:1,userId:c.userId,scope,context:{...c,scopes:[scope],organisations:[]},preparedAt:new Date().toISOString(),leaseUntil:new Date(Date.now()+8*36e5).toISOString(),lastSyncedAt:new Date().toISOString(),geology,outbox:[],drafts:{},receipts:{}};
  const envelope=await encryptPack(p,key,Array.from(salt),1);await writeVault(envelope,0);vault.current={key,pack:p,envelope};setPack(p);setSaveState('Field records prepared on this device. Basemap coverage is not included.');
  if(navigator.storage?.persist)await navigator.storage.persist();
- },[scope,persist]);
+ },[scope,persist,development]);
  const sync=useCallback(async()=>{
  if(syncRef.current)return syncRef.current;
  const task=(async()=>{if(!navigator.onLine)throw new Error('Reconnect before synchronising.');const active=vault.current;if(!active)return;
@@ -65,6 +66,7 @@ export default function OperationsProvider({children}:{children:React.ReactNode}
  const send=useCallback(async(command:Command)=>{
  command={...command,expectedActorId:command.expectedActorId||contextRef.current?.userId};
  if(!scope||command.scopeId!==scope.id)throw new Error('This entry belongs to another workspace.');
+ if(development){const result=await api('command',command);bump(n=>n+1);setSaveState('Saved in this browser · development only');return result;}
  const v=vault.current,fieldAction=OFFLINE_GEO_ACTIONS.has(command.action);
  if(v&&v.pack.scope.id===scope.id&&fieldAction){
   if(Date.now()>Date.parse(v.pack.leaseUntil))throw new Error('The eight-hour offline work window expired. Reconnect and refresh the field pack; retained work remains intact.');
@@ -85,12 +87,12 @@ export default function OperationsProvider({children}:{children:React.ReactNode}
  }
  if(navigator.onLine&&!offlineMode){if(vault.current?.pack.outbox.length)await sync();const result=await api('command',command);bump(n=>n+1);setSaveState('Synced to MineralX');return result;}
  throw new Error(fieldAction?'Prepare this project for field use while connected before offline capture.':'This accountable action requires a live authorised session. Keep the observation as a draft until connected.');
- },[scope,offlineMode,persist,sync]);
+ },[scope,offlineMode,persist,sync,development]);
  const saveDraft=useCallback(async(key:string,value:unknown)=>{if(vault.current&&vault.current.pack.scope.id===scope?.id)await persist(p=>({...p,drafts:{...p.drafts,[key]:value}}));},[persist,scope?.id]);
  const resolveConflict=useCallback(async(requestId:string,expectedVersion:number,reason:string)=>{if(reason.trim().length<10)throw new Error('Explain the explicit conflict decision.');await persist(p=>({...p,receipts:{...p.receipts,[requestId]:{localDisposition:'superseded after explicit comparison',reason,command:p.outbox.find(q=>q.command.requestId===requestId)?.command}},outbox:p.outbox.map(q=>q.command.requestId!==requestId?q:{...q,state:'queued',error:undefined,command:{...q.command,requestId:crypto.randomUUID(),expectedVersion,payload:{...q.command.payload,reason}}})}));},[persist]);
  const retryBlocked=useCallback(async(requestId:string)=>{await persist(p=>({...p,outbox:p.outbox.map(q=>q.command.requestId===requestId?{...q,state:'queued',error:undefined}:q)}));},[persist]);
  const selectScope=useCallback((id:string)=>{if(!mayNavigate())return;if(vault.current?.pack.outbox.length&&id!==scope?.id&&!window.confirm('Pending field changes remain safely on this device. Switch workspace without synchronising now?'))return;router.push(`/ops?scope=${encodeURIComponent(id)}`);},[router,scope?.id]);
  const exportVault=useCallback(async()=>{await queue.current.catch(()=>{});return vault.current?.envelope||null;},[]);
  useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(vault.current?.pack.outbox.length){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
- return <OperationsContext.Provider value={{context,scope,loading,failure,online,offlineMode,pack,revision,syncing,saveState,refresh,selectScope,send,prepare,unlock,sync,saveDraft,exportVault,resolveConflict,retryBlocked}}>{children}</OperationsContext.Provider>;
+ return <OperationsContext.Provider value={{development,context,scope,loading,failure,online,offlineMode,pack,revision,syncing,saveState,refresh,selectScope,send,prepare,unlock,sync,saveDraft,exportVault,resolveConflict,retryBlocked}}>{children}</OperationsContext.Provider>;
 }

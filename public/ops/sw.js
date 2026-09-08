@@ -1,11 +1,11 @@
 /* Generic offline shell only; operational APIs and evidence are never cached. */
-const CACHE='mineralx-ops-shell-2026.09.07.6';
+const CACHE='mineralx-ops-shell-2026.09.08.1';
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('message',event=>{if(event.data?.type!=='prepare-shell')return;event.waitUntil((async()=>{
  try{
   const cache=await caches.open(CACHE);
-  const response=await fetch('/ops/field',{credentials:'omit',cache:'no-store'});
+  const response=await fetch('/ops/field?mode=staff',{credentials:'omit',cache:'no-store'});
   if(!response.ok)throw new Error('Field shell unavailable');
   const html=await response.text();
   const referenced=[...html.matchAll(/(?:src|href)=["'](\/_next\/static\/[^"']+)["']/g)].map(m=>m[1]);
