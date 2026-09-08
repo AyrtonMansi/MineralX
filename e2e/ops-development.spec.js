@@ -108,7 +108,10 @@ test('development choice never authorises live APIs and switching to staff stays
  await expect(page.getByRole('heading',{name:'Development workspace',exact:true})).toBeVisible();expect(calls).toEqual([]);
  const response=await request.get('/api/ops/context?mode=development',{headers:{'x-mineralx-ops-mode':'development'}});
  expect([401,503]).toContain(response.status());expect(await response.text()).not.toContain('Development facility');
- const write=await request.post('/api/ops/command?mode=development',{data:{scopeId:facility,id:crypto.randomUUID(),requestId:crypto.randomUUID(),expectedVersion:0,action:'campaign.create',payload:{name:'Must not write production'}},headers:{'x-mineralx-ops-mode':'development'});
+ const write=await request.post('/api/ops/command?mode=development',{
+  data:{scopeId:facility,id:crypto.randomUUID(),requestId:crypto.randomUUID(),expectedVersion:0,action:'campaign.create',payload:{name:'Must not write production'}},
+  headers:{'x-mineralx-ops-mode':'development'},
+ });
  expect([401,403,503]).toContain(write.status());
  await page.getByRole('link',{name:'Open protected staff sign-in',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();
