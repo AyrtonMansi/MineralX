@@ -1,0 +1,12 @@
+'use client';
+import {useState} from 'react';
+import {downloadBlob} from '@/lib/ops/client';
+import {Heading,Message} from './primitives';
+export default function DevelopmentTools(){
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ return <><Heading title="Development workspace" description="Temporary no-login access. Real staff identity and production data remain separate."/>
+ <section className="ops-card"><h2>Save a complete local backup</h2><p>Processing drafts, gold-lot observations, geology, source files and record history are stored in this browser. They survive normal reloads but do not move between devices or sync to production. Anyone using this browser profile can access them.</p><p>The backup is a PostgreSQL development data-directory archive, not a production import package. Keep it before changing browser, clearing site data or disabling this workspace.</p>{error&&<Message error>{error}</Message>}
+ <button className="ops-primary" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{const {developmentBackup}=await import('@/lib/ops/development');downloadBlob(`MineralX-DEVELOPMENT-${new Date().toISOString().slice(0,10)}.tgz`,await developmentBackup());}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>{busy?'Preparing backup…':'Download development backup'}</button></section>
+ <section className="ops-card"><h2>What can be tested here</h2><p>Use Home, Geology, Plant & Gold, Work queue, Files and Reports without an account. Enter test observations, attach test source files and reload to check saving. Start with the development facility or select Development geology in the workspace selector.</p><p>Named approvals, production recognition, period close, real custody signatures, account invitations and migration into company records still require protected staff access. Development mode never sends these local records to the live service.</p><a href="/ops/login">Open protected staff sign-in</a></section>
+ <section className="ops-card"><h2>Field work</h2><p>This is a development workspace, not an encrypted staff field pack. Local records can be edited while this loaded page is disconnected; offline page reload and map coverage are not prepared by this mode. Use the existing local geology app for its established field capture and backup workflow, or sign in to prepare an authorised field pack.</p><a href="/mineralx">Open local geology app</a></section></>;
+}

@@ -1,0 +1,126 @@
+import {test,expect} from '@playwright/test';
+import {readFile} from 'node:fs/promises';
+const facility='de000000-0000-4000-8000-000000000003',project='de000000-0000-4000-8000-000000000004';
+// These synthetic observations are entered in the facility's wall-clock time, not UTC.
+function plantTime(ms){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ms)).map(p=>[p.type,p.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;}
+const TILE=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==','base64');
+async function open(page,path='/ops'){
+ const forbidden=[];page.on('request',r=>{const u=new URL(r.url());if(u.pathname.startsWith('/api/ops/')||u.hostname.endsWith('.supabase.co'))forbidden.push(r.url());});
+ // Public map imagery is deterministic. Application, database, imports and local saving are real.
+ await page.route('**/api/basemap/**',r=>r.fulfill({contentType:'image/png',body:TILE}));
+ await page.goto(path+(path.includes('?')?'&':'?')+'mode=development',{waitUntil:'domcontentloaded'});
+ await expect(page.getByRole('combobox',{name:'Workspace or site'})).toBeVisible({timeout:30000});
+ await expect(page.locator('.ops-development-banner')).toContainText('no sign-in');
+ return forbidden;
+}
+async function feed(page,reference){
+ await page.getByRole('link',{name:'Plant & Gold',exact:true}).click();
+ await page.getByRole('button',{name:'Feed',exact:true}).click();
+ await page.getByRole('button',{name:'Record feed lot',exact:true}).click();
+ const form=page.getByRole('region',{name:'Record feed lot',exact:true});
+ await form.getByLabel('Feed / stockpile reference').fill(reference);await form.getByLabel('Received quantity, t').fill('5');
+ await form.getByRole('button',{name:'Record feed lot',exact:true}).click();
+ await expect(form).toHaveCount(0);await expect(page.getByRole('row').filter({hasText:reference})).toBeVisible();
+}
+async function run(page){
+ await page.getByRole('button',{name:'Runs',exact:true}).click();await page.getByRole('button',{name:'Processing run',exact:true}).click();
+ const form=page.getByRole('region',{name:'Processing run',exact:true});
+ await expect(form.getByLabel('Feed lot', {exact:false}).locator('option')).toHaveCount(2);
+ await form.getByLabel('Feed lot',{exact:false}).selectOption({index:1});await form.getByLabel('Measured tonnes').fill('2.5');
+ const now=Date.now();await form.getByLabel('Actual start').fill(plantTime(now-2*3600000));await form.getByLabel('Actual end').fill(plantTime(now-3600000));
+ await form.getByLabel('Shift notes / handover').fill('Development browser run — synthetic measurement');
+ await form.getByRole('button',{name:'Save run draft'}).click();await expect(form).toHaveCount(0);
+ const row=page.locator('tbody tr').first();await expect(row).toBeVisible();return (await row.locator('td').first().innerText()).trim();
+}
+
+test('no-login suite uses real local save/reload and never requests protected services',async({page})=>{
+ const calls=await open(page);await feed(page,'DEV-FEED-ONLY');const reference=await run(page);
+ await expect(page.locator('.ops-connection')).toContainText('Saved in this browser');await page.reload();
+ await expect(page.getByRole('row').filter({hasText:reference})).toBeVisible({timeout:30000});
+ await page.getByRole('button',{name:'Gold lots',exact:true}).click();
+ await page.getByRole('button',{name:'Record clean-up / physical gold lot',exact:true}).click();
+ const lot=page.getByRole('region',{name:'Record clean-up / physical gold lot',exact:true});
+ await lot.getByLabel('Lot / clean-up reference').fill('DEV-CLEANUP-ONLY');
+ const yesterday=plantTime(Date.now()-86400000);
+ await lot.getByLabel('Actual clean-up time').fill(yesterday);await lot.getByRole('checkbox',{name:new RegExp(reference)}).check();
+ // A clean-up cannot precede the run it covers. Preserve this real validation assertion.
+ await lot.getByRole('button',{name:'Record physical lot'}).click();
+ await expect(lot.getByRole('alert')).toContainText('A linked run is outside the clean-up facility/campaign or follows the clean-up');
+ await expect(lot.getByLabel('Lot / clean-up reference')).toHaveValue('DEV-CLEANUP-ONLY');
+ await lot.getByLabel('Actual clean-up time').fill(plantTime(Date.now()-30*60000));
+ await lot.getByRole('button',{name:'Record physical lot'}).click();await expect(lot).toHaveCount(0);
+ await page.getByRole('button',{name:'Open DEV-CLEANUP-ONLY'}).click();
+ await expect(page.getByText('Not recognised',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Verify gold measurement and assay'}).click();
+ await expect(page.getByRole('button',{name:'Verify selected evidence'})).toBeDisabled();
+ await expect(page.getByText('Development mode cannot approve production or sign custody.',{exact:false})).toBeVisible();
+ expect(calls).toEqual([]);
+ await page.screenshot({path:'test-results/development-gold-workflow.png',fullPage:true});
+});
+
+test('geology capture, reviewed map import and original bytes survive reload without login',async({page})=>{
+ const calls=await open(page,`/ops/geology?scope=${project}`);
+ await page.getByRole('button',{name:'Collect a physical sample',exact:true}).click();
+ const form=page.getByRole('region',{name:'Collect a physical sample'});
+ await form.getByLabel('Physical sample / bag identifier').fill('DEV-BAG-001');await form.getByLabel('Actual collection date').fill(new Date(Date.now()-86400000).toISOString().slice(0,10));
+ await form.getByLabel('Latitude, WGS84').fill('-20');await form.getByLabel('Longitude, WGS84').fill('145');
+ await form.getByRole('button',{name:'Save sample',exact:true}).click();await expect(form).toHaveCount(0);
+ await page.reload();await expect(page.getByRole('button',{name:'Open DEV-BAG-001'})).toBeVisible({timeout:30000});
+ await page.getByRole('button',{name:'Map & sources',exact:true}).click();
+ await page.getByRole('button',{name:'Publish project map source',exact:true}).click();
+ const layer=page.getByRole('region',{name:'Publish project map source'});
+ const source=JSON.stringify({type:'FeatureCollection',features:[{type:'Feature',properties:{name:'Development tenement',source:'synthetic'},geometry:{type:'Polygon',coordinates:[[[145,-20],[145.1,-20],[145.1,-20.1],[145,-20]]]}}]});
+ await layer.locator('input[type=file]').setInputFiles({name:'development-tenement.geojson',mimeType:'application/geo+json',buffer:Buffer.from(source)});
+ await expect(layer.getByRole('combobox',{name:'Verified source evidence'})).not.toHaveValue('');
+ await layer.getByLabel('Layer name').fill('Development boundary');await layer.getByLabel('Project role').selectOption('boundary');
+ await layer.getByRole('checkbox',{name:'I reviewed geometry, warnings and the destination project'}).check();
+ await layer.getByRole('button',{name:'Preview source & changes'}).click();await expect(layer.getByText('Current source preview')).toBeVisible();
+ await layer.getByRole('button',{name:'Publish reviewed map layer'}).click();await expect(layer).toHaveCount(0);
+ await page.goto(`/ops/geology?scope=${project}&view=spatialLayers`);await page.reload();
+ await page.getByRole('button',{name:'Open Development boundary'}).click();
+ const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'Download original source'}).click();
+ const downloaded=await waiting;expect((await readFile(await downloaded.path())).toString()).toBe(source);
+ expect(calls).toEqual([]);
+});
+
+test('local storage failure retains the draft and retry persists before acknowledging success',async({page})=>{
+ await open(page,`/ops/plant?scope=${facility}&view=campaigns`);await page.getByRole('button',{name:'Open processing campaign'}).click();
+ const form=page.getByRole('region',{name:'Open processing campaign'});await form.getByLabel('Campaign name').fill('RECOVERED-DEVELOPMENT-CAMPAIGN');
+ await page.evaluate(()=>{const original=IDBDatabase.prototype.transaction;window.restoreDevelopmentStorage=()=>{IDBDatabase.prototype.transaction=original;};IDBDatabase.prototype.transaction=function(names,mode,...args){if(mode==='readwrite')throw new DOMException('Injected development storage quota','QuotaExceededError');return original.call(this,names,mode,...args);};});
+ await form.getByRole('button',{name:'Open campaign',exact:true}).click();
+ await expect(form.getByRole('alert')).toBeVisible();await expect(form.getByLabel('Campaign name')).toHaveValue('RECOVERED-DEVELOPMENT-CAMPAIGN');
+ await expect(page.locator('.ops-connection')).not.toContainText('Saved in this browser');
+ await page.evaluate(()=>window.restoreDevelopmentStorage());
+ await form.getByRole('button',{name:'Retry original save',exact:true}).click();await expect(form).toHaveCount(0);
+ await page.reload();await expect(page.getByRole('row').filter({hasText:'RECOVERED-DEVELOPMENT-CAMPAIGN'})).toHaveCount(1,{timeout:30000});
+});
+
+test('one browser writer prevents concurrent overwrites; separate browsers have no shared data',async({page,context,browser,baseURL})=>{
+ await open(page);await feed(page,'BROWSER-A-ONLY');
+ const second=await context.newPage();await second.goto(`/ops/plant?scope=${facility}&view=feed`);
+ await expect(second.getByText('The development workspace is open in another tab.',{exact:false})).toBeVisible({timeout:20000});
+ await page.close();await second.reload();await expect(second.getByRole('row').filter({hasText:'BROWSER-A-ONLY'})).toBeVisible({timeout:30000});
+ const separate=await browser.newContext({baseURL});try{const fresh=await separate.newPage();await open(fresh,`/ops/plant?scope=${facility}&view=feed`);await expect(fresh.getByRole('heading',{name:'No records yet'})).toBeVisible();await expect(fresh.getByText('BROWSER-A-ONLY')).toHaveCount(0);}finally{await separate.close();}
+});
+
+test('development choice never authorises live APIs and switching to staff stays explicit',async({page,request})=>{
+ const calls=await open(page);await page.getByRole('link',{name:'Development settings',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Development workspace',exact:true})).toBeVisible();expect(calls).toEqual([]);
+ const response=await request.get('/api/ops/context?mode=development',{headers:{'x-mineralx-ops-mode':'development'}});
+ expect([401,503]).toContain(response.status());expect(await response.text()).not.toContain('Development facility');
+ const write=await request.post('/api/ops/command?mode=development',{
+  data:{scopeId:facility,id:crypto.randomUUID(),requestId:crypto.randomUUID(),expectedVersion:0,action:'campaign.create',payload:{name:'Must not write production'}},
+  headers:{'x-mineralx-ops-mode':'development'},
+ });
+ expect([401,403,503]).toContain(write.status());
+ await page.getByRole('link',{name:'Open protected staff sign-in',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();
+ await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','staff');
+ await page.getByRole('link',{name:'Continue without sign-in — development workspace'}).click();await expect(page.locator('.ops-development-banner')).toBeVisible();
+});
+
+test('development backup downloads actual local PostgreSQL records and files',async({page})=>{
+ const calls=await open(page);await feed(page,'BACKUP-DEVELOPMENT-ONLY');await page.getByRole('link',{name:'Development settings',exact:true}).click();
+ const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download development backup'}).click();const file=await pending;
+ expect(file.suggestedFilename()).toMatch(/^MineralX-DEVELOPMENT-.*\.tgz$/);const bytes=await readFile(await file.path());expect(bytes[0]).toBe(0x1f);expect(bytes[1]).toBe(0x8b);expect(bytes.length).toBeGreaterThan(1000);expect(calls).toEqual([]);
+});

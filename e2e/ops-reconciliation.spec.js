@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+test.beforeEach(async({context,baseURL})=>{await context.addCookies([{name:'mx-ops-workspace-mode',value:'staff',domain:new URL(baseURL).hostname,path:'/ops',httpOnly:true,sameSite:'Lax'}]);});
 // UI integration fixtures only. These tests do not claim live identity/database acceptance.
 const scopeId='00000000-0000-4000-8000-000000000011',userId='00000000-0000-4000-8000-000000000001';
 const scope={id:scopeId,name:'Synthetic project',code:'SYNTHETIC',kind:'project',timezone:'Australia/Brisbane',permissions:['geo.read','geo.capture','geo.publish','files.geo','work.read','work.write'],version:1,policy:{}};
