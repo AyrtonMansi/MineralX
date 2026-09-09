@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {requireSession,rpc} from '../server';
 import {OpsError} from '../contracts';
 import {extractCandidates,meetingImportSchema,reviewSchema,sourceLink} from './model';
+import {manualSourceKey} from './source-key';
 
 export async function meetingIndex(){
   const {db,user}=await requireSession();const index=await rpc(db,'mx_meetings_index');
@@ -13,9 +14,11 @@ export async function importMeeting(raw:unknown){
   const parsed=meetingImportSchema.parse(raw);const {db,user}=await requireSession();
   // Browser imports cannot assert that an email was retrieved by a trusted integration.
   if(parsed.sourceKind!=='manual')throw new OpsError('forbidden','Mailbox ingestion is reserved for the authorised integration.');
-  const source={title:parsed.title,held_on:parsed.heldOn,source_text:parsed.sourceText,source_hash:createHash('sha256').update(parsed.sourceText).digest('hex'),source_url:sourceLink(parsed.sourceUrl),source_kind:parsed.sourceKind,candidates:extractCandidates(parsed.sourceText)};
+  const sourceUrl=sourceLink(parsed.sourceUrl),sourceHash=createHash('sha256').update(parsed.sourceText).digest('hex');
+  const sourceKey=manualSourceKey({sourceUrl,sourceHash,title:parsed.title,heldOn:parsed.heldOn});
+  const source={title:parsed.title,held_on:parsed.heldOn,source_text:parsed.sourceText,source_hash:sourceHash,source_url:sourceUrl,source_kind:parsed.sourceKind,candidates:extractCandidates(parsed.sourceText)};
   if(source.candidates.length>150)throw new OpsError('validation','This source contains more than 150 action items. Split it into bounded meeting records.');
-  return rpc(db,'mx_meetings_import',{p_workspace:parsed.workspaceId,p_request:parsed.requestId,p_source_key:parsed.sourceKey,p_source:source,p_actor:user.id});
+  return rpc(db,'mx_meetings_import',{p_workspace:parsed.workspaceId,p_request:parsed.requestId,p_source_key:sourceKey,p_source:source,p_actor:user.id});
 }
 export async function reviewCandidate(raw:unknown){
   const data=reviewSchema.parse(raw),{db,user}=await requireSession();

@@ -12,6 +12,11 @@ async function start(page,path=`/ops?scope=${project}`){
  return {errors,protectedRequests};
 }
 const region=(page,name)=>page.getByRole('region',{name,exact:true});
+
+test('the public plant layout reference has no review-note write surface',async({page})=>{
+ const noteRequests=[];page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/plant/notes'))noteRequests.push(request.url());});await page.goto('/plant',{waitUntil:'domcontentloaded'});
+ await expect(page.getByText('Read-only engineering reference.',{exact:false})).toBeVisible();await expect(page.getByRole('tab',{name:/Review notes/})).toHaveCount(0);await expect(page.getByRole('button',{name:/Pin note/})).toHaveCount(0);expect(noteRequests).toEqual([]);
+});
 async function save(form,button){await form.getByRole('button',{name:button,exact:true}).click();await expect(form).toHaveCount(0,{timeout:20000});}
 async function person(page,scope,name='Synthetic operator'){
  await page.goto(`/ops/work?scope=${scope}&view=people`);await page.getByRole('button',{name:'Add planning personnel',exact:true}).click();

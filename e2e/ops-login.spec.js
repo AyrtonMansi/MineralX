@@ -1,5 +1,18 @@
 import {test,expect} from '@playwright/test';
 
+test('a first visit explains the available workspaces before opening any records',async({page})=>{
+ const protectedCalls=[];page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/ops/'))protectedCalls.push(request.url());});
+ await page.goto('/ops',{waitUntil:'domcontentloaded'});
+ await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','chooser');
+ await expect(page.getByRole('heading',{name:'Choose the workspace that holds this work.'})).toBeVisible();
+ await expect(page.getByRole('link',{name:'Staff sign in',exact:true})).toHaveAttribute('href','/ops/login');
+ await expect(page.getByRole('link',{name:'Open private meetings',exact:true})).toHaveAttribute('href','/ops/meetings');
+ await expect(page.getByRole('link',{name:'Open device workspace',exact:true})).toHaveAttribute('href','/ops?mode=development');
+ expect(protectedCalls).toEqual([]);
+ await page.getByRole('link',{name:'Staff sign in',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();
+});
+
 test('sign-in remains visible while the Operations context request is pending',async({page})=>{
  let release;const gate=new Promise(resolve=>{release=resolve;});let requested=false;
  await page.route('**/api/ops/context',async route=>{requested=true;await gate;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Operations unavailable',code:'unavailable'})}).catch(()=>{});});

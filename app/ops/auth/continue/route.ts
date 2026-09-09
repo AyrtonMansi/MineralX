@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       try { await db.rpc('mx_ops_claim_invitations'); } catch { /* Access remains independently checked. */ }
     }
     const response=redirect(landing.destination);
-    if(landing.operationsReady)response.cookies.set(DEVELOPMENT_MODE_COOKIE,'staff',{path:'/ops',httpOnly:true,sameSite:'lax',secure:request.nextUrl.protocol==='https:',maxAge:604800});
+    if(!/^\/ops\/meetings(?:\/|\?|$)/.test(landing.destination))response.cookies.set(DEVELOPMENT_MODE_COOKIE,'staff',{path:'/ops',httpOnly:true,sameSite:'lax',secure:request.nextUrl.protocol==='https:',maxAge:604800});
     response.cookies.delete('mx-meeting-signin');
     return response;
   } catch {

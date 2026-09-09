@@ -7,9 +7,11 @@ export async function middleware(request: NextRequest) {
   const chosen = request.nextUrl.searchParams.get('mode');
   const explicit = chosen === 'staff' || chosen === 'development' ? chosen : undefined;
   const preference = path === '/ops/login' ? 'staff' : explicit || request.cookies.get(DEVELOPMENT_MODE_COOKIE)?.value;
-  const development = developmentPage(path, preference, DEVELOPMENT_ACCESS_ENABLED && process.env.MINERALX_DEVELOPMENT_ACCESS !== 'off');
+  const developmentEnabled = DEVELOPMENT_ACCESS_ENABLED && process.env.MINERALX_DEVELOPMENT_ACCESS !== 'off';
+  const chooser = path === '/ops' && !preference && developmentEnabled;
+  const development = !chooser && developmentPage(path, preference, developmentEnabled);
   // Overwrite caller-supplied mode headers. This controls presentation only, never API access.
-  request.headers.set('x-mineralx-ops-mode', development ? 'development' : 'staff');
+  request.headers.set('x-mineralx-ops-mode', chooser ? 'chooser' : development ? 'development' : 'staff');
   request.headers.set('x-mineralx-ops-section', path==='/ops/meetings'||path.startsWith('/ops/meetings/')?'meetings':'operations');
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31,8 +33,9 @@ export async function middleware(request: NextRequest) {
     });
     await db.auth.getUser();
   }
-  if ((path === '/ops' || path.startsWith('/ops/')) && explicit) {
-    response.cookies.set(DEVELOPMENT_MODE_COOKIE, preference!, {path:'/ops', httpOnly:true, sameSite:'lax', secure:request.nextUrl.protocol==='https:', maxAge:604800});
+  const selectableOperationsRoute = (path === '/ops' || path.startsWith('/ops/')) && !/^\/ops\/(login|account|auth|meetings|sw\.js)(\/|$)/.test(path);
+  if (selectableOperationsRoute && explicit) {
+    response.cookies.set(DEVELOPMENT_MODE_COOKIE, explicit, {path:'/ops', httpOnly:true, sameSite:'lax', secure:request.nextUrl.protocol==='https:', maxAge:604800});
   }
   response.headers.set("Cache-Control", "private, no-store, max-age=0");
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");

@@ -12,10 +12,39 @@ test('Meetings is discoverable from Operations and remains private even with dev
  const response=await request.get('/api/ops/meetings');expect([401,503]).toContain(response.status());expect(response.headers()['cache-control']).toContain('no-store');expect(await response.text()).not.toContain('source_text');
 });
 
+test('a Meetings URL cannot silently select the device workspace for later visits',async({page,context})=>{
+ await page.goto('/ops/meetings?mode=development',{waitUntil:'domcontentloaded'});
+ await expect(page.locator('[data-mineralx-ops-mode="staff"]')).toBeVisible();
+ expect((await context.cookies()).some(cookie=>cookie.name==='mx-ops-workspace-mode')).toBe(false);
+ await page.goto('/ops/meetings?mode=staff',{waitUntil:'domcontentloaded'});
+ expect((await context.cookies()).some(cookie=>cookie.name==='mx-ops-workspace-mode')).toBe(false);
+ await page.goto('/ops',{waitUntil:'domcontentloaded'});
+ await expect(page.locator('[data-mineralx-ops-mode="chooser"]')).toBeVisible();
+});
+
+test('manual note import carries a Gmail source link for later revisions',async({page})=>{
+ const f=fixture(),imports=[];await page.route('**/api/ops/meetings',route=>{if(route.request().method()==='POST'){imports.push(route.request().postDataJSON());return json(route,{id:mid});}return json(route,f.index);});await page.route('**/api/ops/meetings/'+mid+'**',route=>json(route,f.detail));
+ await page.goto('/ops/meetings');await page.getByRole('button',{name:'Add meeting notes',exact:true}).click();const form=page.getByRole('form',{name:'Import meeting notes'});
+ await form.getByLabel('Meeting date').fill('2026-09-09');await form.getByLabel('Meeting title').fill('Linked source meeting');await form.getByLabel('Gmail source link (optional)').fill('https://mail.google.com/mail/#all/synthetic-source');await form.getByLabel('Original notes').fill('Synthetic meeting notes with enough detail.\n\nNext steps\n\nField lead\n* Confirm the source revision.\n\nSummary');await form.getByRole('button',{name:'Save meeting',exact:true}).click();
+ await expect.poll(()=>imports.length).toBe(1);expect(imports[0].sourceUrl).toBe('https://mail.google.com/mail/#all/synthetic-source');
+});
+
+test('the mobile Meetings drawer keeps focus and can be closed with its control or Escape',async({page})=>{
+ const f=fixture();await page.route('**/api/ops/meetings',route=>json(route,f.index));await page.route('**/api/ops/meetings/'+mid+'**',route=>json(route,f.detail));await page.setViewportSize({width:390,height:844});await page.goto('/ops/meetings');
+ const drawer=page.locator('#meetings-navigation'),menu=page.getByRole('button',{name:'Menu',exact:true}),close=page.getByRole('button',{name:'Close',exact:true}),last=drawer.getByRole('link').last();await menu.click();await expect(drawer).toHaveClass(/is-open/);await expect(close).toBeFocused();await last.focus();await page.keyboard.press('Tab');await expect(close).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(last).toBeFocused();await close.click();await expect(drawer).not.toHaveClass(/is-open/);await expect(menu).toBeFocused();await menu.click();await page.keyboard.press('Escape');await expect(drawer).not.toHaveClass(/is-open/);await expect(menu).toBeFocused();
+});
+
 test('private meeting reader shows actions and escaped source notes on desktop and mobile',async({page})=>{
  const f=fixture(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/api/ops/meetings',r=>json(r,f.index));await page.route('**/api/ops/meetings/'+mid,r=>json(r,f.detail));
- await page.goto('/ops/meetings');await expect(page.getByRole('heading',{name:'Synthetic planning meeting'})).toBeVisible();await expect(page.getByRole('heading',{name:'Inspect synthetic stockpile'})).toBeVisible();await page.getByRole('tab',{name:'Original notes'}).click();await expect(page.locator('.mt-notes pre')).toHaveText(source);expect(await page.evaluate(()=>window.meetingInjection)).toBeUndefined();await expect(page.locator('.mt-notes img')).toHaveCount(0);
+ await page.goto('/ops/meetings');await expect(page.getByRole('heading',{name:'Synthetic planning meeting'})).toBeVisible();await expect(page.getByRole('heading',{name:'Inspect synthetic stockpile'})).toBeVisible();await page.getByRole('button',{name:'Original notes'}).click();await expect(page.locator('.mt-notes pre')).toHaveText(source);expect(await page.evaluate(()=>window.meetingInjection)).toBeUndefined();await expect(page.locator('.mt-notes img')).toHaveCount(0);
  await page.screenshot({path:'test-results/meetings-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(page.getByRole('heading',{name:'Meetings',exact:true})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/meetings-mobile.png',fullPage:true});expect(errors).toEqual([]);
+});
+
+test('private meeting navigation does not promise staff-only Operations pages',async({page})=>{
+ const f=fixture();await page.route('**/api/ops/meetings',r=>json(r,f.index));await page.route('**/api/ops/meetings/'+mid,r=>json(r,f.detail));
+ await page.goto('/ops/meetings');const nav=page.getByRole('navigation',{name:'Meetings navigation'});
+ await expect(nav.getByRole('link',{name:/Meetings/})).toBeVisible();await expect(nav.getByRole('link',{name:/Device workspace/})).toHaveAttribute('href','/ops?mode=development');await expect(nav.getByRole('link',{name:/Shared Operations/})).toHaveAttribute('href','/ops/login');
+ await expect(nav.getByRole('link',{name:'Geology',exact:true})).toHaveCount(0);await expect(nav.getByRole('link',{name:'Plant',exact:true})).toHaveCount(0);
 });
 
 test('failed review retains the entry and retry uses one request identity',async({page})=>{
@@ -33,5 +62,5 @@ test('sign-in email is requested only after the user submits the form',async({pa
 });
 
 test('notes export checks current access before creating a download',async({page})=>{
- const f=fixture();let revoke=false,downloads=0;page.on('download',()=>downloads++);await page.route('**/api/ops/meetings',r=>json(r,f.index));await page.route('**/api/ops/meetings/'+mid+'**',r=>revoke?json(r,{error:{code:'forbidden',message:'Access revoked'}},403):json(r,f.detail));await page.goto('/ops/meetings');await expect(page.getByRole('heading',{name:'Synthetic planning meeting'})).toBeVisible();await page.getByRole('tab',{name:'Original notes'}).click();revoke=true;await page.getByRole('button',{name:'Download notes'}).click();await expect(page.getByRole('heading',{name:'Sign in to view your meetings'})).toBeVisible();await expect(page.locator('.mt-notes pre')).toHaveCount(0);expect(downloads).toBe(0);
+ const f=fixture();let revoke=false,downloads=0;page.on('download',()=>downloads++);await page.route('**/api/ops/meetings',r=>json(r,f.index));await page.route('**/api/ops/meetings/'+mid+'**',r=>revoke?json(r,{error:{code:'forbidden',message:'Access revoked'}},403):json(r,f.detail));await page.goto('/ops/meetings');await expect(page.getByRole('heading',{name:'Synthetic planning meeting'})).toBeVisible();await page.getByRole('button',{name:'Original notes'}).click();revoke=true;await page.getByRole('button',{name:'Download notes'}).click();await expect(page.getByRole('heading',{name:'Sign in to view your meetings'})).toBeVisible();await expect(page.locator('.mt-notes pre')).toHaveCount(0);expect(downloads).toBe(0);
 });

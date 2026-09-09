@@ -38,8 +38,7 @@ test('no-login suite uses real local save/reload and never requests protected se
  const calls=await open(page);await feed(page,'DEV-FEED-ONLY');const reference=await run(page);
  await expect(page.locator('.ops-connection')).toContainText('Saved in this browser');await page.reload();
  await expect(page.getByRole('row').filter({hasText:reference})).toBeVisible({timeout:30000});
- await page.getByRole('button',{name:'Gold lots',exact:true}).click();
- await page.getByRole('button',{name:'Record clean-up / physical gold lot',exact:true}).click();
+ await page.getByRole('link',{name:'Record clean-up / gold lot',exact:true}).click();
  const lot=page.getByRole('region',{name:'Record clean-up / physical gold lot',exact:true});
  await lot.getByLabel('Lot / clean-up reference').fill('DEV-CLEANUP-ONLY');
  // Exercise the exact-minute boundary on every run instead of depending on the wall clock.
@@ -132,4 +131,15 @@ test('visiting staff sign-in does not replace the chosen device workspace',async
 });
 test('the explicit staff gate offers an explicit return to the same device tool',async({page})=>{
  await page.goto('/ops/pit?mode=staff');await expect(page.getByRole('link',{name:'Staff sign in',exact:true})).toBeVisible({timeout:30000});const back=page.getByRole('link',{name:'Open device workspace',exact:true});await expect(back).toHaveAttribute('href','/ops/pit?mode=development');await back.click();await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});await expect(page.locator('.ops-development-banner')).toBeVisible();
+});
+
+test('a legacy processing URL lands in Gold and keeps only compatible lot context',async({page})=>{
+ await page.goto(`/ops/plant?scope=${facility}&view=lots&item=legacy-lot&action=run&mode=development`,{waitUntil:'domcontentloaded'});
+ await expect(page).toHaveURL(new RegExp(`/ops/gold\\?scope=${facility}&view=lots&item=legacy-lot&mode=development`));
+ await expect(page.getByRole('heading',{name:'Gold',exact:true})).toBeVisible({timeout:30000});
+ await expect(page.getByRole('button',{name:'Gold lots',exact:true})).toBeVisible();
+});
+
+test('the mobile Operations drawer keeps focus and can be closed with its control or Escape',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await open(page,`/ops/pit?scope=${project}`);const drawer=page.locator('#operations-navigation'),menu=page.getByRole('button',{name:'Menu',exact:true}),close=page.getByRole('button',{name:'Close',exact:true}),last=drawer.getByRole('link').last();await menu.click();await expect(drawer).toHaveClass(/is-open/);await expect(close).toBeFocused();await last.focus();await page.keyboard.press('Tab');await expect(close).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(last).toBeFocused();await close.click();await expect(drawer).not.toHaveClass(/is-open/);await expect(menu).toBeFocused();await menu.click();await page.keyboard.press('Escape');await expect(drawer).not.toHaveClass(/is-open/);await expect(menu).toBeFocused();
 });
