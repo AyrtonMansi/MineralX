@@ -1,0 +1,82 @@
+name: Verify unified programs plant energy and gold workflows
+on:
+  push:
+    branches: [codex/mineralx-workflows-20260909]
+    paths: [.workflow-checkpoint/**, .github/workflows/workflow-upgrade-checkpoint.yml]
+permissions:
+  contents: write
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: workflow-upgrade-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'AyrtonMansi/MineralX' && github.ref == 'refs/heads/codex/mineralx-workflows-20260909'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify current production base
+        run: test "$(git rev-parse origin/main)" = 8c53ce7d8a521457afc56ec72131a50da78f31af
+      - name: Expand data-only source checkpoint
+        run: python3 .workflow-checkpoint/apply.py
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Type check and lint
+        run: |
+          npm run typecheck
+          npm run lint
+      - name: Operations database and workflow tests
+        run: npm run test:ops | tee /tmp/workflow-operations-tests.log
+      - name: Existing geology and operational regressions
+        run: |
+          npm run test:geology | tee /tmp/workflow-geology-tests.log
+          find tests/gic tests/plant -name '*.test.ts' -print0 | xargs -0 node --import tsx --test | tee /tmp/workflow-legacy-tests.log
+      - name: Unmocked production build
+        run: npm run build | tee /tmp/workflow-build.log
+      - name: Preserve verified normal source on the isolated branch
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = 8c53ce7d8a521457afc56ec72131a50da78f31af
+          git add app components lib scripts supabase tests e2e docs playwright.release.config.js
+          git diff --cached --binary > /tmp/workflow-source.patch
+          rm -r .workflow-checkpoint
+          git add .workflow-checkpoint
+          test -z "$(git diff --cached --name-only -- .github/workflows)"
+          git diff --cached --check
+          git config user.name 'AyrtonMansi'
+          git config user.email '35603638+AyrtonMansi@users.noreply.github.com'
+          git commit -m 'Preserve tested canonical programs, tasks, engineering, energy and sequenced gold source; browser acceptance pending'
+          git push origin HEAD:refs/heads/codex/mineralx-workflows-20260909
+          git archive --format=tar.gz HEAD > /tmp/mineralx-workflow-source.tar.gz
+          sha256sum /tmp/mineralx-workflow-source.tar.gz > /tmp/mineralx-workflow-source.sha256
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Existing and new browser journeys
+        run: npx playwright test --config=playwright.release.config.js
+      - name: Preserve release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mineralx-workflow-upgrade-evidence
+          path: |
+            /tmp/workflow-source.patch
+            /tmp/mineralx-workflow-source.tar.gz
+            /tmp/mineralx-workflow-source.sha256
+            /tmp/workflow-*-tests.log
+            /tmp/workflow-build.log
+            test-results
+            playwright-report
+          retention-days: 14
