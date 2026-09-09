@@ -27,8 +27,8 @@ const operationsResponse=await fetch(`${origin}/api/ops/release`,{cache:'no-stor
 assert.equal(operationsResponse.status,200);
 const operationsRelease=await operationsResponse.json();
 assert.equal(operationsRelease.commit,expected);
-assert.equal(operationsRelease.release,'2026.09.09.2');
-for(const path of ['/ops','/ops/programs','/ops/geology','/ops/pit','/ops/plant','/ops/gold','/ops/work']){
+assert.equal(operationsRelease.release,'2026.09.09.3');
+for(const path of ['/ops','/ops/programs','/ops/meetings','/ops/geology','/ops/pit','/ops/plant','/ops/gold','/ops/work']){
  const response=await fetch(`${origin}${path}?mode=development`,{signal:AbortSignal.timeout(20000)});
  assert.equal(response.status,200,path);routes.push({path,status:response.status});
 }

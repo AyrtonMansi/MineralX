@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const OPS_RELEASE = '2026.09.09.2';
+export const OPS_RELEASE = '2026.09.09.3';
 export const OPS_SCHEMA = 6;
 export const WORKFLOW_SCHEMA = 7; // Additive workflows: core identity and legacy registers remain usable on schema 6.
 export const permissionProfiles = {
