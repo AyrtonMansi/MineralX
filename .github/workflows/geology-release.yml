@@ -69,8 +69,9 @@ jobs:
       - name: Browser acceptance paths against production build
         run: |
           npx playwright test --config=playwright.release.config.js
+          cp test-results/geology-release.json /tmp/geology-local-acceptance.json
           npx playwright test e2e/globe.spec.js --workers=1
-          cp test-results/geology-release.json test-results/geology-local-acceptance.json
+          cp /tmp/geology-local-acceptance.json test-results/geology-local-acceptance.json
       - name: Verify deployed production revision and browser shell
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
