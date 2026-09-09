@@ -188,7 +188,7 @@ export default function OperationsShell({ children }: { children: React.ReactNod
       {development && <p>Device mode does not need a login. Its records remain on this browser until you export a recovery copy.</p>}
       <div className="ops-actions"><a className="ops-primary" href="/ops/login">Staff sign in</a><a href="/ops/meetings">Open private JV meetings</a><Link href="/ops/field">Unlock prepared field records</Link><button onClick={() => { if (mayNavigate()) void refresh(); }}>Check access again</button></div>
       <hr />
-      {developmentPage(path, 'development') && <p><a className="ops-primary" href={deviceHref}>Open device workspace</a><br /><small>Local pit, geology and planning tools. Private meeting notes still need verified sign-in.</small></p>}
+      {developmentPage(path, 'development') && <p><a className="ops-primary" href={deviceHref}>Open device workspace</a><br /><small>Local pit, exploration and planning tools. Private meeting notes still need verified sign-in.</small></p>}
     </main>;
   }
 

@@ -42,7 +42,7 @@ test('development deep links choose the right internal record set and retire rem
   await openDevelopment(page, `/ops/geology?view=map&scope=${facility}`);
   await expect.poll(() => new URL(page.url()).searchParams.get('scope')).toBe(project);
   await expect.poll(() => new URL(page.url()).searchParams.get('view')).toBe('map');
-  await expect(page.getByRole('heading', { name: 'Geology', exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Exploration', exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByLabel('Exploration map work programs')).toBeVisible();
   await expect(page.locator('#operations-navigation').getByRole('link', { name: 'Exploration', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('Development geology', { exact: true })).toHaveCount(0);

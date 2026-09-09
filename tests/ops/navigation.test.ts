@@ -13,6 +13,7 @@ test('navigation only shows record surfaces compatible with the active workspace
   assert.ok(projectLabels.includes('Geology Globe'));
   assert.ok(projectLabels.includes('Exploration'));
   assert.equal(projectItems.find((item) => item.label === 'Geology Globe')?.href, '/mineralx');
+  assert.equal(projectLabels.indexOf('Exploration'), projectLabels.indexOf('Geology Globe') + 1);
   assert.ok(projectLabels.includes('Pits & stockpiles'));
   assert.ok(!projectLabels.includes('Plant'));
   assert.ok(!projectLabels.includes('Gold'));
@@ -29,6 +30,7 @@ test('development presents one minimal workspace while keeping geology and proce
   assert.deepEqual(groups.map((group) => group.label), ['Workspace', 'Operations']);
   assert.deepEqual(labels, ['Home', 'Work', 'Geology Globe', 'Exploration', 'Pits & stockpiles', 'Processing', 'Gold']);
   assert.equal(groups[1].items.find((item) => item.label === 'Geology Globe')?.href, '/mineralx');
+  assert.equal(labels.indexOf('Exploration'), labels.indexOf('Geology Globe') + 1);
   for (const removed of ['Programs', 'Reports', 'Field preparation', 'People & workload', 'Files & procedures', 'Development settings', 'Legacy processing register', 'Local geology workspace', 'Plant layout reference']) {
     assert.equal(labels.includes(removed), false, `${removed} must not return as a device-workspace entry point`);
   }

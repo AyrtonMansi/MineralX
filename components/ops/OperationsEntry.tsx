@@ -18,7 +18,7 @@ export default function OperationsEntry() {
       </section>
       <section className="ops-card">
         <p className="ops-eyebrow">LOCAL DEVICE TOOLS</p>
-        <h2>Pits, geology & planning</h2>
+        <h2>Pits, exploration & planning</h2>
         <p>Browser-local planning tools for device use. Export a recovery copy before changing devices.</p>
         <a className="ops-primary" href="/ops?mode=development">Open device workspace</a>
       </section>
