@@ -8,7 +8,7 @@ async function start(page,path=`/ops?scope=${project}`){
  page.on('request',r=>{const u=new URL(r.url());if(u.pathname.startsWith('/api/ops/')||u.hostname.endsWith('.supabase.co'))protectedRequests.push(r.url());});
  await page.route('**/api/basemap/**',r=>r.fulfill({contentType:'image/png',body:TILE}));
  await page.goto(path+'&mode=development',{waitUntil:'domcontentloaded'});
- await expect(page.getByRole('combobox',{name:'Workspace or site'})).toBeVisible({timeout:30000});
+ await expect(page.getByRole('combobox',{name:'Workspace or site'})).toHaveCount(0,{timeout:30000});
  return {errors,protectedRequests};
 }
 const region=(page,name)=>page.getByRole('region',{name,exact:true});
@@ -103,7 +103,7 @@ test('diesel balances compare independent dips, and proposed solar never becomes
 test('private engineering reuses the plant diagram without touching public review notes',async({page})=>{
  const trace=await start(page,`/ops?scope=${facility}`);const notes=[];page.on('request',r=>{if(/\/api\/plant/.test(new URL(r.url()).pathname))notes.push(r.url());});
  await page.goto(`/ops/plant?scope=${facility}&view=engineering`);await expect(page.getByText('P5 engineering reference · existing layout',{exact:true})).toBeVisible();await expect(page.locator('.plant-app svg').first()).toBeVisible();
- const tab=page.getByRole('navigation',{name:'Plant workspace'}).getByRole('link',{name:'Engineering',exact:true});expect((await tab.boundingBox()).height).toBeGreaterThanOrEqual(44);await expect(tab).toHaveAttribute('aria-current','page');
+ const tab=page.getByRole('navigation',{name:'Processing workspace'}).getByRole('link',{name:'Engineering',exact:true});expect((await tab.boundingBox()).height).toBeGreaterThanOrEqual(44);await expect(tab).toHaveAttribute('aria-current','page');
  await page.getByRole('button',{name:'Add engineering revision'}).click();const f=region(page,'Record engineering revision');await f.getByLabel('Revision title').fill('Synthetic pump relocation');await f.getByLabel('Drawing / revision reference').fill('SYN-P5-C1');await save(f,'Save engineering record');
  await expect(page.getByRole('heading',{name:'Synthetic pump relocation',exact:true})).toBeVisible();expect(notes).toEqual([]);expect(trace.errors).toEqual([]);
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-engineering-desktop.png',fullPage:true});
@@ -111,7 +111,7 @@ test('private engineering reuses the plant diagram without touching public revie
 
 test('workflow records are present in the complete development backup, not a separate browser key',async({page})=>{
  await start(page);await person(page,project);await program(page,'BACKUP-CANONICAL');
- await page.getByRole('link',{name:'Development settings',exact:true}).click();const wait=page.waitForEvent('download');await page.getByRole('button',{name:'Download development backup'}).click();const file=await wait;const bytes=await readFile(await file.path());expect(bytes[0]).toBe(0x1f);expect(bytes[1]).toBe(0x8b);expect(bytes.length).toBeGreaterThan(1000);
+ const wait=page.waitForEvent('download');await page.getByRole('button',{name:'Download device backup'}).click();const file=await wait;const bytes=await readFile(await file.path());expect(bytes[0]).toBe(0x1f);expect(bytes[1]).toBe(0x8b);expect(bytes.length).toBeGreaterThan(1000);
  // SQL restore, content hash and record identity are also tested in the isolated database suite.
 });
 

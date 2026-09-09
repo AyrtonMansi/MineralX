@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { api, downloadBlob } from '@/lib/ops/client';
 import { OPS_RELEASE } from '@/lib/ops/contracts';
 import {
@@ -10,9 +10,10 @@ import {
   navigationGroups,
   operationsHref,
   createShortcuts,
+  scopeForOperationsPath,
+  scopeLabel,
   type OperationsArea,
 } from '@/lib/ops/suite-navigation';
-import DevelopmentTools from './DevelopmentTools';
 import { developmentPage } from '@/lib/ops/development-policy';
 import { mayNavigate } from './navigation';
 import { useOperations } from './OperationsProvider';
@@ -52,23 +53,30 @@ export default function OperationsShell({ children }: { children: React.ReactNod
     exportVault,
   } = useOperations();
   const path = usePathname();
+  const router = useRouter();
   const urlQuery = useSearchParams();
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<any[] | null>(null);
   const [error, setError] = useState('');
   const [menu, setMenu] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLElement>(null);
   const header = useRef<HTMLElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const menuWasOpen = useRef(false);
-  const groups = navigationGroups(scope);
+  const groups = navigationGroups(scope, development ? { development: true, scopes: context?.scopes } : undefined);
   const createItems = createShortcuts(scope);
   const deviceQuery = new URLSearchParams(urlQuery.toString());
   deviceQuery.set('mode', 'development');
   const deviceHref = `${path}?${deviceQuery.toString()}`;
-  const href = (area: OperationsArea = '', params = '') => operationsHref(area, scope?.id, params);
+  const href = (area: OperationsArea = '', params = '') => {
+    const destination = development
+      ? scopeForOperationsPath(context?.scopes, area ? `/ops/${area}` : '/ops', scope?.id)
+      : scope;
+    return operationsHref(area, destination?.id, params);
+  };
   const isCurrentItem = (item: { area: OperationsArea; label: string }) => {
     if (item.label === 'People & workload') return path === '/ops/work' && urlQuery.get('view') === 'people';
     if (item.area === 'work') return path === '/ops/work' && urlQuery.get('view') !== 'people';
@@ -105,6 +113,13 @@ export default function OperationsShell({ children }: { children: React.ReactNod
       else element.setAttribute('aria-hidden', original.ariaHidden);
     });
   }, [menu]);
+
+  useEffect(() => {
+    if (!development || !context || !scope || !['/ops/admin', '/ops/field'].includes(path)) return;
+    const params = new URLSearchParams();
+    if (urlQuery.get('mode') === 'development') params.set('mode', 'development');
+    router.replace(operationsHref('', scope.id, params));
+  }, [context, development, path, router, scope, urlQuery]);
 
   useEffect(() => {
     if (!menu) return;
@@ -172,9 +187,11 @@ export default function OperationsShell({ children }: { children: React.ReactNod
       <div className="ops-actions"><a className="ops-primary" href="/ops/login">Staff sign in</a><a href="/ops/meetings">Open private JV meetings</a><Link href="/ops/field">Unlock prepared field records</Link><button onClick={() => { if (mayNavigate()) void refresh(); }}>Check access again</button></div>
       <hr />
       {developmentPage(path, 'development') && <p><a className="ops-primary" href={deviceHref}>Open device workspace</a><br /><small>Local pit, geology and planning tools. Private meeting notes still need verified sign-in.</small></p>}
-      <p>Retained records and references:</p>
-      <div className="ops-actions"><Link href="/gic">Existing processing register</Link><Link href="/mineralx">Local geology workspace</Link><Link href="/plant">Read-only plant reference</Link></div>
     </main>;
+  }
+
+  if (development && ['/ops/admin', '/ops/field'].includes(path)) {
+    return <main className="ops-shell ops-loading" id="main-content"><p role="status">Opening the Development workspace…</p></main>;
   }
 
   const search = async (event: React.FormEvent) => {
@@ -202,11 +219,24 @@ export default function OperationsShell({ children }: { children: React.ReactNod
     }
   };
 
+  const downloadDevelopmentBackup = async () => {
+    setBackupBusy(true);
+    setError('');
+    try {
+      const { developmentBackup } = await import('@/lib/ops/development');
+      downloadBlob(`MineralX-DEVELOPMENT-${new Date().toISOString().slice(0, 10)}.tgz`, await developmentBackup());
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   return <div className="ops-shell">
     <header className="ops-topbar" ref={header}>
       <Link href={href()} className="ops-brand">MINERAL<span>X</span><small>OPERATIONS</small></Link>
       <button ref={menuButton} className="ops-mobile-menu" aria-controls="operations-navigation" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>Menu</button>
-      <label className="ops-scope"><span>Workspace / site</span><select aria-label="Workspace or site" value={scope?.id || ''} onChange={(event) => selectScope(event.target.value)}>{context.scopes.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} · {candidate.kind}</option>)}</select></label>
+      {!development && <label className="ops-scope"><span>Workspace / site</span><select aria-label="Workspace or site" value={scope?.id || ''} onChange={(event) => selectScope(event.target.value)}>{context.scopes.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} · {candidate.kind}</option>)}</select></label>}
       <form className="ops-search" onSubmit={search}><label className="ops-sr-only" htmlFor="ops-search">Find a program, task or record</label><input id="ops-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find programs, tasks or records" minLength={2} /><button type="submit">Find</button></form>
       {createItems.length > 0 && <details className="ops-create-menu"><summary>Create</summary><div>{createItems.map((item) => <Link key={`${item.area}:${item.params}`} href={href(item.area, item.params)}>{item.label}</Link>)}</div></details>}
       <a href="/ops/login">{development ? 'Staff sign-in' : 'Switch account'}</a>
@@ -216,20 +246,20 @@ export default function OperationsShell({ children }: { children: React.ReactNod
     <aside ref={drawer} className={`ops-sidebar ${menu ? 'is-open' : ''}`} id="operations-navigation" role={menu ? 'dialog' : undefined} aria-modal={menu || undefined} aria-label={menu ? 'Operations navigation' : undefined} tabIndex={menu ? -1 : undefined}>
       <nav aria-label="Operations">
         <div className="ops-nav-mobile-heading"><span>Navigation</span><button ref={closeButton} type="button" onClick={() => setMenu(false)}>Close</button></div>
-        {groups.map((group) => <section className="ops-nav-group" key={group.label}><span className="ops-nav-caption">{group.label}</span>{group.items.map((item) => <Link key={`${group.label}:${item.area}:${item.label}`} href={item.label === 'People & workload' ? href('work', 'view=people') : href(item.area)} aria-current={isCurrentItem(item) ? 'page' : undefined} onClick={() => setMenu(false)}>{item.label}{item.area === 'pit' && <small aria-hidden="true">Device workspace</small>}</Link>)}</section>)}
+        {groups.map((group) => <section className="ops-nav-group" key={group.label}><span className="ops-nav-caption">{group.label}</span>{group.items.map((item) => <Link key={`${group.label}:${item.area}:${item.label}`} href={item.label === 'People & workload' ? href('work', 'view=people') : href(item.area)} aria-current={isCurrentItem(item) ? 'page' : undefined} onClick={() => setMenu(false)}>{item.label}</Link>)}</section>)}
         <section className="ops-nav-group"><span className="ops-nav-caption">Private records</span><a href="/ops/meetings" aria-label="Meetings" aria-current={path === '/ops/meetings' ? 'page' : undefined} onClick={() => setMenu(false)}>Meetings<small aria-hidden="true">Verified JV access</small></a></section>
-        <section className="ops-nav-group ops-nav-utility"><span className="ops-nav-caption">Other tools</span>{development ? <Link href={href('admin')} onClick={() => setMenu(false)}>Development settings</Link> : context.organisations.some((organisation) => organisation.admin) && <Link href={href('admin')} onClick={() => setMenu(false)}>Access & settings</Link>}<Link href="/gic" onClick={() => setMenu(false)}>Legacy processing register</Link><Link href="/mineralx" onClick={() => setMenu(false)}>Local geology workspace</Link><Link href="/plant" onClick={() => setMenu(false)}>Plant layout reference</Link></section>
+        {!development && context.organisations.some((organisation) => organisation.admin) && <section className="ops-nav-group ops-nav-utility"><span className="ops-nav-caption">Other tools</span><Link href={href('admin')} onClick={() => setMenu(false)}>Access & settings</Link></section>}
       </nav>
       <footer><span>Release {OPS_RELEASE}</span><span>{development ? 'Device workspace · browser-local records' : 'Named access · source-linked records'}</span></footer>
     </aside>
     <div className="ops-content" ref={content}>
-      {development && <section className="ops-development-banner" aria-label="Temporary development access"><strong>Device workspace — no sign-in, stored on this browser</strong><p>Pit, geology and planning data do not enter the production database or private meetings archive. Export a recovery copy before changing devices.</p><Link href={href('admin')}>Save device backup</Link><a href="/ops/login">Open protected staff workspace →</a></section>}
+      {development && <section className="ops-development-banner" aria-label="Development workspace"><strong>Development workspace — no sign-in, stored on this browser</strong><p>Pit, geology and planning data do not enter the production database or private meetings archive. Download a recovery copy before changing devices.</p><button onClick={() => void downloadDevelopmentBackup()} disabled={backupBusy}>{backupBusy ? 'Preparing backup…' : 'Download device backup'}</button><a href="/ops/login">Open protected staff workspace →</a></section>}
       <div className="ops-connection" aria-live="polite"><Status tone={offlineMode || !online ? 'warning' : 'neutral'}>{development ? 'Device workspace · saved on this browser' : offlineMode || !online ? 'Offline · device records only' : 'Connected to MineralX'}</Status>{saveState && <span>{saveState}</span>}<button disabled={loading || !online} onClick={() => { if (mayNavigate()) void refresh(); }}>Refresh records</button>{pack && <><span>{pack.outbox.length} pending</span><button disabled={!online || syncing} onClick={() => sync().catch((caught) => setError(caught.message))}>{syncing ? 'Synchronising…' : 'Sync now'}</button><button onClick={async () => { const envelope = await exportVault(); if (envelope) downloadBlob('MineralX-encrypted-field-recovery.json', JSON.stringify(envelope)); }}>Recovery copy</button></>}</div>
       {failure && <Message error>{failure.message}</Message>}
       {error && <Message error>{error}<button onClick={() => setError('')}>Dismiss</button></Message>}
       {matches && <section className="ops-search-results" aria-label="Search results"><h2>Search results</h2><button onClick={() => setMatches(null)}>Close results</button>{matches.length ? matches.map((result) => { const area = resultArea(result.kind); return <Link key={`${result.kind}:${result.id}`} href={href(area, `view=${encodeURIComponent(result.kind)}&item=${encodeURIComponent(result.id)}`)} onClick={() => setMatches(null)}>{result.label} <small>{result.kind} · {result.status}</small></Link>; }) : <p>No matching records in this authorised workspace.</p>}</section>}
-      <main id="main-content" key={`${context.userId}:${scope?.id || 'none'}`}>{development && (path === '/ops/admin' || path === '/ops/field') ? <DevelopmentTools /> : children}</main>
-      <footer className="ops-footnote">{scope?.name || 'No workspace assigned'} · {scope?.timezone || 'Australia/Brisbane'} · {development ? 'Device workspace only — not production records.' : offlineMode ? 'Not a live authorisation. Queued work is checked again on reconnection.' : 'Shared records use current account permissions.'}</footer>
+      <main id="main-content" key={`${context.userId}:${scope?.id || 'none'}`}>{children}</main>
+      <footer className="ops-footnote">{scopeLabel(scope, development)} · {scope?.timezone || 'Australia/Brisbane'} · {development ? 'Device workspace only — not production records.' : offlineMode ? 'Not a live authorisation. Queued work is checked again on reconnection.' : 'Shared records use current account permissions.'}</footer>
     </div>
   </div>;
 }

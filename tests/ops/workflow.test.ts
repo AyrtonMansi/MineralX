@@ -53,6 +53,15 @@ test('idempotent retries return one task and audit row; changed requests are rej
  await assert.rejects(command(db,ids.operator,'task.save',task,{title:'Changed'},0,ids.facility,request),/IDEMPOTENCY/);
  assert.equal((await db.query<{n:number}>('select count(*)::int n from mx_ops.audit where entity_id=$1',[task])).rows[0].n,1);
 });
+test('a one-off task can be saved and made ready without a work program',async()=>{
+ const person=id(),task=id();
+ await call('person.save',person,{name:'Standalone task owner',active:true});
+ const saved=await call('task.save',task,{title:'Inspect the site gate',responsible_id:person});
+ assert.equal(saved.record.program_id,null);
+ assert.equal((await db.query<{program_id:string|null}>('select program_id from mx_ops.work_items where id=$1',[task])).rows[0].program_id,null);
+ const ready=await call('task.status',task,{status:'ready',outcome:'Owner confirmed'},1);
+ assert.equal(ready.record.status,'ready');
+});
 test('engineering assets remain proposed until installed; diesel ledger reconciles independent dips',async()=>{
  await call('asset.save',tank,{code:'T-01',name:'Synthetic tank',kind:'tank',state:'installed',capacity:'1000',capacity_unit:'L'});
  await call('asset.save',generator,{code:'G-01',name:'Synthetic generator',kind:'generator',state:'operating'});

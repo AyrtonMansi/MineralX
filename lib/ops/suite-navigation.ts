@@ -55,13 +55,39 @@ const resources: NavigationItem[] = [
   { area: 'files', label: 'Files & procedures' },
 ];
 
+const developmentWorkspace: NavigationGroup[] = [
+  { label: 'Workspace', items: [{ area: '', label: 'Home' }, { area: 'work', label: 'Work', permission: 'work.read' }] },
+  {
+    label: 'Operations',
+    items: [
+      { area: 'geology', label: 'Geology', requiredKind: 'project', permission: 'geo.read' },
+      { area: 'pit', label: 'Pits & stockpiles', requiredKind: 'project' },
+      { area: 'plant', label: 'Processing', requiredKind: 'facility', permission: 'plant.read' },
+      { area: 'gold', label: 'Gold', requiredKind: 'facility', permission: 'gold.read' },
+    ],
+  },
+];
+
 export function supportsNavigationItem(scope: Scope | undefined, item: NavigationItem) {
   if (!scope) return false;
   if (item.requiredKind && scope.kind !== item.requiredKind) return false;
   return !item.permission || scope.permissions.includes(item.permission);
 }
 
-export function navigationGroups(scope: Scope | undefined): NavigationGroup[] {
+/**
+ * Development keeps its project and facility data separated internally, while
+ * presenting one local workspace. Each operation links to its compatible
+ * internal boundary automatically; people never need to choose a raw scope.
+ */
+export function developmentNavigationGroups(scopes: Scope[] | undefined): NavigationGroup[] {
+  return developmentWorkspace.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => scopes?.some((scope) => supportsNavigationItem(scope, item))),
+  })).filter((group) => group.items.length);
+}
+
+export function navigationGroups(scope: Scope | undefined, options?: { development?: boolean; scopes?: Scope[] }): NavigationGroup[] {
+  if (options?.development) return developmentNavigationGroups(options.scopes || (scope ? [scope] : []));
   if (!scope) return [];
   const capture = scope.kind === 'project' ? projectWork : scope.kind === 'facility' ? facilityWork : [];
   return [
@@ -71,35 +97,22 @@ export function navigationGroups(scope: Scope | undefined): NavigationGroup[] {
   ].filter((group) => group.items.length);
 }
 
+/** A stable presentation name keeps device-only implementation scopes out of the UI. */
+export function scopeLabel(scope: Scope | undefined, development = false) {
+  return development ? 'Development workspace' : scope?.name || 'No workspace assigned';
+}
+
 /**
- * The Create menu only offers a destination when the user can both open its
- * register and perform the proposed capture. Custom roles frequently split
- * read and capture privileges, so testing only work.write here creates a
- * dead-end route.
+ * Keep the header Create menu to planning records. Domain captures start in
+ * their own workspace, where their evidence and record context are visible.
  */
 export function createShortcuts(scope: Scope | undefined): CreateShortcut[] {
   if (!scope || !scope.permissions.includes('work.read') || !scope.permissions.includes('work.write')) return [];
 
-  const shortcuts: CreateShortcut[] = [
-    { area: 'programs', label: 'Work program / campaign', params: 'action=create' },
-    { area: 'work', label: 'Task / to-do', params: 'action=task' },
-    { area: 'work', label: 'Handover', params: 'action=task&kind=handover' },
+  return [
+    { area: 'work', label: 'Task', params: 'action=task' },
+    { area: 'programs', label: 'Work program', params: 'action=create' },
   ];
-
-  if (scope.kind === 'project') {
-    if (scope.permissions.includes('geo.read') && scope.permissions.includes('geo.capture')) {
-      shortcuts.push({ area: 'geology', label: 'Physical sample', params: 'action=sample' });
-    }
-  } else if (scope.kind === 'facility') {
-    if (scope.permissions.includes('plant.read') && scope.permissions.includes('plant.capture')) {
-      shortcuts.push({ area: 'plant', label: 'Processing run', params: 'view=runs&action=run' });
-    }
-    if (scope.permissions.includes('gold.read') && scope.permissions.includes('gold.capture')) {
-      shortcuts.push({ area: 'gold', label: 'Clean-up / gold lot', params: 'view=lots&action=cleanup' });
-    }
-  }
-
-  return shortcuts;
 }
 
 export function operationsHref(area: OperationsArea, scopeId?: string, params?: URLSearchParams | string) {
@@ -123,6 +136,23 @@ export function supportsOperationsPath(scope: Scope, pathname: string) {
   if (/^\/ops\/plant(?:\/|$)/.test(pathname)) return scope.permissions.includes('plant.read');
   if (/^\/ops\/gold(?:\/|$)/.test(pathname)) return scope.permissions.includes('gold.read');
   return true;
+}
+
+/**
+ * Finds a compatible local scope for a route. It is intentionally a selector,
+ * not an authorisation bypass: callers still pass the chosen scope through the
+ * same permission checks used everywhere else.
+ */
+export function scopeForOperationsPath(scopes: Scope[] | undefined, pathname: string, preferredScopeId?: string) {
+  if (!scopes?.length) return undefined;
+  const preferred = preferredScopeId ? scopes.find((scope) => scope.id === preferredScopeId) : undefined;
+  const kind = requiredScopeKind(pathname);
+  if (kind) {
+    const compatible = scopes.filter((scope) => scope.kind === kind && supportsOperationsPath(scope, pathname));
+    return compatible.find((scope) => scope.id === preferredScopeId) || compatible[0] || preferred || scopes[0];
+  }
+  if (preferred && supportsOperationsPath(preferred, pathname)) return preferred;
+  return scopes.find((scope) => supportsOperationsPath(scope, pathname)) || scopes[0];
 }
 
 /**

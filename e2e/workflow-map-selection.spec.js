@@ -11,7 +11,7 @@ test('the suite Globe opens the exact field record on a rendered point click, in
  page.on('request',r=>{const u=new URL(r.url());if(u.pathname.startsWith('/api/ops/')||u.hostname.endsWith('.supabase.co'))protectedRequests.push(r.url());});
  await page.route('**/api/basemap/**',r=>r.fulfill({contentType:'image/png',body:TILE}));
  await page.goto(`/ops?scope=${project}&mode=development`,{waitUntil:'domcontentloaded'});
- await expect(page.getByRole('combobox',{name:'Workspace or site'})).toBeVisible({timeout:30000});
+ await expect(page.getByRole('combobox',{name:'Workspace or site'})).toHaveCount(0,{timeout:30000});
  const title='SYNTHETIC-MAP-TARGET';
  await page.goto(`/ops/geology?scope=${project}&view=targets`);
  await page.getByRole('button',{name:'Record field target',exact:true}).click();

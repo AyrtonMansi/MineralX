@@ -56,14 +56,14 @@ export class DevelopmentEngine {
     // Every function name below is a literal controlled by this module, never user input.
     return this.asActor<T>(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) as result`,args,service);
   }
-  private scope(id:string|null){if(id!==FACILITY&&id!==PROJECT)throw new OpsError('forbidden','Choose this browser’s development project or facility. Production workspaces cannot be opened in development mode.');return id;}
-  async context(){const c=await this.rpc('mx_ops_context');return {...c,aal:'development',organisations:c.organisations.map((o:any)=>({...o,admin:false})),capabilities:{development:true,evidence:true,sharedGeology:false,invitationEmail:false,independentObjectBackup:false,storage:'browser-local-development'}};}
+  private scope(id:string|null){if(id!==FACILITY&&id!==PROJECT)throw new OpsError('forbidden','This record is outside the Development workspace. Production workspaces cannot be opened in development mode.');return id;}
+  async context(){const c=await this.rpc('mx_ops_context');return {...c,scopes:c.scopes.map((scope:any)=>({...scope,name:'Development workspace'})),aal:'development',organisations:c.organisations.map((o:any)=>({...o,admin:false})),capabilities:{development:true,evidence:true,sharedGeology:false,invitationEmail:false,independentObjectBackup:false,storage:'browser-local-development'}};}
   async geology(scopeId:string){
     this.scope(scopeId);const c=await this.context(),scope=c.scopes.find((s:any)=>s.id===scopeId);
-    if(scope.kind!=='project')fault('Choose the development geological project.');
-    let project:any=newSharedProject(scope),versions:Record<string,number>={},revision=0,metadataVersion=0;
+    if(scope.kind!=='project')fault('Geology requires the compatible records in this Development workspace.');
+    let project:any=newSharedProject({...scope,name:'Development workspace'}),versions:Record<string,number>={},revision=0,metadataVersion=0;
     for(const kind of GEO_KINDS){let cursor=null;const rows:any[]=[];
-      do{const page:any=await this.rpc('mx_ops_geo_page',[scopeId,kind,cursor,1000]);revision=page.revision;metadataVersion=page.project?.version||0;if(page.project)project={...project,...page.project.data};
+      do{const page:any=await this.rpc('mx_ops_geo_page',[scopeId,kind,cursor,1000]);revision=page.revision;metadataVersion=page.project?.version||0;if(page.project)project={...project,...page.project.data,name:'Development workspace'};
         for(const row of page.rows){versions[`${kind}:${row.id}`]=row.version;rows.push({...row.data,recordId:row.id});}
         if(rows.length>10000)fault('This development project exceeds the bounded record limit. Export a backup.');
         cursor=page.rows.length===1000?page.rows[page.rows.length-1].id:null;
