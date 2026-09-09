@@ -1,0 +1,28 @@
+name: Preserve workflow upgrade baseline
+on:
+  push:
+    branches: [codex/mineralx-workflows-20260909]
+    paths: [.github/workflows/workflow-upgrade-baseline.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: |
+          git archive --format=tar.gz 8c53ce7d8a521457afc56ec72131a50da78f31af > /tmp/mineralx-8c53ce7.tar.gz
+          git ls-tree -r 8c53ce7d8a521457afc56ec72131a50da78f31af > /tmp/mineralx-8c53ce7-tree.txt
+          sha256sum /tmp/mineralx-8c53ce7.tar.gz > /tmp/mineralx-8c53ce7.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workflow-upgrade-baseline
+          path: |
+            /tmp/mineralx-8c53ce7.tar.gz
+            /tmp/mineralx-8c53ce7-tree.txt
+            /tmp/mineralx-8c53ce7.sha256
+          retention-days: 14
