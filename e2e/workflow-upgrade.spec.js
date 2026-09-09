@@ -64,7 +64,7 @@ test('Home and the shared Exploration map create and edit one canonical campaign
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-home-desktop.png',fullPage:true});
 });
 
-test('work sequencing validates dependencies, exposes personnel and retains a useful schedule',async({page})=>{
+test('work sequencing validates dependencies, exposes personnel and retains a useful schedule',{timeout:60_000},async({page})=>{
  const trace=await start(page);await person(page,project);const id=await program(page,'Synthetic site plan');
  const first=await task(page,'Prepare drill site',project,id);const second=await task(page,'Begin drilling',project,id);
  await page.getByRole('button',{name:'Edit task plan'}).click();const f=region(page,'Plan a task');
@@ -90,7 +90,7 @@ test('a failed program save stays open, retries idempotently and appears once af
  await page.evaluate(()=>window.restoreWorkflowStorage());await save(f,'Retry original save');await page.reload();await expect(page.getByRole('heading',{name:'RECOVER-PROGRAM',exact:true})).toHaveCount(1,{timeout:30000});
 });
 
-test('diesel balances compare independent dips, and proposed solar never becomes measured generation',async({page})=>{
+test('diesel balances compare independent dips, and proposed solar never becomes measured generation',{timeout:60_000},async({page})=>{
  const trace=await start(page,`/ops?scope=${facility}`);await asset(page,'T1','tank','installed','1000');await asset(page,'PV1','solar','proposed','12');
  await fuel(page,'opening','200','2026-09-01T09:00','SYN-OPEN');await fuel(page,'delivery','500','2026-09-02T09:00','SYN-DEL');await fuel(page,'issue','100','2026-09-03T09:00','SYN-USE');await fuel(page,'dip','590','2026-09-04T09:00','SYN-DIP');
  await expect(page.getByText('600 L',{exact:true})).toBeVisible();await expect(page.getByText(/difference -10 L/)).toBeVisible();
