@@ -1,5 +1,18 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {nextGoldAction,tankBalance,energySummary,blockers,localDay,taskDue,calendarMonthStart} from '../../lib/ops/workflow-model';
+import {nextGoldAction,tankBalance,energySummary,blockers,localDay,taskDue,calendarMonthStart,openProgramChoices,processingProgramChoices,resourcesFor} from '../../lib/ops/workflow-model';
+test('open program choices normalize canonical and field records while keeping closed work out of new links',()=>{
+ const workflow={programs:[
+  {id:'processing-open',scope_id:'facility-a',version:3,data:{recordId:'stale-id',name:'Mill campaign',type:'processing',state:'planned'}},
+  {id:'completed',scope_id:'facility-a',version:2,data:{name:'Finished campaign',type:'processing',state:'completed'}},
+  {id:'mapping-open',scope_id:'project-a',version:1,data:{name:'Mapping program',type:'mapping',state:'in_progress'}},
+ ]};
+ const choices=openProgramChoices(workflow);
+ assert.deepEqual(choices.map((program:any)=>program.id),['processing-open','mapping-open']);
+ assert.equal(choices[0].recordId,'processing-open');assert.equal(choices[0].version,3);
+ assert.deepEqual(processingProgramChoices(workflow).map((program:any)=>program.id),['processing-open']);
+ assert.deepEqual(resourcesFor(workflow).programs.map((program:any)=>program.id),['processing-open','mapping-open']);
+ assert.deepEqual(openProgramChoices([{recordId:'field-open',name:'Field mapping',status:'active'},{recordId:'field-closed',name:'Completed fieldwork',status:'completed'}]).map((program:any)=>program.id),['field-open']);
+});
 test('gold guidance is evidence-, lineage- and policy-aware rather than a fixed wizard',()=>{
  const d:any={record:{id:'lot-a',review_state:'unreviewed',form:'dore'},weights:[],assays:[]};
  assert.equal(nextGoldAction(d).key,'weight');d.weights=[{net_g:100}];assert.equal(nextGoldAction(d).key,'assay');

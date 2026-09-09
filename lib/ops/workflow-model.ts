@@ -1,10 +1,23 @@
 /** Pure presentation calculations. SQL validates quantities and remains the record authority. */
 export const programStates=['draft','planned','ready','in_progress','blocked','on_hold','completed','cancelled'] as const;
 export const taskStates=['open','ready','in_progress','blocked','on_hold','resolved','cancelled'] as const;
+const closedProgramStates=new Set(['completed','cancelled']);
 export function programRows(data:any){return (data?.programs||[]).map((p:any)=>({...p.data,id:p.id,recordId:p.id,version:p.version,scope_id:p.scope_id,updated_at:p.updated_at}));}
+function normaliseProgramChoice(row:any){
+ const stored=row?.data&&typeof row.data==='object'&&!Array.isArray(row.data),data=stored?row.data:row,id=stored?row.id:data?.recordId||data?.id;
+ if(typeof id!=='string'||!id)return null;
+ return {...data,id,recordId:id,version:stored?row.version:data?.version,scope_id:stored?row.scope_id:data?.scope_id,updated_at:stored?row.updated_at:data?.updated_at};
+}
+/** A scope-local program list suitable for new links. Completed and cancelled work remains visible in its history, not in new-entry selectors. */
+export function openProgramChoices(source:any){
+ const rows=Array.isArray(source)?source:source?.programs||[];
+ return rows.map(normaliseProgramChoice).filter((program:any)=>program&&!closedProgramStates.has(String(program.state??program.status??'').toLowerCase()));
+}
+/** The processing projection of open canonical work programs, for facility and gold selectors. */
+export function processingProgramChoices(source:any){return openProgramChoices(source).filter((program:any)=>String(program.type||'').toLowerCase()==='processing');}
 export function resourcesFor(data:any,members:any[]=[],otherTasks:any[]=[]){
  const tasks=data?.tasks||[];
- return {types:(data?.types||[]).map((t:any)=>({...t,id:t.key,name:t.label})),programs:programRows(data),tasks,packages:tasks.filter((t:any)=>t.kind==='package'&&!['resolved','cancelled'].includes(t.status)),predecessors:[...tasks,...otherTasks].map((t:any)=>({...t,name:t.title,reference:t.title})),people:(data?.people||[]).filter((p:any)=>p.active),assets:data?.assets||[],tanks:(data?.assets||[]).filter((a:any)=>a.kind==='tank'&&!['proposed','retired'].includes(a.state)),members:members.map((m:any)=>({...m,id:m.user_id||m.id,name:m.name||m.display_name||m.email||m.user_id})),engineering:data?.engineering||[],spares:data?.spares||[]};
+ return {types:(data?.types||[]).map((t:any)=>({...t,id:t.key,name:t.label})),programs:openProgramChoices(data),tasks,packages:tasks.filter((t:any)=>t.kind==='package'&&!['resolved','cancelled'].includes(t.status)),predecessors:[...tasks,...otherTasks].map((t:any)=>({...t,name:t.title,reference:t.title})),people:(data?.people||[]).filter((p:any)=>p.active),assets:data?.assets||[],tanks:(data?.assets||[]).filter((a:any)=>a.kind==='tank'&&!['proposed','retired'].includes(a.state)),members:members.map((m:any)=>({...m,id:m.user_id||m.id,name:m.name||m.display_name||m.email||m.user_id})),engineering:data?.engineering||[],spares:data?.spares||[]};
 }
 export function blockers(task:any,data:any){return (data?.dependencies||[]).filter((d:any)=>d.task_id===task.id&&(d.status!=='resolved'||d.kind==='maintenance'&&!d.verified));}
 export function localDay(zone:string,date=new Date()){return new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);}
