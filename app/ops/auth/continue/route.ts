@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { configured, database } from '@/lib/gic/server';
 import { resolveSignInLanding, safeSignInNext } from '@/lib/gic/login-routing';
+import { DEVELOPMENT_MODE_COOKIE } from '@/lib/ops/development-policy';
 import { OPS_SCHEMA } from '@/lib/ops/contracts';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,10 @@ export async function GET(request: NextRequest) {
       // An invitation failure must not invalidate an already verified identity.
       try { await db.rpc('mx_ops_claim_invitations'); } catch { /* Access remains independently checked. */ }
     }
-    return redirect(landing.destination);
+    const response=redirect(landing.destination);
+    if(landing.operationsReady)response.cookies.set(DEVELOPMENT_MODE_COOKIE,'staff',{path:'/ops',httpOnly:true,sameSite:'lax',secure:request.nextUrl.protocol==='https:',maxAge:604800});
+    response.cookies.delete('mx-meeting-signin');
+    return response;
   } catch {
     return redirect(login + '&access=unavailable');
   }

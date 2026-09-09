@@ -124,3 +124,10 @@ test('development backup downloads actual local PostgreSQL records and files',as
  const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download development backup'}).click();const file=await pending;
  expect(file.suggestedFilename()).toMatch(/^MineralX-DEVELOPMENT-.*\.tgz$/);const bytes=await readFile(await file.path());expect(bytes[0]).toBe(0x1f);expect(bytes[1]).toBe(0x8b);expect(bytes.length).toBeGreaterThan(1000);expect(calls).toEqual([]);
 });
+
+test('visiting staff sign-in does not replace the chosen device workspace',async({page})=>{
+ await open(page,'/ops/pit');await page.getByRole('link',{name:'Staff sign-in',exact:true}).click();await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','staff');await page.goto('/ops/pit');await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});await expect(page.locator('.ops-development-banner')).toBeVisible();
+});
+test('the explicit staff gate offers an explicit return to the same device tool',async({page})=>{
+ await page.goto('/ops/pit?mode=staff');await expect(page.getByRole('link',{name:'Staff sign in',exact:true})).toBeVisible({timeout:30000});const back=page.getByRole('link',{name:'Open device workspace',exact:true});await expect(back).toHaveAttribute('href','/ops/pit?mode=development');await back.click();await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});await expect(page.locator('.ops-development-banner')).toBeVisible();
+});

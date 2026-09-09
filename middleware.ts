@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
     });
     await db.auth.getUser();
   }
-  if ((path === '/ops' || path.startsWith('/ops/')) && (explicit || path === '/ops/login')) {
+  if ((path === '/ops' || path.startsWith('/ops/')) && explicit) {
     response.cookies.set(DEVELOPMENT_MODE_COOKIE, preference!, {path:'/ops', httpOnly:true, sameSite:'lax', secure:request.nextUrl.protocol==='https:', maxAge:604800});
   }
   response.headers.set("Cache-Control", "private, no-store, max-age=0");
