@@ -18,8 +18,15 @@ test('the suite Globe opens the exact field record on a rendered point click, in
  const f=region(page,'Record field target');await f.getByLabel('Target name').fill(title);
  await f.getByLabel('Latitude, WGS84').fill('-20');await f.getByLabel('Longitude, WGS84').fill('144');
  await save(f,'Record target');
- await page.getByRole('button',{name:`Open ${title}`,exact:true}).click();
- await expect(page.getByRole('heading',{name:title,exact:true,level:2})).toBeVisible();
+ // The register and detail heading use the generated target reference, not its name.
+ // Read that visible identity from the sole saved row; never inject a database ID.
+ const row=page.getByRole('row').filter({has:page.getByRole('button',{name:/^Open TG-/})});
+ await expect(row).toHaveCount(1);
+ const reference=(await row.getByRole('cell').first().innerText()).trim();
+ expect(reference).toMatch(/^TG-/);
+ await row.getByRole('button',{name:`Open ${reference}`,exact:true}).click();
+ await expect(page.getByRole('heading',{name:reference,exact:true,level:2})).toBeVisible();
+ await expect(page.getByText(title,{exact:true})).toBeVisible();
  const id=new URL(page.url()).searchParams.get('item');expect(id).toMatch(/^[0-9a-f-]{36}$/);
  for(const reload of [false,true]){
   await page.goto(`/ops/geology?scope=${project}&view=map`);
@@ -31,7 +38,8 @@ test('the suite Globe opens the exact field record on a rendered point click, in
   // not a timer or an injected map object. Retries only hover; navigation is clicked once.
   await expect(async()=>{await canvas.hover({position:{x:15,y:15}});await canvas.hover({position:point});await expect(canvas).toHaveCSS('cursor','pointer',{timeout:1000});}).toPass({timeout:15000});
   await canvas.click({position:point});
-  await expect(page.getByRole('heading',{name:title,exact:true,level:2})).toBeVisible();
+  await expect(page.getByRole('heading',{name:reference,exact:true,level:2})).toBeVisible();
+  await expect(page.getByText(title,{exact:true})).toBeVisible();
   expect(new URL(page.url()).searchParams.get('item')).toBe(id);
  }
  expect(errors).toEqual([]);expect(protectedRequests).toEqual([]);
