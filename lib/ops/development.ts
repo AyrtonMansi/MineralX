@@ -3,7 +3,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {DevelopmentEngine} from './development-engine';
 import {DurableDevelopment,readDevelopmentSnapshot,writeDevelopmentSnapshot} from './development-storage';
 import {OpsError} from './contracts';
-import {publishDevelopmentPrograms,readDeviceProgramRegistry} from './device-program-bridge';
+import {publishDevelopmentPrograms,readDeviceProgramRegistry,type DeviceProgramRegistry} from './device-program-bridge';
 import {DEVELOPMENT_PROJECT} from './development-policy';
 let opened:Promise<DurableDevelopment>|undefined;
 let queue:Promise<unknown>=Promise.resolve();
@@ -51,19 +51,44 @@ function bridgeRequest(path:string,data?:unknown){
  * that project's program metadata back. It has no production client, staff
  * session, meeting workspace, or network request.
  */
-async function synchroniseDevicePrograms(engine:DevelopmentEngine){
- const {registry}=await readDeviceProgramRegistry();
- await engine.importDevicePrograms(registry.programs);
- await publishDevelopmentPrograms(await engine.deviceProjectPrograms());
+/**
+ * The registry is an optional convenience layer over the durable local
+ * development database. Its IndexedDB failure must never turn a normal local
+ * refresh or command into a failed request.
+ */
+export type DeviceProgramBridgePort={
+ read:()=>Promise<{registry:DeviceProgramRegistry;revision:number}>;
+ publish:(programs:any[])=>Promise<unknown>;
+};
+const browserDeviceProgramBridge:DeviceProgramBridgePort={read:readDeviceProgramRegistry,publish:publishDevelopmentPrograms};
+
+async function synchroniseDevicePrograms(engine:DevelopmentEngine,bridge:DeviceProgramBridgePort){
+ try{
+  const {registry}=await bridge.read();
+  await engine.importDevicePrograms(registry.programs);
+  await bridge.publish(await engine.deviceProjectPrograms());
+ }catch{
+  // Keep the PGlite workspace usable and retry this optional mirror later.
+ }
+}
+
+async function mirrorDevelopmentPrograms(engine:DevelopmentEngine,bridge:DeviceProgramBridgePort){
+ try{await bridge.publish(await engine.deviceProjectPrograms());}catch{
+  // The local command is already durable. A future refresh can mirror it.
+ }
+}
+
+/** Exported for regression coverage of the browser-local, fail-open bridge. */
+export async function requestDevelopmentWithDeviceProgramBridge(engine:DevelopmentEngine,path:string,data?:unknown,deviceBridge:DeviceProgramBridgePort=browserDeviceProgramBridge){
+ const bridge=bridgeRequest(path,data);
+ if(bridge)await synchroniseDevicePrograms(engine,deviceBridge);
+ const result=await engine.request(path,data);
+ if(bridge)await mirrorDevelopmentPrograms(engine,deviceBridge);
+ return result;
 }
 export const developmentApi=(path:string,data?:unknown)=>task(async db=>{
  const bridge=bridgeRequest(path,data);
- return db.perform(async engine=>{
-  if(bridge)await synchroniseDevicePrograms(engine);
-  const result=await engine.request(path,data);
-  if(bridge)await publishDevelopmentPrograms(await engine.deviceProjectPrograms());
-  return result;
- },data!==undefined||bridge);
+ return db.perform(engine=>requestDevelopmentWithDeviceProgramBridge(engine,path,data),data!==undefined||bridge);
 });
 export const developmentUpload=(...args:Parameters<DevelopmentEngine['upload']>)=>task(db=>db.perform(engine=>engine.upload(...args),true));
 export const developmentSource=(scope:string,id:string)=>task(db=>db.perform(engine=>engine.source(scope,id)));
