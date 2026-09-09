@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const OPS_RELEASE = '2026.09.09.5';
-export const OPS_SCHEMA = 8; // Processing-program selectors require the canonical, plant.read-only v8 RPC.
-export const WORKFLOW_SCHEMA = 7; // Workflow payload format remains v7 while Operations schema v8 adds the selector RPC.
+export const OPS_SCHEMA = 9; // v9 also restores closed legacy processing campaigns before exposing new-entry selectors.
+export const WORKFLOW_SCHEMA = 7; // Workflow payload format remains v7 while Operations schema v9 adds selector-history correction.
 export const permissionProfiles = {
   collector: ['geo.read', 'geo.capture', 'files.geo', 'work.read', 'work.write'],
   geologist: ['geo.read', 'geo.capture', 'geo.publish', 'files.geo', 'work.read', 'work.write'],

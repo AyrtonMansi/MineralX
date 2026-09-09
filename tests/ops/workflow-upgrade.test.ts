@@ -6,7 +6,7 @@ test('a version-six device archive upgrades atomically without replacing existin
   await db.exec('create table mineralx_development_meta(version integer primary key);insert into mineralx_development_meta values(1)');
   const id=crypto.randomUUID();await db.query("insert into mx_ops.campaigns(id,scope_id,name,created_by) values($1,$2,'Previously saved campaign',$3)",[id,ids.facility,ids.operator]);
   const engine=new DevelopmentEngine(db);await engine.initialise();
-  assert.equal((await db.query<{v:number}>('select max(version) v from mx_ops.schema_version')).rows[0].v,8);
+  assert.equal((await db.query<{v:number}>('select max(version) v from mx_ops.schema_version')).rows[0].v,9);
   assert.equal((await db.query<{name:string}>("select data->>'name' as name from mx_ops.geo_programs where id=$1",[id])).rows[0].name,'Previously saved campaign');
   const bytes=await db.dumpDataDir('gzip');copy=new PGlite({loadDataDir:bytes});await copy.waitReady;await new DevelopmentEngine(copy).initialise();
   assert.equal((await copy.query<{n:number}>('select count(*)::int n from mx_ops.geo_programs where id=$1',[id])).rows[0].n,1);

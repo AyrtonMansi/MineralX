@@ -34,7 +34,13 @@ export class DevelopmentEngine {
         await this.db.transaction(async tx=>{await tx.exec(upgrade!.sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,''));});
         version=8;
       }
-      if(version!==8)fault('Unsupported development database version. Keep your recovery copy.');
+      if(version===8){
+        const upgrade=schema.find(m=>m.name==='20260910020000_operations_closed_campaign_backfill.sql');
+        if(!upgrade)fault('The reviewed closed-campaign migration is unavailable. Keep the original backup.');
+        await this.db.transaction(async tx=>{await tx.exec(upgrade!.sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,''));});
+        version=9;
+      }
+      if(version!==9)fault('Unsupported development database version. Keep your recovery copy.');
       return;
     }
     await this.db.transaction(async tx=>{
