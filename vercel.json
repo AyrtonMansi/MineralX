@@ -1,5 +1,10 @@
 {
- "$schema": "https://openapi.vercel.sh/vercel.json",
- "framework": "nextjs",
- "git": {"deploymentEnabled": {"codex/mineralx-workflows-20260909": false}}
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "git": {
+    "deploymentEnabled": {
+      "codex/operations-suite-20260907": false,
+      "implementation/mineralx-operations-integrated-20260907": false
+    }
+  }
 }
