@@ -109,6 +109,37 @@ test('an Operations-created Program from the earlier bridge stays visible in its
  }finally{(globalThis as any).fetch=originalFetch;await db.close();}
 });
 
+test('an active Globe project cannot read another project’s linked local work',async()=>{
+ const globeA='work-globe-project-a',globeB='work-globe-project-b',alpha=localProgram(crypto.randomUUID(),globeA,'Alpha restricted program'),bravo=localProgram(crypto.randomUUID(),globeB,'Bravo active program');
+ let registry=registerGlobePrograms(emptyDeviceProgramRegistry(),globeA,[alpha]);
+ registry=registerGlobePrograms(registry,globeB,[bravo]);
+ const db=new PGlite(),engine=new DevelopmentEngine(db),originalFetch=globalThis.fetch,calls:string[]=[];
+ const bridge:DeviceProgramBridgePort={read:async()=>({registry,revision:0}),publish:async()=>undefined};
+ const saveTask=(id:string,payload:Record<string,unknown>)=>engine.request('command',{scopeId:DEVELOPMENT_PROJECT,requestId:crypto.randomUUID(),id,expectedVersion:0,action:'task.save',expectedActorId:DEVELOPMENT_ACTOR,payload});
+ try{
+  await engine.initialise();
+  (globalThis as any).fetch=(input:unknown)=>{calls.push(String(input));throw new Error('The device bridge must not use fetch.');};
+  await engine.importDevicePrograms([alpha],globeA);await engine.importDevicePrograms([bravo],globeB);
+  const alphaTask=crypto.randomUUID(),bravoTask=crypto.randomUUID(),standaloneTask=crypto.randomUUID();
+  await saveTask(alphaTask,{title:'Alpha confidential field task',program_id:alpha.recordId});
+  await saveTask(bravoTask,{title:'Bravo visible field task',program_id:bravo.recordId,dependencies:[{id:alphaTask,scopeId:DEVELOPMENT_PROJECT}]});
+  await saveTask(standaloneTask,{title:'Standalone local handover'});
+  const alphaCost=crypto.randomUUID(),bravoCost=crypto.randomUUID();
+  await db.query('insert into mx_ops.program_costs(id,scope_id,program_id,kind,amount,currency,reference,occurred_on,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9),($10,$2,$11,$4,$5,$6,$12,$8,$9)',[alphaCost,DEVELOPMENT_PROJECT,alpha.recordId,'estimate','100','AUD','ALPHA-CONFIDENTIAL-COST','2026-09-10',DEVELOPMENT_ACTOR,bravoCost,bravo.recordId,'BRAVO-VISIBLE-COST']);
+
+  const workflow=await requestDevelopmentWithDeviceProgramBridge(engine,`workflow?scope=${DEVELOPMENT_PROJECT}`,undefined,bridge);
+  assert.deepEqual(workflow.programs.map((program:any)=>program.id),[bravo.recordId]);
+  assert.deepEqual(workflow.tasks.map((task:any)=>task.id).sort(),[bravoTask,standaloneTask].sort());
+  assert.deepEqual(workflow.costs.map((cost:any)=>cost.id),[bravoCost]);
+  assert.deepEqual(workflow.progress.map((progress:any)=>progress.id),[bravo.recordId]);
+  assert.deepEqual(workflow.dependencies,[{task_id:bravoTask,predecessor_id:alphaTask,predecessor_scope:DEVELOPMENT_PROJECT,title:'Restricted linked work',status:null,kind:null,verified:false}]);
+  assert.ok(workflow.tasks.some((task:any)=>task.id===standaloneTask&&task.title==='Standalone local handover'));
+  assert.equal(JSON.stringify(workflow).includes('Alpha confidential field task'),false);
+  assert.equal(JSON.stringify(workflow).includes('ALPHA-CONFIDENTIAL-COST'),false);
+  assert.equal(calls.length,0);
+ }finally{(globalThis as any).fetch=originalFetch;await db.close();}
+});
+
 test('unavailable or corrupt bridge storage fails open for local development refreshes and commands',async()=>{
  const db=new PGlite(),engine=new DevelopmentEngine(db),originalFetch=globalThis.fetch,calls:string[]=[];
  const unavailable:DeviceProgramBridgePort={

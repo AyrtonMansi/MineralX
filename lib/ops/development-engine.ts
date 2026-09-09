@@ -160,8 +160,24 @@ export class DevelopmentEngine {
   }
   private async filterDeviceProgramResponse(kind:string,result:any,globeProjectId:string|null|undefined){
     if(!globeProjectId)return result;
-    const ids=await this.deviceProgramIds(globeProjectId),allowed=(row:any)=>ids.has(row?.id||row?.recordId);
-    if(kind==='workflow')return {...result,programs:(result?.programs||[]).filter(allowed)};
+    const ids=await this.deviceProgramIds(globeProjectId),activeProgram=(id:unknown)=>typeof id==='string'&&ids.has(id),allowed=(row:any)=>activeProgram(row?.id||row?.recordId);
+    if(kind==='workflow'){
+      // The browser-local Development database can retain several Globe
+      // projects. Keep standalone work available, but do not expose records
+      // attached to a different project's Program through this active view.
+      const tasks=(result?.tasks||[]).filter((task:any)=>!task?.program_id||activeProgram(task.program_id));
+      const visibleTaskIds=new Set(tasks.map((task:any)=>task?.id).filter((id:unknown):id is string=>typeof id==='string'));
+      const dependencies=(result?.dependencies||[]).flatMap((dependency:any)=>{
+        if(!visibleTaskIds.has(dependency?.task_id))return [];
+        // Keep a legacy cross-project prerequisite from being silently
+        // bypassed, without disclosing its title or progress to this project.
+        if(!visibleTaskIds.has(dependency?.predecessor_id)&&(!dependency?.predecessor_scope||dependency.predecessor_scope===PROJECT))return [{
+          task_id:dependency.task_id,predecessor_id:dependency.predecessor_id,predecessor_scope:dependency.predecessor_scope,title:'Restricted linked work',status:null,kind:null,verified:false,
+        }];
+        return [dependency];
+      });
+      return {...result,programs:(result?.programs||[]).filter(allowed),tasks,costs:(result?.costs||[]).filter((cost:any)=>activeProgram(cost?.program_id)),progress:(result?.progress||[]).filter((progress:any)=>activeProgram(progress?.id)),dependencies};
+    }
     if(kind==='geology')return {...result,project:{...result.project,programs:(result?.project?.programs||[]).filter(allowed)}};
     return result;
   }
