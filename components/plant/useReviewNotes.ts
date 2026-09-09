@@ -1,13 +1,14 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NoteDraft, ReviewNote } from '@/lib/plant/notes';
-export function useReviewNotes(endpoint='/api/notes') {
+export function useReviewNotes(endpoint:string|null='/api/notes') {
   const [notes,setNotes]=useState<ReviewNote[]>([]);
   const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false);
   const [error,setError]=useState(''),[message,setMessage]=useState('');
   const inFlight=useRef(false);
   const [ready,setReady]=useState(false);
   const load=useCallback(async()=>{
+    if(!endpoint){setNotes([]);setLoading(false);setReady(false);return;}
     setLoading(true);setError('');
     try {
       let next: string|null=null;const rows:ReviewNote[]=[];
@@ -23,7 +24,7 @@ export function useReviewNotes(endpoint='/api/notes') {
   },[endpoint]);
   useEffect(()=>{if(typeof window!=='undefined')void load();},[load]);
   async function write(payload: unknown,method:'POST'|'PATCH') {
-    if(inFlight.current)return false;
+    if(!endpoint||inFlight.current)return false;
     if(!ready){setError('Load the saved notes before saving a new note. Your draft is kept.');return false;}
     inFlight.current=true;setSaving(true);setError('');setMessage('');
     try {

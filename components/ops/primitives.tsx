@@ -8,8 +8,20 @@ export function Message({children,error=false}:{children:React.ReactNode;error?:
 export function Empty({title,children}:{title:string;children:React.ReactNode}){return <section className="ops-empty"><h3>{title}</h3><p>{children}</p></section>;}
 export function Heading({title,description,action}:{title:string;description?:string;action?:React.ReactNode}){return <header className="ops-heading"><div><p className="ops-eyebrow">MineralX Operations</p><h1>{title}</h1>{description&&<p>{description}</p>}</div>{action}</header>;}
 export function Quantity({value,unit='g',missing='Not recorded'}:{value:unknown;unit?:string;missing?:string}){if(value===null||value===undefined||value==='')return <span className="ops-muted">{missing}</span>;const n=Number(value);return <span className="ops-number">{Number.isFinite(n)?new Intl.NumberFormat('en-AU',{maximumFractionDigits:6}).format(n):String(value)} <small>{unit}</small></span>;}
-export function useResource<T=any>(path:string|null){const {revision,offlineMode}=useOperations(),[data,setData]=useState<T|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[nonce,reload]=useState(0);
- useEffect(()=>{let cancelled=false;if(!path||offlineMode){setData(null);setLoading(false);return;}setLoading(true);setData(null);setError('');api<T>(path).then(value=>{if(!cancelled)setData(value);}).catch(e=>{if(!cancelled){setData(null);setError(e.message);}}).finally(()=>{if(!cancelled)setLoading(false);});return()=>{cancelled=true;};},[path,revision,nonce,offlineMode]);return {data,error,loading,reload:()=>reload(x=>x+1)};}
+export function useResource<T=any>(path:string|null){
+ const {revision,offlineMode,context}=useOperations();
+ const key=path&&!offlineMode?`${context?.userId||'anonymous'}:${path}`:null;
+ const [state,setState]=useState<{key:string|null;data:T|null;error:string;loading:boolean}>({key:null,data:null,error:'',loading:false});
+ const [nonce,reload]=useState(0);
+ useEffect(()=>{let cancelled=false;
+  if(!key||!path){setState({key:null,data:null,error:'',loading:false});return;}
+  setState(old=>({key,data:old.key===key?old.data:null,error:'',loading:true}));
+  api<T>(path).then(data=>{if(!cancelled)setState({key,data,error:'',loading:false});})
+   .catch(e=>{if(!cancelled)setState({key,data:null,error:e.message,loading:false});});
+  return()=>{cancelled=true;};
+ },[key,path,revision,nonce]);
+ return {data:state.key===key?state.data:null,error:state.key===key?state.error:'',loading:!!key&&(state.key!==key||state.loading),reload:()=>reload(x=>x+1)};
+}
 export function Register({kind,columns,empty='No records yet',onOpen}:{kind:string;columns:{key:string;label:string;render?:(r:any)=>React.ReactNode}[];empty?:string;onOpen?:(r:any)=>void}){
  const {scope,revision}=useOperations(),[rows,setRows]=useState<any[]>([]),[after,setAfter]=useState<string|null>(null),[next,setNext]=useState<string|null>(null),[filter,setFilter]=useState('');const path=scope?`register?scope=${scope.id}&kind=${kind}${after?'&after='+after:''}`:null,{data,error,loading}=useResource(path);
  useEffect(()=>{setRows([]);setAfter(null);},[scope?.id,kind,revision]);useEffect(()=>{if(data){setRows(old=>after?[...old.filter(r=>!data.rows.some((n:any)=>(n.id||n.lot_id)===(r.id||r.lot_id))),...data.rows]:data.rows);setNext(data.next);}},[data,after]);

@@ -23,6 +23,15 @@ for(const path of ['/','/company','/contact','/clothing','/gic/login','/plant','
   const res=await fetch(`${origin}${path}`,{signal:AbortSignal.timeout(20000)});
   assert.equal(res.status,200,`${path} failed on production`);routes.push({path,status:res.status});
 }
+const operationsResponse=await fetch(`${origin}/api/ops/release`,{cache:'no-store',signal:AbortSignal.timeout(20000)});
+assert.equal(operationsResponse.status,200);
+const operationsRelease=await operationsResponse.json();
+assert.equal(operationsRelease.commit,expected);
+assert.equal(operationsRelease.release,'2026.09.09.1');
+for(const path of ['/ops','/ops/programs','/ops/geology','/ops/plant','/ops/gold','/ops/work']){
+ const response=await fetch(`${origin}${path}?mode=development`,{signal:AbortSignal.timeout(20000)});
+ assert.equal(response.status,200,path);routes.push({path,status:response.status});
+}
 const browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try{
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
@@ -37,7 +46,7 @@ try{
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:'test-results/geology-production-mobile.png',fullPage:true});
   assert.deepEqual(errors,[],'Unexpected browser runtime errors');
-  const report={observedAt:new Date().toISOString(),origin,release,routes,navigation:names,runtimeErrors:errors,scope:'Fresh browser context; no operational data or paid requests'};
+  const report={observedAt:new Date().toISOString(),origin,release,operationsRelease,routes,navigation:names,runtimeErrors:errors,scope:'Fresh browser context; no operational data or paid requests'};
   await writeFile('test-results/geology-production.json',JSON.stringify(report,null,2));
   console.log(JSON.stringify(report,null,2));
 }finally{await browser.close();}

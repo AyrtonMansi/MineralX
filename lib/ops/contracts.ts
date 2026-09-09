@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-export const OPS_RELEASE = '2026.09.07.6';
+export const OPS_RELEASE = '2026.09.09.1';
 export const OPS_SCHEMA = 6;
+export const WORKFLOW_SCHEMA = 7; // Additive workflows: core identity and legacy registers remain usable on schema 6.
 export const permissionProfiles = {
   collector: ['geo.read', 'geo.capture', 'files.geo', 'work.read', 'work.write'],
   geologist: ['geo.read', 'geo.capture', 'geo.publish', 'files.geo', 'work.read', 'work.write'],

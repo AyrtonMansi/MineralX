@@ -1021,3 +1021,4 @@ button:disabled { opacity: 0.45; cursor: default; }
   .mx-close-btn { width: 32px; height: 32px; }
   .mx-basemap-section { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
+.mx-suite-notice{position:relative;z-index:50;padding:9px 20px;background:#f4f5f1;color:#34473b;font:13px/1.5 system-ui;display:flex;gap:12px;flex-wrap:wrap}.mx-suite-notice a{color:#245d42;font-weight:600}

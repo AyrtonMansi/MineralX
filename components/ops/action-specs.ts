@@ -1,6 +1,6 @@
 // Internal presentation contracts, not an end-user workflow builder. Database commands
 // remain the authority for permissions, transitions and quantities.
-export type Field={key:string;label:string;type?:'text'|'textarea'|'decimal'|'number'|'date'|'datetime'|'select'|'multi'|'check'|'evidence'|'repeat';required?:boolean;options?:string[];resource?:string;family?:string;fields?:Field[];hint?:string;when?:(v:any)=>boolean;default?:any};
+export type Field={advanced?:boolean;key:string;label:string;type?:'text'|'textarea'|'decimal'|'number'|'date'|'datetime'|'select'|'multi'|'check'|'evidence'|'repeat';required?:boolean;options?:string[];resource?:string;family?:string;fields?:Field[];hint?:string;when?:(v:any)=>boolean;default?:any};
 export type ActionSpec={title:string;action:string;permission:string;description:string;button:string;fields:Field[];mfa?:boolean;preview?:boolean;defaults?:any;prepare?:(v:any,resources:Record<string,any[]>)=>any};
 const text=(key:string,label:string,required=true):Field=>({key,label,required}),decimal=(key:string,label:string,required=true):Field=>({key,label,type:'decimal',required}),date=(key:string,label:string,required=true):Field=>({key,label,type:'datetime',required}),select=(key:string,label:string,resource:string,required=true):Field=>({key,label,type:'select',resource,required});
 const reason:Field={key:'reason',label:'Reason / review decision',type:'textarea',required:true,hint:'Describe the observation or decision. This is kept with the authenticated record.'};

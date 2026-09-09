@@ -53,3 +53,13 @@ test('development backup restores local data and exact source bytes without prod
   assert.match(await (await recovered.export(facility,'runs')).text(),/development_only/);
  }finally{await copy.close();}
 });
+test('program created through the planning command is the exact field-program record',async()=>{
+ const c=cmd('program.save',{name:'CANONICAL-DRILL',type:'drilling',method:'rc',state:'planned'},project);
+ await engine.request('command',c);
+ const shared=await engine.geology(project),planning=await engine.request(`workflow?scope=${project}`);
+ const g=shared.project.programs.find((p:any)=>p.recordId===c.id);
+ assert.equal(g.name,'CANONICAL-DRILL');assert.equal(planning.programs.find((p:any)=>p.id===c.id).data.name,g.name);
+ await engine.request('command',{...c,requestId:crypto.randomUUID(),expectedVersion:1,payload:{...c.payload,name:'CANONICAL-UPDATED'}});
+ assert.equal((await engine.geology(project)).project.programs.find((p:any)=>p.recordId===c.id).name,'CANONICAL-UPDATED');
+ assert.equal((await engine.request(`workflow?scope=${project}`)).programs.filter((p:any)=>p.id===c.id).length,1);
+});
