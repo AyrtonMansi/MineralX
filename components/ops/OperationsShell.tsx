@@ -4,7 +4,7 @@ import React,{useState} from 'react';
 import Link from 'next/link';import {usePathname} from 'next/navigation';
 import {useOperations} from './OperationsProvider';import {Message,Status} from './primitives';import {api,downloadBlob} from '@/lib/ops/client';import {OPS_RELEASE} from '@/lib/ops/contracts';
 import DevelopmentTools from './DevelopmentTools';
-const navigation=[['','Home'],['programs','Programs'],['geology','Geology'],['plant','Plant'],['gold','Gold'],['work','Work'],['reports','Reports']];
+const navigation=[['','Home'],['programs','Programs'],['geology','Geology'],['pit','Pits & stockpiles'],['plant','Plant'],['gold','Gold'],['work','Work'],['reports','Reports']];
 export default function OperationsShell({children}:{children:React.ReactNode}){
  const {development,context,scope,loading,failure,online,offlineMode,pack,saveState,syncing,sync,selectScope,refresh,exportVault}=useOperations();const path=usePathname();const [query,setQuery]=useState(''),[matches,setMatches]=useState<any[]|null>(null),[error,setError]=useState(''),[menu,setMenu]=useState(false);
  if(path.startsWith('/ops/auth/'))return <main className="ops-shell ops-field-unlock">{children}</main>;
