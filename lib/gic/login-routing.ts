@@ -26,7 +26,7 @@ export async function resolveSignInLanding(input: {
   if (!input.userId) throw new Error('A verified account is required.');
   const destination = safeSignInNext(input.requestedNext);
   // Password and MFA management must not depend on an operational schema or role.
-  if (new URL(destination, 'https://mineralx.invalid').pathname === '/ops/account') {
+  if (['/ops/account','/ops/meetings'].includes(new URL(destination, 'https://mineralx.invalid').pathname)) {
     return { destination, operationsReady: false };
   }
   const operations = await input.readOperations().catch(() => ({ data: null, error: true }));

@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
   const development = developmentPage(path, preference, DEVELOPMENT_ACCESS_ENABLED && process.env.MINERALX_DEVELOPMENT_ACCESS !== 'off');
   // Overwrite caller-supplied mode headers. This controls presentation only, never API access.
   request.headers.set('x-mineralx-ops-mode', development ? 'development' : 'staff');
+  request.headers.set('x-mineralx-ops-section', path==='/ops/meetings'||path.startsWith('/ops/meetings/')?'meetings':'operations');
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =
