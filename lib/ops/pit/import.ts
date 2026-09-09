@@ -4,6 +4,32 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { BufferGeometry, Mesh } from 'three';
 import { bounds, MAX_FILE_BYTES, MAX_TRIANGLES, MAX_VERTICES, validateSurface, type PitProject, type Surface, type Vec3 } from './model';
 
+// Check variable-length PLY records before the loader can allocate from untrusted list counts.
+function preflightPLY(bytes:ArrayBuffer){
+  const prefix=new TextDecoder().decode(bytes.slice(0,65536));
+  const end=prefix.indexOf('end_header');if(end<0)throw new Error('Invalid PLY header.');
+  const header=prefix.slice(0,end),format=header.match(/format (\S+) 1\.0/)?.[1];
+  if(!['ascii','binary_little_endian','binary_big_endian'].includes(format||''))throw new Error('Unsupported PLY encoding.');
+  const types:Record<string,[number,string]>={char:[1,'getInt8'],int8:[1,'getInt8'],uchar:[1,'getUint8'],uint8:[1,'getUint8'],short:[2,'getInt16'],int16:[2,'getInt16'],ushort:[2,'getUint16'],uint16:[2,'getUint16'],int:[4,'getInt32'],int32:[4,'getInt32'],uint:[4,'getUint32'],uint32:[4,'getUint32'],float:[4,'getFloat32'],float32:[4,'getFloat32'],double:[8,'getFloat64'],float64:[8,'getFloat64']};
+  type Element={name:string;count:number;properties:{type:string;listType?:string;name:string}[]};
+  const elements:Element[]=[];
+  for(const line of header.split(/\r?\n/)){const parts=line.trim().split(/\s+/);
+    if(parts[0]==='element'){const count=Number(parts[2]);if(!['vertex','face'].includes(parts[1])||!Number.isSafeInteger(count)||count<0||count>(parts[1]==='vertex'?MAX_VERTICES:MAX_TRIANGLES))throw new Error('Export a smaller mesh-only PLY with vertex and face elements.');elements.push({name:parts[1],count,properties:[]});}
+    if(parts[0]==='property'){const element=elements[elements.length-1];if(!element)throw new Error('Invalid PLY property.');const list=parts[1]==='list',type=parts[list?3:1],listType=list?parts[2]:undefined,name=parts[list?4:2];if(!types[type]||listType&&!types[listType]||!name)throw new Error('Unsupported PLY property.');element.properties.push({type,listType,name});}
+  }
+  if(elements.filter(e=>e.name==='vertex').length!==1||elements.filter(e=>e.name==='face').length!==1||!elements.find(e=>e.name==='face')?.count)throw new Error('This PLY contains points only. Export a triangulated mesh from the scanning app.');
+  const raw=new Uint8Array(bytes);let offset=new TextEncoder().encode(prefix.slice(0,end+10)).length;
+  if(raw[offset]===13)offset++;if(raw[offset]===10)offset++;else throw new Error('Invalid PLY header terminator.');
+  const tokens=format==='ascii'?new TextDecoder().decode(bytes.slice(offset)).trim().split(/\s+/):null;
+  const view=new DataView(bytes);let token=0;
+  const read=(type:string)=>{const [size,method]=types[type];if(tokens){const value=Number(tokens[token++]);if(!Number.isFinite(value))throw new Error('Incomplete or invalid PLY data.');return value;}if(offset+size>bytes.byteLength)throw new Error('Incomplete PLY data.');const value=(view[method as keyof DataView] as Function).call(view,offset,format==='binary_little_endian') as number;offset+=size;if(!Number.isFinite(value))throw new Error('Invalid PLY numeric data.');return value;};
+  let triangles=0;const vertexCount=elements.find(e=>e.name==='vertex')!.count;
+  for(const element of elements)for(let i=0;i<element.count;i++)for(const property of element.properties){
+    if(property.listType){const count=read(property.listType);if(element.name!=='face'||!['vertex_indices','vertex_index'].includes(property.name)||!Number.isInteger(count)||count<3||count>4)throw new Error('Export a triangulated PLY mesh with triangle or quad faces.');triangles+=count-2;if(triangles>MAX_TRIANGLES)throw new Error('Export a smaller PLY mesh.');for(let j=0;j<count;j++){const index=read(property.type);if(!Number.isInteger(index)||index<0||index>=vertexCount)throw new Error('Invalid PLY face index.');}}
+    else read(property.type);
+  }
+}
+
 export async function importScan(bytes: ArrayBuffer, name: string, units: PitProject['source']['units'], up: PitProject['source']['up']): Promise<PitProject> {
   if (!bytes.byteLength || bytes.byteLength > MAX_FILE_BYTES) throw new Error('Choose a non-empty mesh smaller than 25 MB.');
   const extension = name.split('.').pop()?.toLowerCase(), geometries: BufferGeometry[] = [];
@@ -17,11 +43,7 @@ export async function importScan(bytes: ArrayBuffer, name: string, units: PitPro
       object.traverse(child => { if (child instanceof Mesh) geometries.push(child.geometry); });
       object.traverse(child => { if (child instanceof Mesh) (Array.isArray(child.material) ? child.material : [child.material]).forEach(m => m.dispose()); });
     } else if (extension === 'ply') {
-      const header=new TextDecoder().decode(bytes.slice(0,65536));
-      if(!header.includes('end_header'))throw new Error('Invalid PLY header.');
-      const vertexCount=Number(header.match(/element vertex (\d+)/)?.[1]),faceCount=Number(header.match(/element face (\d+)/)?.[1]);
-      if(!vertexCount||!faceCount)throw new Error('This PLY contains points only. Export a triangulated mesh from the scanning app.');
-      if(vertexCount>MAX_VERTICES||faceCount>MAX_TRIANGLES)throw new Error('Export a smaller PLY mesh.');
+      preflightPLY(bytes);
       geometries.push(new PLYLoader().parse(bytes));
     } else if (extension === 'stl') {
       const binaryCount=bytes.byteLength>=84?new DataView(bytes).getUint32(80,true):0;

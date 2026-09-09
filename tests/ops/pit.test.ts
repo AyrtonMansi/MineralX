@@ -27,6 +27,7 @@ test('PLY mesh imports while point-only and oversized PLY fail before allocation
  const p=await importScan(encode(header+'element face 1\nproperty list uchar int vertex_indices\nend_header\n0 0 0\n1 0 0\n0 1 0\n3 0 1 2\n'),'scan.ply','m','y');assert.equal(p.original.indices.length,3);
  await assert.rejects(importScan(encode(header+'end_header\n0 0 0\n1 0 0\n0 1 0\n'),'cloud.ply','m','y'),/points only/);
  await assert.rejects(importScan(encode(header.replace('vertex 3','vertex 900000000')+'element face 1\nend_header\n'),'huge.ply','m','y'),/smaller/);
+ await assert.rejects(importScan(encode(header+'element face 1\nproperty list int int vertex_indices\nend_header\n0 0 0\n1 0 0\n0 1 0\n1000000000 0 1 2\n'),'bad-list.ply','m','y'),/triangle or quad/);
 });
 test('binary PLY mesh and binary STL import real faces',async()=>{
  const header=encode('ply\nformat binary_little_endian 1.0\nelement vertex 3\nproperty float x\nproperty float y\nproperty float z\nelement face 1\nproperty list uchar int vertex_indices\nend_header\n');
