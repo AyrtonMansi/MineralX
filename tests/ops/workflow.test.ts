@@ -8,7 +8,7 @@ const id=()=>crypto.randomUUID();
 const personId=id(),programId=id(),task1=id(),task2=id(),tank=id(),generator=id(),array=id();
 const call=(action:string,target:string,p:any,version=0,user=ids.operator,scope=ids.facility)=>command(db,user,action,target,p,version,scope);
 const work=async(scope=ids.facility,user=ids.operator)=>(await asUser(db,user,'select public.mx_ops_workflow($1) as data',[scope]))[0].data;
-before(async()=>{db=await setup();await db.exec(await readFile(new URL('../../supabase/migrations/20260909020000_operations_workflow.sql',import.meta.url),'utf8'));});
+before(async()=>{db=await setup();await db.exec(await readFile(new URL('../../supabase/migrations/20260909020000_operations_workflow.sql',import.meta.url),'utf8'));await db.exec(await readFile(new URL('../../supabase/migrations/20260910010000_operations_processing_program_choices.sql',import.meta.url),'utf8'));});
 after(async()=>{await db.close();});
 test('workflow read is scoped, includes registry, and rejects anonymous/unassigned users',async()=>{
  const r=await work();assert.equal(r.schemaVersion,7);assert.ok(r.types.find((t:any)=>t.key==='drilling'));assert.equal(r.complete,true);
@@ -32,6 +32,23 @@ test('a program is one canonical record with metadata, versions, no duplicate ca
  assert.equal((await db.query<{id:string}>('select id from mx_ops.geo_programs where id=$1',[campaign])).rows[0].id,campaign);
  await call('program.save',campaign,{name:'Same program renamed',type:'processing',state:'planned'},1);
  assert.equal((await db.query<{name:string}>('select name from mx_ops.campaigns where id=$1',[campaign])).rows[0].name,'Same program renamed');
+});
+test('a plant-only role reads only open canonical processing programs without workflow access',async()=>{
+ const isolated=await setup();try{
+  await isolated.exec(await readFile(new URL('../../supabase/migrations/20260909020000_operations_workflow.sql',import.meta.url),'utf8'));
+  await isolated.exec(await readFile(new URL('../../supabase/migrations/20260910010000_operations_processing_program_choices.sql',import.meta.url),'utf8'));
+  await isolated.query("delete from mx_ops.profile_permissions where profile='operator' and permission='work.read'");
+  const open=id(),closed=id(),nonProcessing=id();
+  await command(isolated,ids.operator,'campaign.create',open,{name:'Open plant-only processing program'});
+  await command(isolated,ids.operator,'campaign.create',closed,{name:'Closed plant-only processing program'});
+  await command(isolated,ids.operator,'program.save',closed,{name:'Closed plant-only processing program',type:'processing',state:'cancelled',reason:'No open work'},1);
+  await command(isolated,ids.operator,'program.save',nonProcessing,{name:'Plant improvement',type:'plant',state:'planned'});
+  const choices=(await asUser(isolated,ids.operator,'select public.mx_ops_processing_programs($1) as data',[ids.facility]))[0].data;
+  assert.deepEqual(choices.programs.map((program:any)=>program.id),[open]);
+  assert.equal(choices.programs[0].data.name,'Open plant-only processing program');
+  assert.equal((await isolated.query<{id:string}>('select id from mx_ops.geo_programs where id=$1',[open])).rows[0].id,open);
+  await assert.rejects(asUser(isolated,ids.operator,'select public.mx_ops_workflow($1) as data',[ids.facility]),/ACCESS_DENIED/);
+ }finally{await isolated.close();}
 });
 test('task dependencies prevent premature work, reject cycles and gate program completion',async()=>{
  await call('task.save',task1,{title:'Service drilling rig',program_id:programId,responsible_id:personId});

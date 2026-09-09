@@ -104,16 +104,19 @@ test('geology capture, reviewed map import and original bytes survive reload wit
  expect(calls).toEqual([]);
 });
 
-test('local storage failure retains the draft and retry persists before acknowledging success',async({page})=>{
- await open(page,`/ops/plant?scope=${facility}&view=campaigns`);await page.getByRole('button',{name:'Open processing campaign'}).click();
- const form=page.getByRole('region',{name:'Open processing campaign'});await form.getByLabel('Campaign name').fill('RECOVERED-DEVELOPMENT-CAMPAIGN');
+test('local storage failure retains a processing program draft and feeds the canonical selector after retry',async({page})=>{
+ await open(page,`/ops/plant?scope=${facility}&view=campaigns`);await page.getByRole('button',{name:'Create processing program'}).click();
+ const form=page.getByRole('region',{name:'Create processing program'});await form.getByLabel('Processing program name').fill('RECOVERED-DEVELOPMENT-PROGRAM');
  await page.evaluate(()=>{const original=IDBDatabase.prototype.transaction;window.restoreDevelopmentStorage=()=>{IDBDatabase.prototype.transaction=original;};IDBDatabase.prototype.transaction=function(names,mode,...args){if(mode==='readwrite')throw new DOMException('Injected development storage quota','QuotaExceededError');return original.call(this,names,mode,...args);};});
- await form.getByRole('button',{name:'Open campaign',exact:true}).click();
- await expect(form.getByRole('alert')).toBeVisible();await expect(form.getByLabel('Campaign name')).toHaveValue('RECOVERED-DEVELOPMENT-CAMPAIGN');
+ await form.getByRole('button',{name:'Create program',exact:true}).click();
+ await expect(form.getByRole('alert')).toBeVisible();await expect(form.getByLabel('Processing program name')).toHaveValue('RECOVERED-DEVELOPMENT-PROGRAM');
  await expect(page.locator('.ops-connection')).not.toContainText('Saved in this browser');
  await page.evaluate(()=>window.restoreDevelopmentStorage());
  await form.getByRole('button',{name:'Retry original save',exact:true}).click();await expect(form).toHaveCount(0);
- await page.reload();await expect(page.getByRole('row').filter({hasText:'RECOVERED-DEVELOPMENT-CAMPAIGN'})).toHaveCount(1,{timeout:30000});
+ await page.reload();await expect(page.getByRole('row').filter({hasText:'RECOVERED-DEVELOPMENT-PROGRAM'})).toHaveCount(1,{timeout:30000});
+ await page.getByRole('button',{name:'Runs',exact:true}).click();await page.getByRole('button',{name:'Processing run',exact:true}).click();
+ const runForm=page.getByRole('region',{name:'Processing run'}),program=runForm.getByLabel('Processing program (optional)');
+ await expect(program.locator('option',{hasText:'RECOVERED-DEVELOPMENT-PROGRAM'})).toHaveCount(1,{timeout:30000});await expect(program).toHaveValue('');
 });
 
 test('one browser writer prevents concurrent overwrites; separate browsers have no shared data',async({page,context,browser,baseURL})=>{

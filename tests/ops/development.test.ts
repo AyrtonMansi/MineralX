@@ -23,6 +23,14 @@ test('local processing uses the actual SQL transaction rules and preserves idemp
  const list=await engine.request(`register?scope=${facility}&kind=runs`);assert.equal(list.rows.length,1);assert.equal(list.rows[0].notes,c.payload.notes);
  await assert.rejects(engine.request('command',{...c,requestId:crypto.randomUUID(),payload:{...c.payload,notes:'stale'}}),e=>(e as any).code==='conflict');
 });
+test('device Processing selects only open canonical processing programs',async()=>{
+ const open=cmd('campaign.create',{name:'DEVICE-OPEN-PROCESSING'}),closed=cmd('campaign.create',{name:'DEVICE-CLOSED-PROCESSING'}),other=cmd('program.save',{name:'DEVICE-PLANT-IMPROVEMENT',type:'plant',state:'planned'});
+ await engine.request('command',open);await engine.request('command',closed);await engine.request('command',{...closed,requestId:crypto.randomUUID(),expectedVersion:1,action:'program.save',payload:{name:'DEVICE-CLOSED-PROCESSING',type:'processing',state:'cancelled',reason:'No open work'}});await engine.request('command',other);
+ const choices=await engine.request(`processing-programs?scope=${facility}`);
+ assert.ok(choices.programs.some((program:any)=>program.id===open.id));
+ assert.ok(!choices.programs.some((program:any)=>program.id===closed.id));
+ assert.ok(!choices.programs.some((program:any)=>program.id===other.id));
+});
 test('source files are saved and read byte-exactly from the local database',async()=>{
  const file=new File(['local source only'], 'source.txt',{type:'text/plain'}),saved=await engine.upload(facility,'gold',file);
  assert.equal(saved.status,'verified');const recovered=await engine.source(facility,saved.id);assert.equal(new TextDecoder().decode(recovered.bytes),'local source only');

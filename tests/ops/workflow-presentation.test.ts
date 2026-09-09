@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {nextGoldAction,tankBalance,energySummary,blockers,localDay,taskDue,calendarMonthStart,openProgramChoices,processingProgramChoices,resourcesFor} from '../../lib/ops/workflow-model';
+import {actions} from '../../components/ops/action-specs';
 test('open program choices normalize canonical and field records while keeping closed work out of new links',()=>{
  const workflow={programs:[
   {id:'processing-open',scope_id:'facility-a',version:3,data:{recordId:'stale-id',name:'Mill campaign',type:'processing',state:'planned'}},
@@ -12,6 +13,11 @@ test('open program choices normalize canonical and field records while keeping c
  assert.deepEqual(processingProgramChoices(workflow).map((program:any)=>program.id),['processing-open']);
  assert.deepEqual(resourcesFor(workflow).programs.map((program:any)=>program.id),['processing-open','mapping-open']);
  assert.deepEqual(openProgramChoices([{recordId:'field-open',name:'Field mapping',status:'active'},{recordId:'field-closed',name:'Completed fieldwork',status:'completed'}]).map((program:any)=>program.id),['field-open']);
+ assert.deepEqual(processingProgramChoices({programs:[{id:'processing-open',data:{name:'Mill campaign',type:'processing',state:'planned'}},{id:'processing-closed',data:{name:'Closed mill campaign',type:'processing',state:'completed'}},{id:'mapping-open',data:{name:'Mapping program',type:'mapping',state:'planned'}}]}).map((program:any)=>program.id),['processing-open']);
+ const run=actions.run.fields.find(field=>field.key==='campaign_id')!,cleanup=actions.cleanup.fields.find(field=>field.key==='campaign_id')!;
+ assert.equal(actions.campaign.action,'campaign.create');assert.equal(actions.campaign.title,'Create processing program');
+ assert.equal(actions.run.action,'run.save');assert.equal(actions.cleanup.action,'cleanup.record');
+ assert.equal(run.resource,'processingPrograms');assert.equal(cleanup.resource,'processingPrograms');assert.equal(run.label,'Processing program (optional)');
 });
 test('gold guidance is evidence-, lineage- and policy-aware rather than a fixed wizard',()=>{
  const d:any={record:{id:'lot-a',review_state:'unreviewed',form:'dore'},weights:[],assays:[]};

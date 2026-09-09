@@ -21,12 +21,20 @@ export class DevelopmentEngine {
       const meta=await this.db.query<{version:number}>('select version from mineralx_development_meta');
       if(meta.rows[0]?.version!==1)fault('This development workspace needs a supported upgrade. Existing records were not replaced.');
       // Upgrade the same database in place. Failure aborts the whole migration; never seed a replacement.
-      const current=await this.db.query<{version:number}>('select max(version) as version from mx_ops.schema_version');
-      if(current.rows[0].version===6){
+      const current=await this.db.query<{version:number}>('select max(version) as version from mx_ops.schema_version');let version=current.rows[0].version;
+      if(version===6){
         const upgrade=schema.find(m=>m.name==='20260909020000_operations_workflow.sql');
         if(!upgrade)fault('The reviewed workflow migration is unavailable. Keep the original backup.');
         await this.db.transaction(async tx=>{await tx.exec(upgrade!.sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,''));});
-      }else if(current.rows[0].version!==7)fault('Unsupported development database version. Keep your recovery copy.');
+        version=7;
+      }
+      if(version===7){
+        const upgrade=schema.find(m=>m.name==='20260910010000_operations_processing_program_choices.sql');
+        if(!upgrade)fault('The reviewed processing-program migration is unavailable. Keep the original backup.');
+        await this.db.transaction(async tx=>{await tx.exec(upgrade!.sql.replace(/^begin;\s*$/mi,'').replace(/^commit;\s*$/mi,''));});
+        version=8;
+      }
+      if(version!==8)fault('Unsupported development database version. Keep your recovery copy.');
       return;
     }
     await this.db.transaction(async tx=>{
@@ -147,6 +155,7 @@ export class DevelopmentEngine {
       const scope=this.scope(q.get('scope'));
       switch(kind){
         case 'workflow':return this.rpc('mx_ops_workflow',[scope]);
+        case 'processing-programs':return this.rpc('mx_ops_processing_programs',[scope]);
         case 'workflow-history':return this.rpc('mx_ops_workflow_history',[scope,q.get('id')]);
         case 'dashboard':return this.rpc('mx_ops_dashboard',[scope,q.get('from')||new Date(Date.now()-30*864e5).toISOString(),q.get('to')||new Date().toISOString()]);
         case 'register':return this.rpc('mx_ops_list',[scope,q.get('kind'),q.get('after'),100,q.get('id')]);
