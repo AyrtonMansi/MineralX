@@ -4,9 +4,9 @@
 
 ## Access and sign-in
 
-Administrators assign a normalized email to a workspace in `mx_meetings.members`. Access requires a live Supabase user with that currently verified email, plus active membership. A note mentioning someone never grants access. Owner/reviewer members can import and review; viewers can read. All seven tables use RLS, browser roles cannot write directly, and public RPC wrappers run with caller privileges. Privileged mutation implementations stay in the private schema and independently enforce membership.
+Administrators provision an unconfirmed Auth account using the server-side Admin API (without bypassing email verification) and assign its normalized email to a workspace in `mx_meetings.members`. Access requires a live Supabase user with that currently verified email, plus active membership. A note mentioning someone never grants access. Owner/reviewer members can import and review; viewers can read. All seven tables use RLS, browser roles cannot write directly, and public RPC wrappers run with caller privileges. Privileged mutation implementations stay in the private schema and independently enforce membership.
 
-The page offers a user-initiated email sign-in link. A server-only allowlist and 60-second per-email cooldown gate requests; Supabase Auth delivers and verifies the link. The existing `/gic/auth/callback` exchanges the PKCE code and a same-browser HttpOnly cookie returns meeting sign-ins to Meetings. No shared Operations membership is required for that destination. Existing password sign-in also accepts this safe destination. Email delivery depends on the project's Auth email configuration and redirect allowlist; requesting a link is not proof of delivery.
+The page offers a user-initiated email sign-in link with automatic signup disabled; public registration remains closed. A server-only allowlist and 60-second per-email cooldown gate requests; Supabase Auth delivers and verifies the link. The existing `/gic/auth/callback` exchanges the PKCE code and a same-browser HttpOnly cookie returns meeting sign-ins to Meetings. No shared Operations membership is required for that destination. Existing password sign-in also accepts this safe destination. Email delivery depends on the project's Auth email configuration and redirect allowlist; requesting a link is not proof of delivery.
 
 ## Sources and review
 

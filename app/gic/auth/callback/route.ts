@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const { error } = await db.auth.exchangeCodeForSession(code);
     if (!error)
       return verified();
-  } else if (token && (type === "invite" || type === "recovery")) {
+  } else if (token && (type === "invite" || type === "recovery" || type === "email")) {
     const { error } = await db.auth.verifyOtp({ token_hash: token, type });
     if (!error)
       return verified();
