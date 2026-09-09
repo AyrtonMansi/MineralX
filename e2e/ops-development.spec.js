@@ -13,7 +13,7 @@ async function open(page,path='/ops'){
  await expect(page.getByRole('combobox',{name:'Workspace or site'})).toHaveCount(0,{timeout:30000});
  // The first browser-local workspace open compiles the self-hosted database
  // runtime and can legitimately take longer than Playwright's 5s default.
- await expect(page.locator('.ops-development-banner')).toContainText('no sign-in',{timeout:30000});
+ await expect(page.locator('.ops-connection')).toContainText('Device workspace',{timeout:30000});
  return forbidden;
 }
 async function feed(page,reference){
@@ -126,7 +126,7 @@ test('one browser writer prevents concurrent overwrites; separate browsers have 
 
 test('development choice never authorises live APIs and switching to staff stays explicit',async({page,request})=>{
  const calls=await open(page);await expect(page.getByRole('link',{name:'Development settings',exact:true})).toHaveCount(0);
- await expect(page.locator('.ops-development-banner')).toHaveAttribute('aria-label','Development workspace');expect(calls).toEqual([]);
+ await expect(page.locator('.ops-development-banner')).toHaveCount(0);await expect(page.getByRole('link',{name:'Staff sign-in',exact:true})).toBeVisible();expect(calls).toEqual([]);
  const response=await request.get('/api/ops/context?mode=development',{headers:{'x-mineralx-ops-mode':'development'}});
  expect([401,503]).toContain(response.status());expect(await response.text()).not.toContain('Development facility');
  const write=await request.post('/api/ops/command?mode=development',{
@@ -134,10 +134,10 @@ test('development choice never authorises live APIs and switching to staff stays
   headers:{'x-mineralx-ops-mode':'development'},
  });
  expect([401,403,503]).toContain(write.status());
- await page.getByRole('link',{name:'Open protected staff workspace →',exact:true}).click();
+ await page.getByRole('link',{name:'Staff sign-in',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();
  await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','staff');
- await page.getByRole('link',{name:'Continue without sign-in — development workspace'}).click();await expect(page.locator('.ops-development-banner')).toBeVisible();
+ await page.getByRole('link',{name:'Continue without sign-in — development workspace'}).click();await expect(page.locator('.ops-connection')).toContainText('Device workspace');
 });
 
 test('development backup downloads actual local PostgreSQL records and files',async({page})=>{
@@ -147,10 +147,10 @@ test('development backup downloads actual local PostgreSQL records and files',as
 });
 
 test('visiting staff sign-in does not replace the chosen device workspace',async({page})=>{
- await open(page,'/ops/pit');await page.getByRole('link',{name:'Staff sign-in',exact:true}).click();await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','staff');await page.goto('/ops/pit');await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});await expect(page.locator('.ops-development-banner')).toBeVisible();
+ await open(page,'/ops/pit');await page.getByRole('link',{name:'Staff sign-in',exact:true}).click();await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','staff');await page.goto('/ops/pit');await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});await expect(page.locator('.ops-connection')).toContainText('Device workspace');
 });
 test('the explicit staff gate offers an explicit return to the same device tool',async({page})=>{
- await page.goto('/ops/pit?mode=staff');await expect(page.getByRole('link',{name:'Staff sign in',exact:true})).toBeVisible({timeout:30000});const back=page.getByRole('link',{name:'Open device workspace',exact:true});await expect(back).toHaveAttribute('href','/ops/pit?mode=development');await back.click();await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});await expect(page.locator('.ops-development-banner')).toBeVisible();
+ await page.goto('/ops/pit?mode=staff');await expect(page.getByRole('link',{name:'Staff sign in',exact:true})).toBeVisible({timeout:30000});const back=page.getByRole('link',{name:'Open device workspace',exact:true});await expect(back).toHaveAttribute('href','/ops/pit?mode=development');await back.click();await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});await expect(page.locator('.ops-connection')).toContainText('Device workspace');
 });
 
 test('a legacy processing URL lands in Gold and keeps only compatible lot context',async({page})=>{

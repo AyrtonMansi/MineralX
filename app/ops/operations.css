@@ -8,11 +8,6 @@
 
 .ops-map-layout{display:grid;grid-template-columns:minmax(200px,260px) minmax(0,1fr);border:1px solid var(--ops-line,#dbe4db);border-radius:16px;overflow:hidden;margin:20px 0;background:#fff}.ops-map-menu{padding:20px;max-height:560px;overflow:auto}.ops-map-menu>div{border-top:1px solid #dbe4db;padding:12px 0}.ops-map-menu label{display:flex;gap:8px;align-items:center}.ops-map-menu input[type=checkbox]{width:auto}.ops-map-menu input[type=range]{width:100%}.ops-map-menu details{padding-top:8px}.ops-map-menu button{margin:8px 6px 0 0}.ops-map-canvas{min-height:480px;width:100%}@media(max-width:720px){.ops-map-layout{grid-template-columns:1fr}.ops-map-menu{max-height:230px}.ops-map-canvas{min-height:400px}}
 
-/* Temporary local-development status: visible on every workspace, including mobile. */
-.ops-development-banner{border:1px solid #a88735;background:#fff7df;color:#43320f;padding:14px 18px;margin-bottom:18px;border-radius:10px;font-size:14px;line-height:1.5;}
-.ops-development-banner p{margin:4px 0 8px;max-width:78ch;}
-.ops-development-banner a{display:inline-block;margin:0 20px 2px 0;text-decoration:underline;}
-@media print{.ops-development-banner{display:block!important;border:2px solid #111;} }
 /* Workflow upgrade: role-focused content, readable record density, no dashboard decoration. */
 .ops-home-grid,.ops-program-cards,.ops-launch-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0 24px}
 .ops-program-card{color:inherit;text-decoration:none;transition:border-color .15s,box-shadow .15s}

@@ -7,7 +7,7 @@ const TILE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQV
 async function openDevelopment(page, path = '/ops') {
   await page.route('**/api/basemap/**', (route) => route.fulfill({ contentType: 'image/png', body: TILE }));
   await page.goto(`${path}${path.includes('?') ? '&' : '?'}mode=development`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.ops-development-banner')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.ops-connection')).toContainText('Device workspace', { timeout: 30_000 });
 }
 
 test('the device workspace presents one minimal navigation without internal development scopes', async ({ page }) => {
