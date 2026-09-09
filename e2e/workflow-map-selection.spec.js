@@ -5,7 +5,7 @@ const region=(page,name)=>page.getByRole('region',{name,exact:true});
 async function save(form,button){await form.getByRole('button',{name:button,exact:true}).click();await expect(form).toHaveCount(0,{timeout:20000});}
 // Real local PostgreSQL, source normalization, MapLibre rendering and pointer events.
 // External background tiles alone are synthetic. No application or record APIs are mocked.
-test('the suite Globe opens the exact field record on a rendered point click, including after reload',async({page})=>{
+test('the shared Exploration map opens the exact field record on a rendered point click, including after reload',async({page})=>{
  test.setTimeout(75000);
  const errors=[],protectedRequests=[];page.on('pageerror',e=>errors.push(e.message));
  page.on('request',r=>{const u=new URL(r.url());if(u.pathname.startsWith('/api/ops/')||u.hostname.endsWith('.supabase.co'))protectedRequests.push(r.url());});
