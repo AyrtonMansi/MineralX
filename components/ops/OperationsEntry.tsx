@@ -23,9 +23,5 @@ export default function OperationsEntry() {
         <a className="ops-primary" href="/ops?mode=development">Open device workspace</a>
       </section>
     </div>
-    <section className="ops-entry-details">
-      <h2>Existing records</h2>
-      <div className="ops-actions"><a href="/gic">Processing register</a><a href="/mineralx">Local geology workspace</a><a href="/plant">Read-only plant reference</a></div>
-    </section>
   </main>;
 }

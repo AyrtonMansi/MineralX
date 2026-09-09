@@ -18,7 +18,7 @@ export default function Login(){
  {!configured&&<Message>Staff sign-in is awaiting identity service configuration.</Message>}
  {query.get('expired')&&<Message error>This sign-in link could not be verified. Request a new link.</Message>}
  {query.get('session')==='unconfirmed'&&<Message error>The server could not confirm your sign-in session. Allow cookies for this site and sign in again. Your account permissions have not been changed.</Message>}
- {(query.get('service')==='unavailable'||query.get('access')==='unavailable')&&<Message error>Account access could not be checked. This is not a confirmed password error. Try the existing processing sign-in below.</Message>}
+ {(query.get('service')==='unavailable'||query.get('access')==='unavailable')&&<Message error>Account access could not be checked. This is not a confirmed password error. Try again shortly or contact your MineralX administrator.</Message>}
  {error&&<Message error>{error}</Message>}{message&&<Message>{message}</Message>}
  <form onSubmit={async e=>{
   e.preventDefault();if(inFlight.current)return;inFlight.current=true;
@@ -47,7 +47,6 @@ export default function Login(){
  <button className="ops-primary" disabled={busy||!configured}>{busy?'Please wait…':mode==='signin'?'Sign in':'Send reset link'}</button>
  </form>
  <button className="ops-link" disabled={busy} onClick={()=>{setMode(mode==='signin'?'reset':'signin');setMessage('');setError('');}}>{mode==='signin'?'Forgot password?':'Return to sign in'}</button>
- <a href="/gic/login">Existing processing / admin sign-in</a>
  <a href="/ops?mode=development">Continue without sign-in — development workspace</a>
  <a href="/ops/field">Unlock prepared field records</a>
  </main>;

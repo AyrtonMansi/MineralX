@@ -10,12 +10,12 @@ async function open(page,path='/ops'){
  // Public map imagery is deterministic. Application, database, imports and local saving are real.
  await page.route('**/api/basemap/**',r=>r.fulfill({contentType:'image/png',body:TILE}));
  await page.goto(path+(path.includes('?')?'&':'?')+'mode=development',{waitUntil:'domcontentloaded'});
- await expect(page.getByRole('combobox',{name:'Workspace or site'})).toBeVisible({timeout:30000});
+ await expect(page.getByRole('combobox',{name:'Workspace or site'})).toHaveCount(0,{timeout:30000});
  await expect(page.locator('.ops-development-banner')).toContainText('no sign-in');
  return forbidden;
 }
 async function feed(page,reference){
- await page.getByRole('link',{name:'Plant',exact:true}).click();await page.getByRole('link',{name:'Processing',exact:true}).click();
+ await page.locator('#operations-navigation').getByRole('link',{name:'Processing',exact:true}).click();await page.getByRole('navigation',{name:'Processing workspace'}).getByRole('link',{name:'Processing',exact:true}).click();
  await page.getByRole('button',{name:'Feed',exact:true}).click();
  await page.getByRole('button',{name:'Record feed lot',exact:true}).click();
  const form=page.getByRole('region',{name:'Record feed lot',exact:true});
@@ -57,6 +57,24 @@ test('no-login suite uses real local save/reload and never requests protected se
  await expect(page.getByText('Development mode cannot approve production or sign custody.',{exact:false})).toBeVisible();
  expect(calls).toEqual([]);
  await page.screenshot({path:'test-results/development-gold-workflow.png',fullPage:true});
+});
+
+test('the first standalone task needs no work program',async({page})=>{
+ const calls=await open(page,`/ops?scope=${facility}`);
+ const firstSteps=page.locator('.ops-first-steps');
+ await expect(firstSteps.getByRole('heading',{name:'Start with the next accountable task.',exact:true})).toBeVisible({timeout:30000});
+ await expect(firstSteps.getByRole('button',{name:'Create work program',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Create first task',exact:true}).click();
+ const form=page.getByRole('region',{name:'Plan a task',exact:true});
+ const program=form.getByLabel('Work program (optional)',{exact:false});
+ await expect(program).toHaveValue('');
+ await expect(program.locator('option').first()).toHaveText('Standalone task — no work program');
+ await expect(form.getByText('Leave this as standalone for one-off work.',{exact:false})).toBeVisible();
+ await form.getByLabel('Task / work package title').fill('DEV-STANDALONE-TASK');
+ await form.getByRole('button',{name:'Save task',exact:true}).click();
+ await expect(form).toHaveCount(0);
+ await expect(page.getByText('DEV-STANDALONE-TASK',{exact:true})).toBeVisible();
+ expect(calls).toEqual([]);
 });
 
 test('geology capture, reviewed map import and original bytes survive reload without login',async({page})=>{
@@ -105,8 +123,8 @@ test('one browser writer prevents concurrent overwrites; separate browsers have 
 });
 
 test('development choice never authorises live APIs and switching to staff stays explicit',async({page,request})=>{
- const calls=await open(page);await page.getByRole('link',{name:'Development settings',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Development workspace',exact:true})).toBeVisible();expect(calls).toEqual([]);
+ const calls=await open(page);await expect(page.getByRole('link',{name:'Development settings',exact:true})).toHaveCount(0);
+ await expect(page.locator('.ops-development-banner')).toHaveAttribute('aria-label','Development workspace');expect(calls).toEqual([]);
  const response=await request.get('/api/ops/context?mode=development',{headers:{'x-mineralx-ops-mode':'development'}});
  expect([401,503]).toContain(response.status());expect(await response.text()).not.toContain('Development facility');
  const write=await request.post('/api/ops/command?mode=development',{
@@ -121,8 +139,8 @@ test('development choice never authorises live APIs and switching to staff stays
 });
 
 test('development backup downloads actual local PostgreSQL records and files',async({page})=>{
- const calls=await open(page);await feed(page,'BACKUP-DEVELOPMENT-ONLY');await page.getByRole('link',{name:'Development settings',exact:true}).click();
- const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download development backup'}).click();const file=await pending;
+ const calls=await open(page);await feed(page,'BACKUP-DEVELOPMENT-ONLY');
+ const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download device backup'}).click();const file=await pending;
  expect(file.suggestedFilename()).toMatch(/^MineralX-DEVELOPMENT-.*\.tgz$/);const bytes=await readFile(await file.path());expect(bytes[0]).toBe(0x1f);expect(bytes[1]).toBe(0x8b);expect(bytes.length).toBeGreaterThan(1000);expect(calls).toEqual([]);
 });
 
