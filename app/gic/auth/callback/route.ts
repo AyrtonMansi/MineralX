@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { configured, database } from "@/lib/gic/server";
 export async function GET(request: NextRequest) {
-  const meetings=request.cookies.get('mx-meeting-signin')?.value==='1';
-  const verified=()=>{const response=NextResponse.redirect(new URL(meetings?'/ops/meetings':'/gic/password',request.url));response.cookies.delete('mx-meeting-signin');response.headers.set('Cache-Control','private, no-store');response.headers.set('Referrer-Policy','no-referrer');return response;};
+  // Meeting links have their destination in the callback URL. Keep the GIC
+  // callback deterministic and clear the short-lived routing cookie left by
+  // earlier deployments.
+  const verified=()=>{const response=NextResponse.redirect(new URL('/gic/password',request.url));response.cookies.delete('mx-meeting-signin');response.headers.set('Cache-Control','private, no-store');response.headers.set('Referrer-Policy','no-referrer');return response;};
   if (!configured())
     return NextResponse.redirect(new URL("/gic/login", request.url));
   const db = await database();

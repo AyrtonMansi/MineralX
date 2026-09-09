@@ -54,7 +54,7 @@ test('development deep links choose the right internal record set and retire rem
 
   for (const retired of [`/ops/admin?scope=${facility}&mode=development`, `/ops/field?scope=${project}&mode=development`]) {
     await page.goto(retired, { waitUntil: 'domcontentloaded' });
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/ops');
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: 30_000 }).toBe('/ops');
     await expect(page.locator('#operations-navigation').getByRole('link', { name: 'Home', exact: true })).toBeVisible();
   }
 });

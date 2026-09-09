@@ -45,16 +45,31 @@ jobs:
             if curl -fsS http://localhost:3000/api/mineralx-release > /tmp/release.json; then break; fi
             sleep 1
           done
-          for path in / /company /contact /clothing /gic/login /plant /mineralx; do
+          for path in / /company /contact /clothing /gic/login /plant /mineralx /maplibre/maplibre-gl-worker.mjs /maplibre/maplibre-gl-shared.mjs; do
             curl -fsS "http://localhost:3000$path" > /dev/null
             echo "PASS $path"
           done
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+
+          for (const path of ['/ops/meetings', '/api/ops/meetings']) {
+            const response = await fetch(`http://localhost:3000${path}`, { redirect: 'manual' });
+            assert.match(response.headers.get('cache-control') || '', /no-store/i, `${path} must not be cacheable`);
+            assert.match(response.headers.get('x-robots-tag') || '', /^noindex,\s*nofollow(?:,\s*noarchive)?$/i, `${path} must be excluded from indexing`);
+            assert.equal(response.headers.get('x-content-type-options'), 'nosniff', `${path} must prevent MIME sniffing`);
+            assert.equal(response.headers.get('x-frame-options'), 'DENY', `${path} must prevent framing`);
+            assert.equal(response.headers.get('referrer-policy'), 'no-referrer', `${path} must not leak private paths`);
+            assert.equal(response.headers.get('x-permitted-cross-domain-policies'), 'none', `${path} must not allow cross-domain policy files`);
+            console.log(`PASS private headers ${path} (${response.status})`);
+          }
+          NODE
           cat /tmp/release.json
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Browser acceptance paths against production build
         run: |
           npx playwright test --config=playwright.release.config.js
+          npx playwright test e2e/globe.spec.js --workers=1
           cp test-results/geology-release.json test-results/geology-local-acceptance.json
       - name: Verify deployed production revision and browser shell
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

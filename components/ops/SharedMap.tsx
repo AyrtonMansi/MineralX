@@ -2,6 +2,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {boundaryData,spatialBounds} from '@/components/mineralx/spatial-import.js';
 import {sharedLayerData,selectSharedMapRecord,interactiveSharedLayers} from '@/lib/ops/map-selection';
+import {configureMapLibreWorker} from '@/lib/maplibre-worker';
 import {Message} from './primitives';
 import 'maplibre-gl/dist/maplibre-gl.css';
 export default function SharedMap({project,userId,onOpen}:{project:any;userId:string;onOpen:(kind:string,id:string)=>void}){
@@ -13,7 +14,11 @@ export default function SharedMap({project,userId,onOpen}:{project:any;userId:st
  {id:'targets',name:'Targets',kind:'targets',data:{type:'FeatureCollection',features:(project.targets||[]).filter((s:any)=>!s.archivedAt&&Number.isFinite(s.lat)&&Number.isFinite(s.lng)).map((s:any)=>({type:'Feature',id:s.recordId,properties:{name:s.name||s.id,recordId:s.recordId},geometry:{type:'Point',coordinates:[s.lng,s.lat]}}))}},
  ...(project.boundary?[{id:'boundary',name:project.boundary.name||'Tenement boundaries',kind:'boundary',data:boundaryData(project.boundary)}]:[])], [project]);
  useEffect(()=>{try{const s=JSON.parse(localStorage.getItem(key)||'{}');setVisibility(s.visibility||{});setOpacity(s.opacity||{});}catch{setVisibility({});setOpacity({});setError('Map preferences could not be read. Shared geometry remains unchanged.');}},[key]);
- useEffect(()=>{let closed=false;import('maplibre-gl').then(({default:mgl})=>{if(closed||!target.current)return;const map=new mgl.Map({container:target.current,style:{version:8,sources:{base:{type:'raster',tiles:['/api/basemap/satellite/{z}/{x}/{y}'],tileSize:256,attribution:'Esri World Imagery'}},layers:[{id:'base',type:'raster',source:'base'}]},center:[144,-20],zoom:5,attributionControl:{}});mapRef.current=map;map.addControl(new mgl.NavigationControl(),'top-right');map.on('load',()=>{map.setProjection({type:'globe'});if(!closed)setReady(n=>n+1);});map.on('error',()=>{if(!closed)setError('A reference tile or map layer did not load. Saved project records are unaffected; offline basemap coverage is not included.');});}).catch(()=>{if(!closed)setError('This device could not open the map. Use the coordinate registers.');});return()=>{closed=true;mapRef.current?.remove();mapRef.current=null;};},[]);
+ useEffect(()=>{let closed=false;import('maplibre-gl').then(mgl=>{if(closed||!target.current)return;configureMapLibreWorker(mgl);const map=new mgl.Map({container:target.current,style:{version:8,sources:{base:{type:'raster',tiles:['/api/basemap/satellite/{z}/{x}/{y}'],tileSize:256,attribution:'Esri World Imagery'}},layers:[{id:'base',type:'raster',source:'base'}]},center:[144,-20],zoom:5,attributionControl:{}});mapRef.current=map;map.addControl(new mgl.NavigationControl(),'top-right');
+ // The dedicated Geology Globe owns globe rendering. This operational map stays
+ // Mercator so nearby field coordinates, fit bounds, and rendered-feature hits stay
+ // precise and consistent across MapLibre v6-capable devices.
+ map.on('load',()=>{if(!closed)setReady(n=>n+1);});map.on('error',()=>{if(!closed)setError('A reference tile or map layer did not load. Saved project records are unaffected; offline basemap coverage is not included.');});}).catch(()=>{if(!closed)setError('This device could not open the map. Use the coordinate registers.');});return()=>{closed=true;mapRef.current?.remove();mapRef.current=null;};},[]);
  // The load event establishes style readiness. isStyleLoaded() can become false again
  // while projection/source work is pending; returning then would permanently skip layers
  // and detach selection handlers, because tile completion is not a React dependency.

@@ -9,8 +9,10 @@ const nextConfig = {
       { key: "Referrer-Policy", value: "no-referrer" },
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Strict-Transport-Security", value: "max-age=31536000" },
+      { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
     ];
-    return ["/gic/:path*", "/gic-review.html"].map(source => ({ source, headers: privateHeaders }));
+    return ["/gic/:path*", "/gic-review.html", "/ops/:path*", "/api/ops/:path*"].map(source => ({ source, headers: privateHeaders }));
   },
   async rewrites() {
     return [{ source: "/clothing", destination: "/clothing/index.html" }];

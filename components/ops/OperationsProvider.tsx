@@ -17,17 +17,19 @@ export default function OperationsProvider({children,development=false}:{childre
  const router=useRouter(),query=useSearchParams(),pathname=usePathname();const [context,setContext]=useState<Context|null>(null),[loading,setLoading]=useState(true),[failure,setFailure]=useState<OpsError|null>(null),[online,setOnline]=useState(true),[offlineMode,setOfflineMode]=useState(false),[pack,setPack]=useState<FieldPack|null>(null),[revision,bump]=useState(0),[syncing,setSyncing]=useState(false),[saveState,setSaveState]=useState('');
  const vault=useRef<Vault|null>(null),queue=useRef<Promise<unknown>>(Promise.resolve()),contextRef=useRef<Context|null>(null),syncRef=useRef<Promise<void>|null>(null);
  const requestedScopeId=query.get('scope');
- const scope=development?scopeForOperationsPath(context?.scopes,pathname,requestedScopeId||undefined):(requestedScopeId?context?.scopes.find(s=>s.id===requestedScopeId):context?.scopes[0]);
+ // A copied or stale deep link can name a facility for a project-only screen
+ // (or the reverse). Resolve it through the same compatibility rules as the
+ // workspace selector, so the page never opens against the wrong boundary.
+ const scope=scopeForOperationsPath(context?.scopes,pathname,requestedScopeId||undefined);
  const refresh=useCallback(async()=>{setLoading(true);try{const c=await api<Context>('context');
  if(contextRef.current?.userId&&contextRef.current.userId!==c.userId){vault.current=null;setPack(null);}
  contextRef.current=c;setContext(c);setFailure(null);setOfflineMode(false);bump(n=>n+1);
  }catch(e){setFailure(e as OpsError);if((e as OpsError).code==='unauthenticated'||(e as OpsError).code==='forbidden'){setContext(null);contextRef.current=null;vault.current=null;setPack(null);}}
  finally{setLoading(false);}},[]);
  useEffect(()=>{refresh();const change=()=>setOnline(navigator.onLine);change();window.addEventListener('online',change);window.addEventListener('offline',change);return()=>{window.removeEventListener('online',change);window.removeEventListener('offline',change);};},[refresh]);
- // A local Development workspace contains separate geological and processing
- // boundaries for data integrity. Route users to the right one automatically
- // so neither raw boundary has to be selected in the UI.
- useEffect(()=>{if(!development||!context||!scope||requestedScopeId===scope.id)return;router.replace(scopeSwitchDestination(pathname,query.toString(),scope));},[context,development,pathname,query,requestedScopeId,router,scope]);
+ // Retire stale or incompatible scope links without exposing the internal
+ // project and facility boundaries as a choice on the destination page.
+ useEffect(()=>{if(!context||!scope||!requestedScopeId||requestedScopeId===scope.id)return;router.replace(scopeSwitchDestination(pathname,query.toString(),scope));},[context,pathname,query,requestedScopeId,router,scope]);
  useEffect(()=>{if(development)return;let stop=()=>{};try{const {data}=authClient().auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'||session?.user.id&&contextRef.current?.userId&&session.user.id!==contextRef.current.userId){vault.current=null;setPack(null);setContext(null);contextRef.current=null;setOfflineMode(false);setTimeout(()=>void refresh(),0);}});stop=()=>data.subscription.unsubscribe();}catch{}return stop;},[refresh,development]);
  // Shared views refresh on foreground/resume. Dirty forms retain their original version for conflict checks.
  useEffect(()=>{if(development)return;let last=0;

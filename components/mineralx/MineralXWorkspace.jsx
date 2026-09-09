@@ -36,6 +36,7 @@ import MapLayersPanel from './MapLayersPanel.jsx';
 import SpatialImportPanel from './SpatialImportPanel.jsx';
 import useSpatialLayers from './useSpatialLayers.js';
 import { boundaryData, commitSpatialImports, dataToKml, downloadSpatialSource, spatialBounds } from './spatial-import.js';
+import { configureMapLibreWorker } from '@/lib/maplibre-worker';
 
 // ── Main component ─────────────────────────────────────────────────────
 export default function MineralXWorkspace() {
@@ -75,6 +76,7 @@ export default function MineralXWorkspace() {
   const [basemap, setBasemap] = useState('satellite');
   const [activeElement, setActiveElement] = useState('Au');
   const [mapReady, setMapReady] = useState(false);
+  const [mapUnavailable, setMapUnavailable] = useState('');
   const [mapEpoch, setMapEpoch] = useState(0); // bumped to force a full map remount after a recovered render crash
   const [programOpen, setProgramOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -551,8 +553,10 @@ export default function MineralXWorkspace() {
       mapInstance.current = null;
     }
     (async () => {
-      const maplibregl = (await import('maplibre-gl')).default;
+      try {
+      const maplibregl = configureMapLibreWorker(await import('maplibre-gl'));
       if (cancelled) return;
+      setMapUnavailable('');
       mgl.current = maplibregl;
       flownToProject.current = false;
       const map = new maplibregl.Map({
@@ -597,6 +601,14 @@ export default function MineralXWorkspace() {
       const ro = new ResizeObserver(() => map.resize());
       ro.observe(mapRef.current);
       resizeObs.current = ro;
+      } catch {
+        if (!cancelled) {
+          mgl.current = null;
+          mapInstance.current = null;
+          setMapReady(false);
+          setMapUnavailable('The 3D Globe could not open on this device. Use an up-to-date browser with WebGL 2; your local project records remain available in the panels.');
+        }
+      }
     })();
     return () => {
       cancelled = true;
@@ -837,6 +849,7 @@ export default function MineralXWorkspace() {
   return (
     <div className="mx-workspace">
       <div ref={mapRef} className="mx-map" />
+      {mapUnavailable && <p className="mx-map-unavailable" role="status">{mapUnavailable}</p>}
 
       {/* TOP BAR */}
       <div className="mx-topbar">

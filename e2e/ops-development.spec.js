@@ -11,7 +11,9 @@ async function open(page,path='/ops'){
  await page.route('**/api/basemap/**',r=>r.fulfill({contentType:'image/png',body:TILE}));
  await page.goto(path+(path.includes('?')?'&':'?')+'mode=development',{waitUntil:'domcontentloaded'});
  await expect(page.getByRole('combobox',{name:'Workspace or site'})).toHaveCount(0,{timeout:30000});
- await expect(page.locator('.ops-development-banner')).toContainText('no sign-in');
+ // The first browser-local workspace open compiles the self-hosted database
+ // runtime and can legitimately take longer than Playwright's 5s default.
+ await expect(page.locator('.ops-development-banner')).toContainText('no sign-in',{timeout:30000});
  return forbidden;
 }
 async function feed(page,reference){

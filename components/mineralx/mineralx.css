@@ -39,6 +39,22 @@
   height: auto; /* beat any `height` MapLibre's own class might set */
   z-index: 1;
 }
+.mx-map-unavailable {
+  position: absolute;
+  z-index: 3;
+  top: 76px;
+  left: 24px;
+  max-width: min(460px, calc(100vw - 48px));
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(106, 56, 37, 0.35);
+  border-radius: 8px;
+  background: rgba(255, 246, 238, 0.96);
+  color: #54291A;
+  box-shadow: 0 5px 16px rgba(33, 30, 26, 0.14);
+  font-size: 13px;
+  line-height: 1.4;
+}
 .mx-workspace .maplibregl-map { background: #CFCABC; font-family: 'Instrument Sans', sans-serif; }
 .mx-workspace .maplibregl-ctrl-bottom-right { margin-bottom: 88px !important; }
 .mx-workspace .maplibregl-ctrl-group { border: none !important; box-shadow: 0 6px 20px rgba(33,30,26,0.18) !important; background: rgba(247,245,238,0.9) !important; backdrop-filter: blur(8px); }

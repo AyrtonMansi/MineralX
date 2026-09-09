@@ -1,9 +1,10 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {boundaryData} from '@/components/mineralx/spatial-import.js';
+import {configureMapLibreWorker} from '@/lib/maplibre-worker';
 export default function ProjectMap({project,onOpen}:{project:any;onOpen:(kind:string,id:string)=>void}){
  const container=useRef<HTMLDivElement>(null),map=useRef<any>(null),[error,setError]=useState('');
- useEffect(()=>{let stopped=false;let active:any;async function load(){try{const {default:maplibre}=await import('maplibre-gl');if(stopped||!container.current)return;
+ useEffect(()=>{let stopped=false;let active:any;async function load(){try{const maplibre=await import('maplibre-gl');if(stopped||!container.current)return;configureMapLibreWorker(maplibre);
  const features:any[]=[];
  for(const [kind,rows] of [['samples',project.samples],['collars',project.collars],['targets',project.targets]] as [string,any[]][]){for(const r of rows||[])if(!r.archivedAt&&Number.isFinite(r.lng)&&Number.isFinite(r.lat))features.push({type:'Feature',geometry:{type:'Point',coordinates:[r.lng,r.lat]},properties:{kind,id:r.recordId,label:r.id||r.name}});}
  for(const l of project.spatialLayers||[])if(!l.archivedAt)for(const f of l.data?.features||[])features.push({...f,properties:{kind:'spatialLayers',id:l.recordId,label:l.name}});

@@ -39,6 +39,7 @@ next-env.d.ts
 .supabase
 
 /public/ops-development-assets/
+/public/maplibre/
 /lib/ops/development-schema.generated.ts
 
 /playwright.local-dev.config.js

@@ -4,10 +4,13 @@ type Result={error:ProviderError|null};
 export async function sendMeetingSignIn(email:string,origin:string,provider:{invite:(email:string,redirectTo:string)=>Promise<Result>;signIn:(email:string,redirectTo:string)=>Promise<Result>}){
  // Unconfirmed identities are treated as signups by the magic-link endpoint.
  // Invitation-only projects therefore need an administrator invitation first.
- const invited=await provider.invite(email,origin+'/ops/auth/complete?next=/ops/meetings');
+ // Keep the protected destination in the link itself. A separate browser cookie
+ // could route an unrelated GIC email link to Meetings or expire before use.
+ const meetingComplete=origin+'/ops/auth/complete?next=/ops/meetings';
+ const invited=await provider.invite(email,meetingComplete);
  if(!invited.error)return 'invitation' as const;
  if(invited.error.code!=='email_exists')throw invited.error;
- const signedIn=await provider.signIn(email,origin+'/gic/auth/callback');
+ const signedIn=await provider.signIn(email,meetingComplete);
  if(signedIn.error)throw signedIn.error;
  return 'sign-in' as const;
 }

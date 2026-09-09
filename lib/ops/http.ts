@@ -1,7 +1,16 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {OpsError,statusFor} from './contracts';
-export function noStore(value:unknown,status=200) {return NextResponse.json(value,{status,headers:{'Cache-Control':'private, no-store, max-age=0','X-Robots-Tag':'noindex, nofollow','X-Content-Type-Options':'nosniff'}});}
+export const privateResponseHeaders={
+ 'Cache-Control':'private, no-store, max-age=0',
+ 'X-Robots-Tag':'noindex, nofollow',
+ 'X-Content-Type-Options':'nosniff',
+ 'Referrer-Policy':'no-referrer',
+ 'X-Frame-Options':'DENY',
+ 'Strict-Transport-Security':'max-age=31536000',
+ 'X-Permitted-Cross-Domain-Policies':'none',
+} as const;
+export function noStore(value:unknown,status=200) {return NextResponse.json(value,{status,headers:privateResponseHeaders});}
 export function failure(error:unknown,requestId=crypto.randomUUID()) {
  const known=error instanceof OpsError?error:error instanceof z.ZodError?new OpsError('validation','Check the required fields and record identifiers.'):new OpsError('unavailable','The request could not be confirmed. Your entry is retained.');
  // No payloads, credentials or private locations enter application logs.

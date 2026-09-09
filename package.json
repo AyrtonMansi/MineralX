@@ -8,9 +8,9 @@
     "node": "22.x"
   },
   "scripts": {
-    "predev": "node clothing/scripts/mount.mjs && node scripts/mount-ops-development.mjs",
+    "predev": "node clothing/scripts/mount.mjs && node scripts/mount-ops-development.mjs && node scripts/mount-maplibre-assets.mjs",
     "dev": "next dev",
-    "prebuild": "node clothing/scripts/verify.mjs && node clothing/scripts/mount.mjs && node scripts/mount-ops-development.mjs",
+    "prebuild": "node clothing/scripts/verify.mjs && node clothing/scripts/mount.mjs && node scripts/mount-ops-development.mjs && node scripts/mount-maplibre-assets.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -21,7 +21,7 @@
     "verify:endpoints": "node scripts/verify-endpoints.mjs",
     "test:ops": "node --import tsx --test tests/ops/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node scripts/mount-ops-development.mjs"
+    "postinstall": "node scripts/mount-ops-development.mjs && node scripts/mount-maplibre-assets.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -31,7 +31,7 @@
     "@xmldom/xmldom": "0.9.12",
     "framer-motion": "^11.3.19",
     "gray-matter": "^4.0.3",
-    "maplibre-gl": "^5.24.0",
+    "maplibre-gl": "6.8.0",
     "marked": "^18.0.5",
     "next": "15.5.25",
     "proj4": "^2.20.9",
