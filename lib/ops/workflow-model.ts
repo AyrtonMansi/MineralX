@@ -8,10 +8,14 @@ function normaliseProgramChoice(row:any){
  if(typeof id!=='string'||!id)return null;
  return {...data,id,recordId:id,version:stored?row.version:data?.version,scope_id:stored?row.scope_id:data?.scope_id,updated_at:stored?row.updated_at:data?.updated_at};
 }
+/** A scope-local program list for historical views. It deliberately retains closed work so linked records remain reviewable. */
+export function programChoices(source:any){
+ const rows=Array.isArray(source)?source:source?.programs||[];
+ return rows.map(normaliseProgramChoice).filter(Boolean);
+}
 /** A scope-local program list suitable for new links. Completed and cancelled work remains visible in its history, not in new-entry selectors. */
 export function openProgramChoices(source:any){
- const rows=Array.isArray(source)?source:source?.programs||[];
- return rows.map(normaliseProgramChoice).filter((program:any)=>program&&!closedProgramStates.has(String(program.state??program.status??'').toLowerCase()));
+ return programChoices(source).filter((program:any)=>!closedProgramStates.has(String(program.state??program.status??'').toLowerCase()));
 }
 /** The processing projection of open canonical work programs, for facility and gold selectors. */
 export function processingProgramChoices(source:any){return openProgramChoices(source).filter((program:any)=>String(program.type||'').toLowerCase()==='processing');}
