@@ -3,7 +3,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {DevelopmentEngine} from './development-engine';
 import {DurableDevelopment,readDevelopmentSnapshot,writeDevelopmentSnapshot} from './development-storage';
 import {OpsError} from './contracts';
-import {publishDevelopmentPrograms,readDeviceProgramRegistry,type DeviceProgramRegistry} from './device-program-bridge';
+import {deviceProgramsForGlobeProject,publishDevelopmentPrograms,readDeviceProgramRegistry,type DeviceProgramRegistry} from './device-program-bridge';
 import {DEVELOPMENT_PROJECT} from './development-policy';
 let opened:Promise<DurableDevelopment>|undefined;
 let queue:Promise<unknown>=Promise.resolve();
@@ -58,32 +58,47 @@ function bridgeRequest(path:string,data?:unknown){
  */
 export type DeviceProgramBridgePort={
  read:()=>Promise<{registry:DeviceProgramRegistry;revision:number}>;
- publish:(programs:any[])=>Promise<unknown>;
+ publish:(programs:any[],globeProjectId:string)=>Promise<unknown>;
 };
 const browserDeviceProgramBridge:DeviceProgramBridgePort={read:readDeviceProgramRegistry,publish:publishDevelopmentPrograms};
 
 async function synchroniseDevicePrograms(engine:DevelopmentEngine,bridge:DeviceProgramBridgePort){
+ let globeProjectId:string|null=null;
  try{
   const {registry}=await bridge.read();
-  await engine.importDevicePrograms(registry.programs);
-  await bridge.publish(await engine.deviceProjectPrograms());
+  globeProjectId=registry.activeGlobeProjectId;
+  if(!globeProjectId)return null;
+  await engine.importDevicePrograms(deviceProgramsForGlobeProject(registry,globeProjectId),globeProjectId);
+  await bridge.publish(await engine.deviceProjectPrograms(globeProjectId),globeProjectId);
  }catch{
   // Keep the PGlite workspace usable and retry this optional mirror later.
  }
+ return globeProjectId;
 }
 
-async function mirrorDevelopmentPrograms(engine:DevelopmentEngine,bridge:DeviceProgramBridgePort){
- try{await bridge.publish(await engine.deviceProjectPrograms());}catch{
+async function mirrorDevelopmentPrograms(engine:DevelopmentEngine,bridge:DeviceProgramBridgePort,globeProjectId:string|null){
+ if(!globeProjectId)return;
+ try{await bridge.publish(await engine.deviceProjectPrograms(globeProjectId),globeProjectId);}catch{
   // The local command is already durable. A future refresh can mirror it.
  }
+}
+
+function programCommandId(data:unknown){
+ if(!data||typeof data!=='object')return null;
+ const command=data as {scopeId?:unknown;action?:unknown;id?:unknown};
+ return command.scopeId===DEVELOPMENT_PROJECT&&['program.save','geo.program.create'].includes(String(command.action))&&typeof command.id==='string'?command.id:null;
 }
 
 /** Exported for regression coverage of the browser-local, fail-open bridge. */
 export async function requestDevelopmentWithDeviceProgramBridge(engine:DevelopmentEngine,path:string,data?:unknown,deviceBridge:DeviceProgramBridgePort=browserDeviceProgramBridge){
  const bridge=bridgeRequest(path,data);
- if(bridge)await synchroniseDevicePrograms(engine,deviceBridge);
- const result=await engine.request(path,data);
- if(bridge)await mirrorDevelopmentPrograms(engine,deviceBridge);
+ const globeProjectId=bridge?await synchroniseDevicePrograms(engine,deviceBridge):null;
+ const result=await engine.request(path,data,globeProjectId);
+ const programId=bridge&&globeProjectId?programCommandId(data):null;
+ if(programId)try{await engine.bindDeviceProgram(programId,globeProjectId!);}catch{
+  // The local command is durable even when an old registry refuses a cross-project bind.
+ }
+ if(bridge)await mirrorDevelopmentPrograms(engine,deviceBridge,globeProjectId);
  return result;
 }
 export const developmentApi=(path:string,data?:unknown)=>task(async db=>{

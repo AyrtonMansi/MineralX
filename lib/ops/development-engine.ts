@@ -13,8 +13,37 @@ const fault=(message:string):never=>{throw new OpsError('validation',message);};
 const unsigned='This action needs a named, verified staff account. Development records cannot approve production, sign custody or change staff access.';
 const digest=async(bytes:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
+const localGlobeProjectId=(value:unknown)=>{const id=typeof value==='string'?value.trim():'';if(!id||id.length>160)fault('Choose a valid local Globe project before linking Programs.');return id;};
 export class DevelopmentEngine {
   constructor(readonly db:PGlite){}
+  /**
+   * This table exists only inside the browser-local PGlite snapshot. It maps
+   * a canonical Program UUID to one local Globe project and is deliberately
+   * absent from production migrations and staff/meeting storage.
+   */
+  private async ensureDeviceProgramBindings(){
+    await this.db.exec(`create table if not exists public.mineralx_device_program_bindings(
+      program_id uuid primary key references mx_ops.geo_programs(id) on delete cascade,
+      globe_project_id text not null check(length(trim(globe_project_id)) between 1 and 160)
+    );create index if not exists mineralx_device_program_bindings_project on public.mineralx_device_program_bindings(globe_project_id,program_id);`);
+  }
+  private async deviceProgramBinding(programId:string){
+    const result=await this.db.query<{globe_project_id:string}>('select globe_project_id from public.mineralx_device_program_bindings where program_id=$1',[programId]);
+    return result.rows[0]?.globe_project_id||null;
+  }
+  private async deviceProgramIds(globeProjectId:string){
+    const result=await this.db.query<{program_id:string}>('select program_id from public.mineralx_device_program_bindings where globe_project_id=$1',[localGlobeProjectId(globeProjectId)]);
+    return new Set(result.rows.map(row=>row.program_id));
+  }
+  /** Bind a locally-created Program only to the current local Globe project. */
+  async bindDeviceProgram(programId:string,globeProjectId:string){
+    const projectId=localGlobeProjectId(globeProjectId);if(!uuid.test(programId))fault('The local Program identity is invalid.');
+    const program=await this.db.query<{id:string}>('select id from mx_ops.geo_programs where id=$1 and scope_id=$2',[programId,PROJECT]);
+    if(!program.rows[0])fault('The local Program could not be found for Globe linking.');
+    const existing=await this.deviceProgramBinding(programId);
+    if(existing&&existing!==projectId)fault('This Program belongs to another local Globe project. Its identity was not moved.');
+    if(!existing)await this.db.query('insert into public.mineralx_device_program_bindings(program_id,globe_project_id) values($1,$2)',[programId,projectId]);
+  }
   async initialise(){
     const existing=await this.db.query<{name:string|null}>("select to_regclass('public.mineralx_development_meta')::text as name");
     if(existing.rows[0].name){
@@ -41,6 +70,7 @@ export class DevelopmentEngine {
         version=9;
       }
       if(version!==9)fault('Unsupported development database version. Keep your recovery copy.');
+      await this.ensureDeviceProgramBindings();
       return;
     }
     await this.db.transaction(async tx=>{
@@ -60,6 +90,7 @@ export class DevelopmentEngine {
       for(const scope of [FACILITY,PROJECT])await tx.query('insert into mx_ops.members(scope_id,user_id,profiles) values($1,$2,$3)',[scope,ACTOR,Object.keys(permissionProfiles)]);
       await tx.exec('create table public.mineralx_development_meta(version integer primary key);insert into public.mineralx_development_meta values(1);create table public.mineralx_development_bytes(id uuid primary key,bytes bytea not null);');
     });
+    await this.ensureDeviceProgramBindings();
   }
   private async asActor<T>(sql:string,args:unknown[]=[],service=false):Promise<T>{
     return this.db.transaction(async tx=>{
@@ -93,17 +124,42 @@ export class DevelopmentEngine {
    * meeting boundary: the scope is a fixed local PGlite scope, never caller
    * supplied, and the canonical program command retains its UUID.
    */
-  async importDevicePrograms(programs:readonly DeviceProgram[]){
+  async importDevicePrograms(programs:readonly DeviceProgram[],globeProjectId:string){
+    const projectId=localGlobeProjectId(globeProjectId);
     const current=await this.geology(PROJECT),known=new Set((current.project.programs||[]).map((program:any)=>program.recordId));let created=0;
     for(const program of programs){
-      if(program.origin!=='globe'||!uuid.test(program.recordId)||!program.name?.trim()||program.name.trim().length>160||known.has(program.recordId))continue;
-      await this.rpc('mx_ops_command',[PROJECT,crypto.randomUUID(),'program.save',program.recordId,0,json({name:program.name.trim(),type:'sampling',state:'planned',method:program.method})]);
-      known.add(program.recordId);created++;
+      if(program.origin!=='globe'||program.globeProjectId!==projectId||!uuid.test(program.recordId)||!program.name?.trim()||program.name.trim().length>160)continue;
+      // A legacy PGlite snapshot may already have this UUID. It can be bound
+      // to this source project once, but it is never repurposed for another.
+      const existingBinding=await this.deviceProgramBinding(program.recordId);
+      if(existingBinding&&existingBinding!==projectId)continue;
+      if(!known.has(program.recordId)){
+        await this.rpc('mx_ops_command',[PROJECT,crypto.randomUUID(),'program.save',program.recordId,0,json({name:program.name.trim(),type:'sampling',state:'planned',method:program.method})]);
+        known.add(program.recordId);created++;
+      }
+      await this.bindDeviceProgram(program.recordId,projectId);
     }
     return {created};
   }
-  /** Exposes only the local Development project's program metadata to the local registry. */
-  async deviceProjectPrograms(){return (await this.geology(PROJECT)).project.programs||[];}
+  /**
+   * Exposes only the current Globe project's local Program metadata to the
+   * registry. Omitting the argument is reserved for non-bridge development
+   * maintenance and is never used by the browser bridge.
+   */
+  async deviceProjectPrograms(globeProjectId?:string|null){
+    const programs=(await this.geology(PROJECT)).project.programs||[];
+    if(globeProjectId===undefined)return programs;
+    if(!globeProjectId)return [];
+    const ids=await this.deviceProgramIds(globeProjectId);
+    return programs.filter((program:any)=>ids.has(program.recordId));
+  }
+  private async filterDeviceProgramResponse(kind:string,result:any,globeProjectId:string|null|undefined){
+    if(!globeProjectId)return result;
+    const ids=await this.deviceProgramIds(globeProjectId),allowed=(row:any)=>ids.has(row?.id||row?.recordId);
+    if(kind==='workflow')return {...result,programs:(result?.programs||[]).filter(allowed)};
+    if(kind==='geology')return {...result,project:{...result.project,programs:(result?.project?.programs||[]).filter(allowed)}};
+    return result;
+  }
   async source(scopeId:string,id:string){
     this.scope(scopeId);const files=await this.rpc('mx_ops_files',[scopeId,id]),file=files?.[0];if(!file||file.status!=='verified')fault('Choose a verified file saved in this development workspace.');
     const result=await this.db.query<{bytes:Uint8Array}>('select bytes from mineralx_development_bytes where id=$1',[id]);
@@ -147,7 +203,7 @@ export class DevelopmentEngine {
     const before=projectMetadata(baseline.project),after=projectMetadata(next),metadata=!baseline.metadataVersion||json(before)!==json(after)?{expectedVersion:baseline.metadataVersion,data:after}:null;
     return this.rpc('mx_ops_geo_commit',[command.scopeId,ACTOR,'aal1',command.requestId,command.action,command.id,json(command),json(changes),metadata?json(metadata):null],true);
   }
-  async request(path:string,data?:unknown):Promise<any>{
+  async request(path:string,data?:unknown,globeProjectId?:string|null):Promise<any>{
     try{
       const u=new URL(path,'https://development.invalid/'),q=u.searchParams,kind=u.pathname.slice(1);
       if(kind==='context'&&data===undefined)return this.context();
@@ -160,7 +216,7 @@ export class DevelopmentEngine {
       }
       const scope=this.scope(q.get('scope'));
       switch(kind){
-        case 'workflow':return this.rpc('mx_ops_workflow',[scope]);
+        case 'workflow':return this.filterDeviceProgramResponse(kind,await this.rpc('mx_ops_workflow',[scope]),globeProjectId);
         case 'processing-programs':return this.rpc('mx_ops_processing_programs',[scope]);
         case 'workflow-history':return this.rpc('mx_ops_workflow_history',[scope,q.get('id')]);
         case 'dashboard':return this.rpc('mx_ops_dashboard',[scope,q.get('from')||new Date(Date.now()-30*864e5).toISOString(),q.get('to')||new Date().toISOString()]);
@@ -170,7 +226,7 @@ export class DevelopmentEngine {
         case 'documents':return this.rpc('mx_ops_documents',[scope]);
         case 'files':return this.rpc('mx_ops_files',[scope,null]);
         case 'search':return this.rpc('mx_ops_search',[scope,q.get('q')]);
-        case 'geology':return this.geology(scope);
+        case 'geology':return this.filterDeviceProgramResponse(kind,await this.geology(scope),globeProjectId);
         default:fault('Unavailable in the temporary development workspace. Nothing was sent to production.');
       }
     }catch(e){if(e instanceof OpsError)throw e;if((e as any).code)throw classifyDatabaseError(e as any);throw new OpsError('validation',(e as Error).message||'The development record could not be saved.');}

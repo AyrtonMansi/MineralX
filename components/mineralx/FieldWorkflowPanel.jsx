@@ -53,7 +53,7 @@ export default function FieldWorkflowPanel({persistence,onNavigate,onTool,onFocu
       });
       setBridgeIssue('');
     };
-    const publish=async()=>{try{apply(await publishGlobePrograms({id:project.id,programs:project.programs||[]}));}catch(error){if(active)setBridgeIssue('The device-only Program link is unavailable. Globe records remain saved locally; reopen Operations development to retry.');}};
+    const publish=async()=>{try{apply(await publishGlobePrograms({id:project.id,programs:project.programs||[]},()=>active));}catch(error){if(active)setBridgeIssue('The device-only Program link is unavailable. Globe records remain saved locally; reopen Operations development to retry.');}};
     const refresh=async()=>{try{apply((await readDeviceProgramRegistry()).registry);}catch(error){if(active)setBridgeIssue('The device-only Program link is unavailable. Globe records remain saved locally; reopen Operations development to retry.');}};
     void publish();
     const unsubscribe=subscribeDeviceProgramRegistry(()=>{void refresh();});

@@ -4,14 +4,14 @@ import {PGlite} from '@electric-sql/pglite';
 import {DevelopmentEngine} from '../../lib/ops/development-engine';
 import {requestDevelopmentWithDeviceProgramBridge,type DeviceProgramBridgePort} from '../../lib/ops/development';
 import {DEVELOPMENT_ACTOR,DEVELOPMENT_FACILITY,DEVELOPMENT_PROJECT} from '../../lib/ops/development-policy';
-import {applyDeviceProgramsToGlobeProject,emptyDeviceProgramRegistry,mirrorDevelopmentPrograms,registerGlobePrograms,type DeviceProgram} from '../../lib/ops/device-program-bridge';
+import {applyDeviceProgramsToGlobeProject,deviceProgramsForGlobeProject,DeviceProgramRegistryBoundaryError,emptyDeviceProgramRegistry,mirrorDevelopmentPrograms,registerGlobePrograms,type DeviceProgram} from '../../lib/ops/device-program-bridge';
 
-const localProgram=(recordId=crypto.randomUUID()):DeviceProgram=>({recordId,globeProjectId:'globe-project',name:'Device soil program',method:'soil',type:'sampling',state:'planned',status:'active',createdAt:'2026-09-10T00:00:00.000Z',origin:'globe'});
+const localProgram=(recordId=crypto.randomUUID(),globeProjectId='globe-project',name='Device soil program'):DeviceProgram=>({recordId,globeProjectId,name,method:'soil',type:'sampling',state:'planned',status:'active',createdAt:'2026-09-10T00:00:00.000Z',origin:'globe'});
 
 test('the device registry carries only program metadata and mirrors into its bound Globe project',()=>{
  const local=localProgram(),registry=registerGlobePrograms(emptyDeviceProgramRegistry(),'globe-project',[{...local,meetingId:'private-meeting',staffUserId:'staff-user'}]);
  assert.deepEqual(Object.keys(registry.programs[0]).sort(),['createdAt','globeProjectId','method','name','origin','recordId','state','status','type']);
- const remoteId=crypto.randomUUID(),mirrored=mirrorDevelopmentPrograms(registry,[{recordId:remoteId,name:'Development drilling',method:'rc',type:'drilling',state:'ready'}]);
+ const remoteId=crypto.randomUUID(),mirrored=mirrorDevelopmentPrograms(registry,'globe-project',[{recordId:remoteId,name:'Development drilling',method:'rc',type:'drilling',state:'ready'}]);
  const source={id:'globe-project',programs:[{...local,status:'legacy-active'}],samples:[{recordId:'sample-1',programId:local.recordId}],meetings:[{id:'local-note'}]};
  const applied=applyDeviceProgramsToGlobeProject(source,mirrored);
  assert.equal(applied.changed,true);assert.equal(applied.project.programs.length,2);assert.equal(applied.project.programs.find((program:any)=>program.recordId===remoteId)?.name,'Development drilling');
@@ -24,8 +24,8 @@ test('a Globe program is imported only into the browser-local Development PGlite
  try{
   await engine.initialise();
   (globalThis as any).fetch=(input:unknown)=>{calls.push(String(input));throw new Error('The device bridge must not use fetch.');};
-  assert.deepEqual(await engine.importDevicePrograms([program]),{created:1});
-  assert.deepEqual(await engine.importDevicePrograms([program]),{created:0});
+  assert.deepEqual(await engine.importDevicePrograms([program],'globe-project'),{created:1});
+  assert.deepEqual(await engine.importDevicePrograms([program],'globe-project'),{created:0});
   assert.equal(calls.length,0);
   const project=await engine.geology(DEVELOPMENT_PROJECT),workflow=await engine.request(`workflow?scope=${DEVELOPMENT_PROJECT}`),facility=await engine.request(`workflow?scope=${DEVELOPMENT_FACILITY}`);
   assert.equal(project.project.programs.find((row:any)=>row.recordId===program.recordId)?.name,program.name);
@@ -34,6 +34,45 @@ test('a Globe program is imported only into the browser-local Development PGlite
   assert.deepEqual((await db.query<{scope_id:string}>('select scope_id from mx_ops.geo_programs where id=$1',[program.recordId])).rows,[{scope_id:DEVELOPMENT_PROJECT}]);
   assert.deepEqual((await db.query<{email:string}>('select email from auth.users order by email')).rows,[{email:'browser@development.invalid'}]);
   assert.equal((await db.query<{meeting_schema:string|null}>("select to_regnamespace('mx_meetings')::text as meeting_schema")).rows[0].meeting_schema,null);
+ }finally{(globalThis as any).fetch=originalFetch;await db.close();}
+});
+
+test('the active Globe project is the only local Program selector source or mirror target',async()=>{
+ const globeA='globe-project-a',globeB='globe-project-b',alpha=localProgram(crypto.randomUUID(),globeA,'Alpha-only program'),bravo=localProgram(crypto.randomUUID(),globeB,'Bravo-only program');
+ let registry=registerGlobePrograms(emptyDeviceProgramRegistry(),globeA,[alpha]);
+ registry=registerGlobePrograms(registry,globeB,[bravo]);
+ assert.deepEqual(deviceProgramsForGlobeProject(registry,globeA).map(program=>program.recordId),[alpha.recordId]);
+ assert.deepEqual(deviceProgramsForGlobeProject(registry,globeB).map(program=>program.recordId),[bravo.recordId]);
+ assert.throws(()=>registerGlobePrograms(registry,globeB,[alpha]),DeviceProgramRegistryBoundaryError);
+
+ const db=new PGlite(),engine=new DevelopmentEngine(db),originalFetch=globalThis.fetch,calls:string[]=[],publications:{globeProjectId:string;ids:string[]}[]=[];
+ const bridge:DeviceProgramBridgePort={
+  read:async()=>({registry,revision:0}),
+  publish:async(programs,globeProjectId)=>{publications.push({globeProjectId,ids:programs.map((program:any)=>program.recordId)});},
+ };
+ try{
+  await engine.initialise();
+  (globalThis as any).fetch=(input:unknown)=>{calls.push(String(input));throw new Error('The device bridge must not use fetch.');};
+  const bravoWorkflow=await requestDevelopmentWithDeviceProgramBridge(engine,`workflow?scope=${DEVELOPMENT_PROJECT}`,undefined,bridge);
+  const bravoGeology=await requestDevelopmentWithDeviceProgramBridge(engine,`geology?scope=${DEVELOPMENT_PROJECT}`,undefined,bridge);
+  assert.deepEqual(bravoWorkflow.programs.map((program:any)=>program.id),[bravo.recordId]);
+  assert.deepEqual(bravoGeology.project.programs.map((program:any)=>program.recordId),[bravo.recordId]);
+  assert.equal(bravoWorkflow.programs.some((program:any)=>program.id===alpha.recordId||program.data?.name===alpha.name),false);
+  assert.equal(bravoGeology.project.programs.some((program:any)=>program.recordId===alpha.recordId||program.name===alpha.name),false);
+  assert.equal(publications.some(publication=>publication.globeProjectId===globeB&&publication.ids.includes(alpha.recordId)),false);
+
+  registry=registerGlobePrograms(registry,globeA,[alpha]);
+  const alphaWorkflow=await requestDevelopmentWithDeviceProgramBridge(engine,`workflow?scope=${DEVELOPMENT_PROJECT}`,undefined,bridge);
+  const alphaGeology=await requestDevelopmentWithDeviceProgramBridge(engine,`geology?scope=${DEVELOPMENT_PROJECT}`,undefined,bridge);
+  assert.deepEqual(alphaWorkflow.programs.map((program:any)=>program.id),[alpha.recordId]);
+  assert.deepEqual(alphaGeology.project.programs.map((program:any)=>program.recordId),[alpha.recordId]);
+  assert.equal(alphaWorkflow.programs.some((program:any)=>program.id===bravo.recordId||program.data?.name===bravo.name),false);
+  assert.equal(alphaGeology.project.programs.some((program:any)=>program.recordId===bravo.recordId||program.name===bravo.name),false);
+  assert.equal(publications.some(publication=>publication.globeProjectId===globeA&&publication.ids.includes(bravo.recordId)),false);
+  assert.deepEqual((await engine.deviceProjectPrograms(globeA)).map((program:any)=>program.recordId),[alpha.recordId]);
+  assert.deepEqual((await engine.deviceProjectPrograms(globeB)).map((program:any)=>program.recordId),[bravo.recordId]);
+  assert.deepEqual((await engine.geology(DEVELOPMENT_PROJECT)).project.programs.map((program:any)=>program.recordId).sort(),[alpha.recordId,bravo.recordId].sort());
+  assert.equal(calls.length,0);
  }finally{(globalThis as any).fetch=originalFetch;await db.close();}
 });
 

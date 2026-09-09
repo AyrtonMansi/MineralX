@@ -38,6 +38,10 @@ type StoredRegistry={registry:DeviceProgramRegistry;revision:number;savedAt:stri
 export class DeviceProgramRegistryConflict extends Error{
  constructor(){super('Another browser tab updated the device program bridge. Your local records remain unchanged; retry the refresh.');this.name='DeviceProgramRegistryConflict';}
 }
+/** A Program UUID is owned by one local Globe project for the life of this registry. */
+export class DeviceProgramRegistryBoundaryError extends Error{
+ constructor(){super('This Program already belongs to another local Globe project. Its identity was not moved between projects.');this.name='DeviceProgramRegistryBoundaryError';}
+}
 
 export const emptyDeviceProgramRegistry=():DeviceProgramRegistry=>({version:DEVICE_PROGRAM_REGISTRY_VERSION,activeGlobeProjectId:null,programs:[]});
 const text=(value:unknown)=>typeof value==='string'?value.trim():'';
@@ -68,15 +72,26 @@ function normaliseRegistry(value:any):DeviceProgramRegistry{
 
 const equal=(left:unknown,right:unknown)=>JSON.stringify(left)===JSON.stringify(right);
 
+/**
+ * Returns the metadata that belongs to exactly one Globe project. The
+ * registry may remember multiple local projects, but callers must never use
+ * that as a cross-project selector source.
+ */
+export function deviceProgramsForGlobeProject(registry:DeviceProgramRegistry,globeProjectId:string|null|undefined){
+ const current=normaliseRegistry(registry),projectId=text(globeProjectId);
+ return projectId?current.programs.filter(program=>program.globeProjectId===projectId):[];
+}
+
 /** Register local Globe programs without importing any other Globe records. */
 export function registerGlobePrograms(registry:DeviceProgramRegistry,globeProjectId:string,programs:any[]):DeviceProgramRegistry{
  const projectId=text(globeProjectId);if(!projectId)throw new Error('Choose a local Globe project before linking its programs.');
- const current=normaliseRegistry(registry),next=current.programs.map(program=>program.globeProjectId===null&&program.origin==='development'?{...program,globeProjectId:projectId}:program),index=new Map(next.map((program,i)=>[program.recordId,i]));
+ const current=normaliseRegistry(registry),next=[...current.programs],index=new Map(next.map((program,i)=>[program.recordId,i]));
  for(const row of programs||[]){
   const program=normaliseProgram(row,projectId,row?.deviceProgramOrigin==='development'?'development':'globe');if(!program)continue;
   const existingIndex=index.get(program.recordId);
   if(existingIndex===undefined){index.set(program.recordId,next.length);next.push(program);continue;}
   const existing=next[existingIndex];
+  if(existing.globeProjectId&&existing.globeProjectId!==projectId)throw new DeviceProgramRegistryBoundaryError();
   // A development-origin record is read-only from Globe. Globe has no
   // program editor today, and retaining the development values prevents a
   // stale browser tab from rolling an Operations-development edit backward.
@@ -84,27 +99,34 @@ export function registerGlobePrograms(registry:DeviceProgramRegistry,globeProjec
    if(existing.globeProjectId!==projectId)next[existingIndex]={...existing,globeProjectId:projectId};
    continue;
   }
-  next[existingIndex]={...program,origin:'globe',createdAt:existing.createdAt||program.createdAt};
+  next[existingIndex]={...program,origin:'globe',globeProjectId:projectId,createdAt:existing.createdAt||program.createdAt};
  }
  return {version:DEVICE_PROGRAM_REGISTRY_VERSION,activeGlobeProjectId:projectId,programs:next};
 }
 
-/** Merge the local PGlite project's public program fields into this registry. */
-export function mirrorDevelopmentPrograms(registry:DeviceProgramRegistry,programs:any[]):DeviceProgramRegistry{
+/**
+ * Merge only one local PGlite/Globe project's public program fields into the
+ * registry. `globeProjectId` is explicit: using the most recently active
+ * Globe project here would relabel a stale PGlite record after a project
+ * switch.
+ */
+export function mirrorDevelopmentPrograms(registry:DeviceProgramRegistry,globeProjectId:string,programs:any[]):DeviceProgramRegistry{
+ const projectId=text(globeProjectId);if(!projectId)throw new Error('Choose a local Globe project before linking its programs.');
  const current=normaliseRegistry(registry),next=[...current.programs],index=new Map(next.map((program,i)=>[program.recordId,i]));
  for(const row of programs||[]){
-  const program=normaliseProgram(row,current.activeGlobeProjectId,'development');if(!program)continue;
+  const program=normaliseProgram(row,projectId,'development');if(!program)continue;
   const existingIndex=index.get(program.recordId);
   if(existingIndex===undefined){index.set(program.recordId,next.length);next.push(program);continue;}
   const existing=next[existingIndex];
-  next[existingIndex]={...program,origin:existing.origin,globeProjectId:existing.globeProjectId||current.activeGlobeProjectId,createdAt:existing.createdAt||program.createdAt,status:existing.status||program.status};
+  if(existing.globeProjectId&&existing.globeProjectId!==projectId)throw new DeviceProgramRegistryBoundaryError();
+  next[existingIndex]={...program,origin:existing.origin,globeProjectId:projectId,createdAt:existing.createdAt||program.createdAt,status:existing.status||program.status};
  }
  return {version:DEVICE_PROGRAM_REGISTRY_VERSION,activeGlobeProjectId:current.activeGlobeProjectId,programs:next};
 }
 
 /** Add or update selector rows only; never deletes Globe records or samples. */
 export function applyDeviceProgramsToGlobeProject(project:any,registry:DeviceProgramRegistry){
- const current=normaliseRegistry(registry),incoming=current.programs.filter(program=>program.globeProjectId===project?.id),existing:any[]=Array.isArray(project?.programs)?project.programs:[],index=new Map<string,number>(existing.map((program:any,i:number):[string,number]=>[String(program.recordId),i])),programs=[...existing];
+ const incoming=deviceProgramsForGlobeProject(registry,text(project?.id)||null),existing:any[]=Array.isArray(project?.programs)?project.programs:[],index=new Map<string,number>(existing.map((program:any,i:number):[string,number]=>[String(program.recordId),i])),programs=[...existing];
  for(const record of incoming){
   const local={recordId:record.recordId,name:record.name,method:record.method,type:record.type,state:record.state,status:record.status,createdAt:record.createdAt,deviceProgramOrigin:record.origin};
   const existingIndex=index.get(record.recordId);
@@ -158,8 +180,9 @@ async function updateDeviceProgramRegistry(update:(current:DeviceProgramRegistry
  throw new DeviceProgramRegistryConflict();
 }
 
-export const publishGlobePrograms=(project:any)=>updateDeviceProgramRegistry(current=>registerGlobePrograms(current,project?.id,project?.programs||[]));
-export const publishDevelopmentPrograms=(programs:any[])=>updateDeviceProgramRegistry(current=>mirrorDevelopmentPrograms(current,programs));
+/** `isCurrent` prevents a stale Globe effect from retaking the active project after a switch. */
+export const publishGlobePrograms=(project:any,isCurrent:()=>boolean=()=>true)=>updateDeviceProgramRegistry(current=>isCurrent()?registerGlobePrograms(current,project?.id,project?.programs||[]):current);
+export const publishDevelopmentPrograms=(programs:any[],globeProjectId:string)=>updateDeviceProgramRegistry(current=>mirrorDevelopmentPrograms(current,globeProjectId,programs));
 
 /** Refresh an open Globe tab after Operations development changes this device registry. */
 export function subscribeDeviceProgramRegistry(listener:()=>void){
