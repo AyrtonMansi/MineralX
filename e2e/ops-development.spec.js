@@ -2,7 +2,8 @@ import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 const facility='de000000-0000-4000-8000-000000000003',project='de000000-0000-4000-8000-000000000004';
 // These synthetic observations are entered in the facility's wall-clock time, not UTC.
-function plantTime(ms){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ms)).map(p=>[p.type,p.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;}
+// datetime-local normalises zero seconds away; Playwright fill requires that canonical form.
+function plantTime(ms){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ms)).map(p=>[p.type,p.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}${p.second==='00'?'':':'+p.second}`;}
 const TILE=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==','base64');
 async function open(page,path='/ops'){
  const forbidden=[];page.on('request',r=>{const u=new URL(r.url());if(u.pathname.startsWith('/api/ops/')||u.hostname.endsWith('.supabase.co'))forbidden.push(r.url());});
@@ -41,7 +42,8 @@ test('no-login suite uses real local save/reload and never requests protected se
  await page.getByRole('button',{name:'Record clean-up / physical gold lot',exact:true}).click();
  const lot=page.getByRole('region',{name:'Record clean-up / physical gold lot',exact:true});
  await lot.getByLabel('Lot / clean-up reference').fill('DEV-CLEANUP-ONLY');
- const yesterday=plantTime(Date.now()-86400000);
+ // Exercise the exact-minute boundary on every run instead of depending on the wall clock.
+ const yesterday=plantTime(Math.floor((Date.now()-86400000)/60000)*60000);
  await lot.getByLabel('Actual clean-up time').fill(yesterday);await lot.getByRole('checkbox',{name:new RegExp(reference)}).check();
  // A clean-up cannot precede the run it covers. Preserve this real validation assertion.
  await lot.getByRole('button',{name:'Record physical lot'}).click();
