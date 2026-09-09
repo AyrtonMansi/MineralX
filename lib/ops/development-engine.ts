@@ -128,12 +128,17 @@ export class DevelopmentEngine {
     const projectId=localGlobeProjectId(globeProjectId);
     const current=await this.geology(PROJECT),known=new Set((current.project.programs||[]).map((program:any)=>program.recordId));let created=0;
     for(const program of programs){
-      if(program.origin!=='globe'||program.globeProjectId!==projectId||!uuid.test(program.recordId)||!program.name?.trim()||program.name.trim().length>160)continue;
+      if(program.globeProjectId!==projectId||!uuid.test(program.recordId)||!program.name?.trim()||program.name.trim().length>160)continue;
       // A legacy PGlite snapshot may already have this UUID. It can be bound
       // to this source project once, but it is never repurposed for another.
+      // Earlier bridge releases wrote Operations-created rows back as
+      // `development` registry records before this binding table existed.
+      // Bind that existing canonical identity; do not manufacture a record
+      // from a registry-only development row.
       const existingBinding=await this.deviceProgramBinding(program.recordId);
       if(existingBinding&&existingBinding!==projectId)continue;
       if(!known.has(program.recordId)){
+        if(program.origin!=='globe')continue;
         await this.rpc('mx_ops_command',[PROJECT,crypto.randomUUID(),'program.save',program.recordId,0,json({name:program.name.trim(),type:'sampling',state:'planned',method:program.method})]);
         known.add(program.recordId);created++;
       }

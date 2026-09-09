@@ -76,6 +76,39 @@ test('the active Globe project is the only local Program selector source or mirr
  }finally{(globalThis as any).fetch=originalFetch;await db.close();}
 });
 
+test('an Operations-created Program from the earlier bridge stays visible in its recorded Globe project',async()=>{
+ const globeProject='legacy-globe-project',legacyId=crypto.randomUUID(),registryOnlyId=crypto.randomUUID();
+ let registry=registerGlobePrograms(emptyDeviceProgramRegistry(),globeProject,[]);
+ registry=mirrorDevelopmentPrograms(registry,globeProject,[
+  {recordId:legacyId,name:'Legacy Operations program',method:'soil',type:'sampling',state:'planned'},
+  {recordId:registryOnlyId,name:'Registry-only development record',method:'soil',type:'sampling',state:'planned'},
+ ]);
+ const db=new PGlite(),engine=new DevelopmentEngine(db),originalFetch=globalThis.fetch,calls:string[]=[],publications:{globeProjectId:string;ids:string[]}[]=[];
+ const bridge:DeviceProgramBridgePort={
+  read:async()=>({registry,revision:0}),
+  publish:async(programs,globeProjectId)=>{publications.push({globeProjectId,ids:programs.map((program:any)=>program.recordId)});},
+ };
+ try{
+  await engine.initialise();
+  (globalThis as any).fetch=(input:unknown)=>{calls.push(String(input));throw new Error('The device bridge must not use fetch.');};
+  // This direct local command represents a Program saved before the binding
+  // table existed. The registry retains its prior Globe project provenance.
+  await engine.request('command',{
+   scopeId:DEVELOPMENT_PROJECT,requestId:crypto.randomUUID(),id:legacyId,expectedVersion:0,action:'program.save',expectedActorId:DEVELOPMENT_ACTOR,
+   payload:{name:'Legacy Operations program',type:'sampling',method:'soil',state:'planned'},
+  });
+  assert.deepEqual((await engine.deviceProjectPrograms(globeProject)).map((program:any)=>program.recordId),[]);
+
+  const workflow=await requestDevelopmentWithDeviceProgramBridge(engine,`workflow?scope=${DEVELOPMENT_PROJECT}`,undefined,bridge);
+  assert.deepEqual(workflow.programs.map((program:any)=>program.id),[legacyId]);
+  assert.deepEqual((await engine.deviceProjectPrograms(globeProject)).map((program:any)=>program.recordId),[legacyId]);
+  assert.deepEqual((await db.query<{program_id:string;globe_project_id:string}>('select program_id,globe_project_id from public.mineralx_device_program_bindings order by program_id')).rows,[{program_id:legacyId,globe_project_id:globeProject}]);
+  assert.equal((await engine.geology(DEVELOPMENT_PROJECT)).project.programs.some((program:any)=>program.recordId===registryOnlyId),false);
+  assert.ok(publications.some(publication=>publication.globeProjectId===globeProject&&publication.ids.includes(legacyId)));
+  assert.equal(calls.length,0);
+ }finally{(globalThis as any).fetch=originalFetch;await db.close();}
+});
+
 test('unavailable or corrupt bridge storage fails open for local development refreshes and commands',async()=>{
  const db=new PGlite(),engine=new DevelopmentEngine(db),originalFetch=globalThis.fetch,calls:string[]=[];
  const unavailable:DeviceProgramBridgePort={
