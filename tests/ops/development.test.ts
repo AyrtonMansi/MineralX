@@ -7,7 +7,8 @@ let db:PGlite,engine:DevelopmentEngine;
 const cmd=(action:string,payload:Record<string,unknown>,scopeId=facility,id=crypto.randomUUID(),expectedVersion=0)=>({scopeId,requestId:crypto.randomUUID(),id,expectedVersion,action,payload,expectedActorId:actor});
 before(async()=>{db=new PGlite();engine=new DevelopmentEngine(db);await engine.initialise();});after(async()=>db.close());
 test('temporary mode applies to suite UI only, never identity or backend endpoints',()=>{
- for(const path of ['/ops','/ops/plant','/ops/geology','/ops/reports','/ops/admin'])assert.equal(developmentPage(path),true);
+ for(const path of ['/ops','/ops/plant','/ops/geology','/ops/reports','/ops/admin'])assert.equal(developmentPage(path),false);
+ for(const path of ['/ops','/ops/plant','/ops/geology','/ops/reports','/ops/admin'])assert.equal(developmentPage(path,'development'),true);
  for(const path of ['/','/gic','/gic/login','/api/ops/context','/api/ops/command','/ops/login','/ops/auth/continue','/ops/account','/ops/sw.js','/opsspoof'])assert.equal(developmentPage(path),false,path);
  assert.equal(developmentPage('/ops','staff'),false);assert.equal(developmentPage('/ops',undefined,false),false);
 });

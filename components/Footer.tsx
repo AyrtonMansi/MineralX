@@ -10,7 +10,7 @@ export function Footer() {
     column.title === "Connect"
       ? {
           ...column,
-          links: [...column.links, ...(hasUpdates ? [{ label: "Updates", href: "/updates" }] : []), { label: "GIC login", href: "/gic/login" }],
+          links: [...column.links, ...(hasUpdates ? [{ label: "Updates", href: "/updates" }] : []), { label: "Staff sign in", href: "/ops/login" }, { label: "Private meetings", href: "/ops/meetings" }, { label: "GIC login", href: "/gic/login" }],
         }
       : column,
   );

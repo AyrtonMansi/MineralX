@@ -1,11 +1,12 @@
 'use client';
 import {mayNavigate,entryIsOpen} from './navigation';
 import React,{createContext,useCallback,useContext,useEffect,useRef,useState} from 'react';
-import {useSearchParams,useRouter} from 'next/navigation';
+import {useSearchParams,useRouter,usePathname} from 'next/navigation';
 import {api,authClient} from '@/lib/ops/client';
 import {OpsError,type OpsContext,type Scope,type Command} from '@/lib/ops/contracts';
 import {acknowledge,enqueue,deriveKey,encryptPack,decryptPack,readVault,writeVault,type FieldPack,type VaultEnvelope} from '@/lib/ops/offline';
 import {applyGeoCommand,OFFLINE_GEO_ACTIONS,changeSet} from '@/lib/ops/geology.js';
+import {scopeSwitchDestination} from '@/lib/ops/suite-navigation';
 
 type Context=OpsContext&{capabilities:Record<string,any>};
 type Vault={key:CryptoKey;pack:FieldPack;envelope:VaultEnvelope};
@@ -13,7 +14,7 @@ type Value={development:boolean;context:Context|null;scope:Scope|undefined;loadi
 const OperationsContext=createContext<Value|null>(null);
 export function useOperations(){const v=useContext(OperationsContext);if(!v)throw new Error('Operations context is missing');return v;}
 export default function OperationsProvider({children,development=false}:{children:React.ReactNode;development?:boolean}){
- const router=useRouter(),query=useSearchParams();const [context,setContext]=useState<Context|null>(null),[loading,setLoading]=useState(true),[failure,setFailure]=useState<OpsError|null>(null),[online,setOnline]=useState(true),[offlineMode,setOfflineMode]=useState(false),[pack,setPack]=useState<FieldPack|null>(null),[revision,bump]=useState(0),[syncing,setSyncing]=useState(false),[saveState,setSaveState]=useState('');
+ const router=useRouter(),query=useSearchParams(),pathname=usePathname();const [context,setContext]=useState<Context|null>(null),[loading,setLoading]=useState(true),[failure,setFailure]=useState<OpsError|null>(null),[online,setOnline]=useState(true),[offlineMode,setOfflineMode]=useState(false),[pack,setPack]=useState<FieldPack|null>(null),[revision,bump]=useState(0),[syncing,setSyncing]=useState(false),[saveState,setSaveState]=useState('');
  const vault=useRef<Vault|null>(null),queue=useRef<Promise<unknown>>(Promise.resolve()),contextRef=useRef<Context|null>(null),syncRef=useRef<Promise<void>|null>(null);
  const scope=query.get('scope')?context?.scopes.find(s=>s.id===query.get('scope')):context?.scopes[0];
  const refresh=useCallback(async()=>{setLoading(true);try{const c=await api<Context>('context');
@@ -97,7 +98,7 @@ export default function OperationsProvider({children,development=false}:{childre
  const saveDraft=useCallback(async(key:string,value:unknown)=>{if(vault.current&&vault.current.pack.scope.id===scope?.id)await persist(p=>({...p,drafts:{...p.drafts,[key]:value}}));},[persist,scope?.id]);
  const resolveConflict=useCallback(async(requestId:string,expectedVersion:number,reason:string)=>{if(reason.trim().length<10)throw new Error('Explain the explicit conflict decision.');await persist(p=>({...p,receipts:{...p.receipts,[requestId]:{localDisposition:'superseded after explicit comparison',reason,command:p.outbox.find(q=>q.command.requestId===requestId)?.command}},outbox:p.outbox.map(q=>q.command.requestId!==requestId?q:{...q,state:'queued',error:undefined,command:{...q.command,requestId:crypto.randomUUID(),expectedVersion,payload:{...q.command.payload,reason}}})}));},[persist]);
  const retryBlocked=useCallback(async(requestId:string)=>{await persist(p=>({...p,outbox:p.outbox.map(q=>q.command.requestId===requestId?{...q,state:'queued',error:undefined}:q)}));},[persist]);
- const selectScope=useCallback((id:string)=>{if(!mayNavigate())return;if(vault.current?.pack.outbox.length&&id!==scope?.id&&!window.confirm('Pending field changes remain safely on this device. Switch workspace without synchronising now?'))return;router.push(`/ops?scope=${encodeURIComponent(id)}`);},[router,scope?.id]);
+ const selectScope=useCallback((id:string)=>{if(!mayNavigate())return;if(vault.current?.pack.outbox.length&&id!==scope?.id&&!window.confirm('Pending field changes remain safely on this device. Switch workspace without synchronising now?'))return;const next=context?.scopes.find(candidate=>candidate.id===id);if(next)router.push(scopeSwitchDestination(pathname,query.toString(),next));},[context?.scopes,pathname,query,router,scope?.id]);
  const exportVault=useCallback(async()=>{await queue.current.catch(()=>{});return vault.current?.envelope||null;},[]);
  useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(vault.current?.pack.outbox.length){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  return <OperationsContext.Provider value={{development,context,scope,loading,failure,online,offlineMode,pack,revision,syncing,saveState,refresh,selectScope,send,prepare,unlock,sync,saveDraft,exportVault,resolveConflict,retryBlocked}}>{children}</OperationsContext.Provider>;

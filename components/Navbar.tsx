@@ -15,6 +15,7 @@ export function Navbar({ hasUpdates = false }: { hasUpdates?: boolean }) {
     ...nav,
     ...(hasUpdates ? [{ label: "Updates", href: "/updates" }] : []),
     { label: "Contact", href: "/contact" },
+    { label: "Staff sign in", href: "/ops/login" },
     { label: "GIC login", href: "/gic/login" },
   ];
   useEffect(() => {

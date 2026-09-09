@@ -32,7 +32,7 @@ function download(name: string, content: string, type: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function PlantDashboard({ model, notesEndpoint='/api/notes', readOnly=false }: { model: PlantModel; notesEndpoint?:string; readOnly?:boolean }) {
+export function PlantDashboard({ model, notesEndpoint='/api/notes', readOnly=false, embedded=false }: { model: PlantModel; notesEndpoint?:string; readOnly?:boolean; embedded?:boolean }) {
   const full: View = {
     x: -5,
     y: -7,
@@ -161,9 +161,9 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes', readOnly=fal
   };
   const gestures=usePlanGestures(svg,view,setView,full.w*1.5,tab==='plan',onTap);
   const notePanel=(scoped=false)=><ReviewNotes store={notes} model={model} draft={draft} setDraft={setDraft} activeId={activeNote} onLocate={locateNote} onPin={()=>{setTab('plan');setTool('pin');setSideNotes(false);}} scope={scoped?(selected||streamId||undefined):undefined}/>;
-  const pinScale=view.w/full.w;
+  const pinScale=view.w/full.w, Root=embedded?'section':'main';
   return (
-    <main id="main-content" className="plant-main">
+    <Root id={embedded?undefined:'main-content'} aria-label={embedded?'Plant engineering reference':undefined} className="plant-main">
       <div className="plant-heading">
         <div>
           <p className="plant-eyebrow">
@@ -318,7 +318,7 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes', readOnly=fal
                 <div role="group" aria-label="Drawing tool">
                   <Button variant="ghost" size="sm" aria-pressed={tool==='pan'} onClick={()=>setTool('pan')}>↔ Pan & select</Button>
                   <Button variant="ghost" size="sm" aria-pressed={tool==='measure'} onClick={()=>{setTool('measure');setMeasurement([]);}}>↗ Measure</Button>
-                  <Button variant="ghost" size="sm" aria-pressed={tool==='pin'} disabled={!!draft||readOnly} onClick={()=>setTool('pin')}>＋ Pin note</Button>
+                  {!readOnly&&<Button variant="ghost" size="sm" aria-pressed={tool==='pin'} disabled={!!draft} onClick={()=>setTool('pin')}>＋ Pin note</Button>}
                 </div>
                 <button hidden={readOnly} className="plant-notes-toggle" aria-pressed={sideNotes} onClick={()=>setSideNotes(v=>!v)}>Notes <span>{notes.notes.filter(n=>n.status==='open').length}</span></button>
               </div>
@@ -994,6 +994,6 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes', readOnly=fal
           Design information · {model.revision} · {model.status}
         </span>
       </footer>
-    </main>
+    </Root>
   );
 }

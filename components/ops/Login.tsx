@@ -1,6 +1,5 @@
 'use client';
 import {useRef,useState} from 'react';
-import Link from 'next/link';
 import {useSearchParams} from 'next/navigation';
 import {authClient} from '@/lib/ops/client';
 import {safeSignInNext,signInFailureMessage} from '@/lib/gic/login-routing';
@@ -13,7 +12,7 @@ export default function Login(){
  const [mode,setMode]=useState<'signin'|'reset'>('signin'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
  const configured=Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL&&(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY||process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
  return <main className="ops-login" id="main-content">
- <Link href="/ops" className="ops-brand">MINERAL<span>X</span><small>OPERATIONS</small></Link>
+ <a href="/ops" className="ops-brand">MINERAL<span>X</span><small>OPERATIONS</small></a>
  <h1>{mode==='signin'?'Your work starts here.':'Reset your password'}</h1>
  <p>Use your existing named MineralX account. You do not need a new account for this portal.</p>
  {!configured&&<Message>Staff sign-in is awaiting identity service configuration.</Message>}
@@ -48,8 +47,8 @@ export default function Login(){
  <button className="ops-primary" disabled={busy||!configured}>{busy?'Please wait…':mode==='signin'?'Sign in':'Send reset link'}</button>
  </form>
  <button className="ops-link" disabled={busy} onClick={()=>{setMode(mode==='signin'?'reset':'signin');setMessage('');setError('');}}>{mode==='signin'?'Forgot password?':'Return to sign in'}</button>
- <Link href="/gic/login">Existing processing / admin sign-in</Link>
+ <a href="/gic/login">Existing processing / admin sign-in</a>
  <a href="/ops?mode=development">Continue without sign-in — development workspace</a>
- <Link href="/ops/field">Unlock prepared field records</Link>
+ <a href="/ops/field">Unlock prepared field records</a>
  </main>;
 }

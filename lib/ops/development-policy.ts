@@ -6,7 +6,7 @@ export const DEVELOPMENT_ORG = 'de000000-0000-4000-8000-000000000002';
 export const DEVELOPMENT_FACILITY = 'de000000-0000-4000-8000-000000000003';
 export const DEVELOPMENT_PROJECT = 'de000000-0000-4000-8000-000000000004';
 export function developmentPage(path: string, preference?: string, enabled = DEVELOPMENT_ACCESS_ENABLED) {
-  return enabled && preference !== 'staff' && (path === '/ops' || path.startsWith('/ops/')) &&
+  return enabled && preference === 'development' && (path === '/ops' || path.startsWith('/ops/')) &&
     !/^\/ops\/(login|account|auth|meetings)(\/|$)/.test(path) && path !== '/ops/sw.js';
 }
 export function developmentSession(): boolean {

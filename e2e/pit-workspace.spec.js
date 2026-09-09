@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 const project='de000000-0000-4000-8000-000000000004';
 function scan(){const lines=[];for(let z=0;z<=10;z++)for(let x=0;x<=10;x++)lines.push(`v ${x*2} 0 ${z*2}`);for(let z=0;z<10;z++)for(let x=0;x<10;x++){const a=z*11+x+1;lines.push(`f ${a} ${a+11} ${a+1}`,`f ${a+1} ${a+11} ${a+12}`);}return Buffer.from(lines.join('\n'));}
 async function open(page){await page.goto(`/ops/pit?scope=${project}&mode=development`);await expect(page.getByRole('heading',{name:'Pits & stockpiles',exact:true})).toBeVisible({timeout:30000});}
-async function importScan(page){await page.getByLabel('Scan or scenario backup').setInputFiles({name:'synthetic-survey.obj',mimeType:'text/plain',buffer:scan()});await expect(page.getByLabel('Scenario name')).toHaveValue('synthetic-survey',{timeout:30000});await expect(page.locator('.pit-canvas canvas')).toBeVisible();}
+async function importScan(page){await expect(page.getByRole('region',{name:'iPhone LiDAR workflow'})).toContainText('Choose the exported mesh from Files');await page.getByLabel('Choose exported mesh from Files').setInputFiles({name:'synthetic-survey.obj',mimeType:'text/plain',buffer:scan()});await expect(page.getByLabel('Scenario name')).toHaveValue('synthetic-survey',{timeout:30000});await expect(page.locator('.pit-canvas canvas')).toBeVisible();}
 async function backup(page){const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Export scenario backup',exact:true}).click();return JSON.parse(await readFile(await(await pending).path(),'utf8'));}
 async function selectSurface(page){await page.getByRole('button',{name:'Top view',exact:true}).click();await page.getByRole('button',{name:'Edit surface',exact:true}).click();const canvas=page.locator('.pit-canvas canvas');const box=await canvas.boundingBox();await canvas.click({position:{x:box.width/2,y:box.height/2}});await expect(page.getByText('Selected local point',{exact:false})).toBeVisible();return box;}
 test('real mesh import, deformation, original ghost, undo, durable save and portable backup',async({page})=>{
@@ -15,7 +15,7 @@ test('real mesh import, deformation, original ghost, undo, durable save and port
  await page.getByRole('button',{name:'Save scenario',exact:true}).click();await expect(page.locator('.pit-status')).toContainText('Saved on this device');
  await page.reload();await page.getByRole('combobox',{name:'Saved on this device',exact:true}).selectOption({label:'synthetic-survey · v1'});await page.getByRole('button',{name:'Open saved scenario'}).click();expect((await backup(page)).edited).toEqual(changed.edited);
  const dl=page.waitForEvent('download');await page.getByRole('button',{name:'Download original scan'}).click();expect(await readFile(await(await dl).path())).toEqual(scan());
- await page.getByText('Import a scan or scenario',{exact:true}).click();await page.getByLabel('Scan or scenario backup').setInputFiles({name:'roundtrip.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(changed))});await expect(page.locator('.pit-status')).toContainText('Scan ready');expect((await backup(page)).edited).toEqual(changed.edited);
+ await page.getByText('Import a scan or scenario',{exact:true}).click();await page.getByLabel('Choose exported mesh from Files').setInputFiles({name:'roundtrip.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(changed))});await expect(page.locator('.pit-status')).toContainText('Scan ready');expect((await backup(page)).edited).toEqual(changed.edited);
  expect(errors).toEqual([]);expect(protectedCalls).toEqual([]);await page.screenshot({path:'test-results/pit-desktop.png',fullPage:true});
 });
 test('dragging a wall handle changes only the planning geometry',async({page})=>{
@@ -26,7 +26,7 @@ test('dragging a wall handle changes only the planning geometry',async({page})=>
 });
 test('mobile scan errors preserve current work and editing controls fit the viewport',async({page})=>{
  await page.setViewportSize({width:390,height:844});await open(page);await page.getByRole('button',{name:'Try a practice pit'}).click();await expect(page.getByLabel('Scenario name')).toHaveValue('Practice pit — synthetic');
- page.on('dialog',d=>d.accept());await page.getByText('Import a scan or scenario',{exact:true}).click();await page.getByLabel('Scan or scenario backup').setInputFiles({name:'camera.mov',mimeType:'video/quicktime',buffer:Buffer.from('not depth')});
+ page.on('dialog',d=>d.accept());await page.getByText('Import a scan or scenario',{exact:true}).click();await page.getByLabel('Choose exported mesh from Files').setInputFiles({name:'camera.mov',mimeType:'video/quicktime',buffer:Buffer.from('not depth')});
  await expect(page.locator('.pit-workspace').getByRole('alert')).toContainText('camera video');await expect(page.getByLabel('Scenario name')).toHaveValue('Practice pit — synthetic');await page.getByRole('button',{name:'Dismiss',exact:true}).click();
  await page.getByText('Import a scan or scenario',{exact:true}).click();await selectSurface(page);await expect(page.getByRole('button',{name:'Apply movement',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:'test-results/pit-mobile.png',fullPage:true});
