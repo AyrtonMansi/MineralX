@@ -6,7 +6,7 @@ import {useRouter,useSearchParams} from 'next/navigation';
 import {Heading,Empty,Message,Status,useResource} from './primitives';
 import {useOperations} from './OperationsProvider';
 import {useWorkflow,WorkflowEditor,WorkflowState,WorkflowHistory,EvidenceLink} from './Workflow';
-import {energySummary,tankBalance,localDay} from '@/lib/ops/workflow-model';
+import {energySummary,tankBalance,localDay,calendarMonthStart} from '@/lib/ops/workflow-model';
 import {zonedTimestamp} from '@/lib/ops/time';
 import {downloadBlob} from '@/lib/ops/client';
 import {rowsToCsv} from '@/lib/ops/contracts';
@@ -38,7 +38,7 @@ export default function PlantWorkspace(){
  </>;
 }
 function Energy({data,onEdit}:{data:any;onEdit:(kind:string,r?:any,initial?:any)=>void}){
- const {scope}=useOperations(),today=localDay(scope!.timezone),[from,setFrom]=useState(today.slice(0,7)+'01'),[to,setTo]=useState(today),[asset,setAsset]=useState(''),[error,setError]=useState('');
+ const {scope}=useOperations(),today=localDay(scope!.timezone),[from,setFrom]=useState(()=>calendarMonthStart(scope!.timezone)),[to,setTo]=useState(today),[asset,setAsset]=useState(''),[error,setError]=useState('');
  const live=data?.energy||[],write=scope!.permissions.includes('plant.capture'),lo=zonedTimestamp(from+'T00:00:00',scope!.timezone),hi=zonedTimestamp(to+'T23:59:59',scope!.timezone),series=asset?live.filter((r:any)=>r.asset_id===asset):[],summary=energySummary(series,lo,hi),assets=data?.assets||[];
  return <><Heading title="Energy & fuel" description="Start with installed equipment and an opening tank balance. Record observations; keep proposed solar and capacity separate." action={write&&<div className="ops-actions"><button disabled={!data} className="ops-primary" onClick={()=>onEdit('fuel')}>Record diesel movement</button><button disabled={!data} onClick={()=>onEdit('energy')}>Record energy observation</button></div>}/><div className="ops-table-tools"><label>From<input type="date" value={from} onChange={e=>e.target.value&&setFrom(e.target.value)}/></label><label>Through<input type="date" value={to} onChange={e=>e.target.value&&setTo(e.target.value)}/></label><label>Meter / asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select one meter series</option>{assets.map((a:any)=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label></div>{from>to&&<Message error>End date must follow the start date.</Message>}
  {asset&&from<=to&&<><div className="ops-kpis">{[['Diesel generation',summary.diesel,'kWh'],['Solar generation',summary.solar,'kWh'],['Grid import',summary.grid,'kWh'],['Metered load',summary.load,'kWh'],['Generator operation',summary.hours,'h']].map(([k,v,u])=><div key={String(k)}><span>{k}</span><strong>{v===null?'Not recorded':Number(v).toLocaleString()} {v===null?'':u}</strong></div>)}</div>{summary.partial>0&&<Message>{summary.partial} observations overlap the chosen dates only partly and are excluded from these interval totals. No prorating was assumed.</Message>}</>}

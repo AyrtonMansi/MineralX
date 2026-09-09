@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {nextGoldAction,tankBalance,energySummary,blockers,localDay,taskDue} from '../../lib/ops/workflow-model';
+import {nextGoldAction,tankBalance,energySummary,blockers,localDay,taskDue,calendarMonthStart} from '../../lib/ops/workflow-model';
 test('gold guidance is evidence-, lineage- and policy-aware rather than a fixed wizard',()=>{
  const d:any={record:{id:'lot-a',review_state:'unreviewed',form:'dore'},weights:[],assays:[]};
  assert.equal(nextGoldAction(d).key,'weight');d.weights=[{net_g:100}];assert.equal(nextGoldAction(d).key,'assay');
@@ -30,4 +30,10 @@ test('a completed maintenance predecessor stays blocked until independently veri
 test('staff day and legacy due dates use the workspace timezone',()=>{
  assert.equal(localDay('Australia/Brisbane',new Date('2026-09-01T15:00Z')),'2026-09-02');
  assert.equal(taskDue({due_at:'2026-09-01T15:00Z'},'Australia/Brisbane'),'2026-09-02');
+});
+
+test('energy filter defaults are valid workspace calendar dates across month and year boundaries',()=>{
+ assert.equal(calendarMonthStart('Australia/Brisbane',new Date('2026-09-09T02:00:00Z')),'2026-09-01');
+ assert.equal(calendarMonthStart('Australia/Brisbane',new Date('2026-12-31T15:00:00Z')),'2027-01-01');
+ assert.equal(calendarMonthStart('America/Los_Angeles',new Date('2026-09-01T00:30:00Z')),'2026-08-01');
 });

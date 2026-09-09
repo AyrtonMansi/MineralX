@@ -29,7 +29,8 @@ async function task(page,title,scope=project,programId=''){
  const f=region(page,'Plan a task');await f.getByLabel('Task / work package title').fill(title);
  await f.getByLabel('Responsible person').selectOption({label:'Synthetic operator'});await save(f,'Save task');
  await page.getByRole('link').filter({has:page.getByText(title,{exact:true})}).click();
- return new URL(page.url()).searchParams.get('item');
+ await expect(page.getByRole('heading',{name:title,exact:true,level:2})).toBeVisible();
+ const id=new URL(page.url()).searchParams.get('item');expect(id).toMatch(/^[0-9a-f-]{36}$/);return id;
 }
 async function asset(page,code,kind,state='installed',capacity=''){
  await page.goto(`/ops/plant?scope=${facility}&view=assets`);await page.getByRole('button',{name:'Add equipment',exact:true}).click();
@@ -55,7 +56,7 @@ test('Home and the suite Globe create and edit one canonical campaign; reload ke
  const map=region(page,'Plan a work program');await expect(map.getByLabel('Type of work')).toHaveValue('mapping');await map.getByLabel('Program name').fill('Created from Globe');await save(map,'Save program');
  await page.goto(`/ops?scope=${project}`);await expect(page.getByRole('heading',{name:'Created from Globe',exact:true})).toBeVisible();
  expect(trace.errors).toEqual([]);expect(trace.protectedRequests).toEqual([]);
- await page.screenshot({path:'test-results/workflow-home-desktop.png',fullPage:true});
+ await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-home-desktop.png',fullPage:true});
 });
 
 test('work sequencing validates dependencies, exposes personnel and retains a useful schedule',async({page})=>{
@@ -72,9 +73,9 @@ test('work sequencing validates dependencies, exposes personnel and retains a us
  await page.goto(`/ops/work?scope=${project}&item=${second}`);await page.getByRole('button',{name:'Update progress / resolve'}).click();
  const next=region(page,'Update task progress');await next.getByLabel('Next state').selectOption('in_progress');await next.getByLabel('Progress / blocker').fill('Predecessor completed');await save(next,'Save progress');
  await page.goto(`/ops/work?scope=${project}`);await page.getByRole('combobox',{name:'View',exact:true}).selectOption('Schedule');
- await expect(page.getByRole('region',{name:'Fourteen day work schedule'})).toContainText('Begin drilling');
+ await page.getByLabel('Window starts').fill('2026-09-09'); await expect(page.getByRole('region',{name:'Fourteen day work schedule'})).toContainText('Begin drilling');
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:'test-results/workflow-schedule-mobile.png',fullPage:true});expect(trace.errors).toEqual([]);
+ await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-schedule-mobile.png',fullPage:true});expect(trace.errors).toEqual([]);
 });
 
 test('a failed program save stays open, retries idempotently and appears once after reload',async({page})=>{
@@ -91,19 +92,29 @@ test('diesel balances compare independent dips, and proposed solar never becomes
  await page.getByRole('button',{name:'Record energy observation',exact:true}).click();const f=region(page,'Record energy observation');await f.getByLabel('Metered equipment').selectOption({label:'Synthetic PV1'});await f.getByLabel('Observation type').selectOption('solar_generation');await f.getByLabel('Interval starts').fill('2026-09-02T08:00:00');await f.getByLabel('Interval ends').fill('2026-09-02T16:00:00');await f.getByLabel('Measured interval').fill('50');await f.getByLabel('Meter IDs').fill('Synthetic actual meter difference');
  await f.getByRole('button',{name:'Save observation'}).click();await expect(f.getByRole('alert')).toContainText('installed asset');
  page.once('dialog',d=>d.accept());await f.getByRole('button',{name:'Close',exact:true}).click();await page.reload();await expect(page.getByText('600 L',{exact:true})).toBeVisible({timeout:30000});
- await page.screenshot({path:'test-results/workflow-energy-desktop.png',fullPage:true});expect(trace.errors).toEqual([]);expect(trace.protectedRequests).toEqual([]);
+ await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-energy-desktop.png',fullPage:true});expect(trace.errors).toEqual([]);expect(trace.protectedRequests).toEqual([]);
 });
 
 test('private engineering reuses the plant diagram without touching public review notes',async({page})=>{
  const trace=await start(page,`/ops?scope=${facility}`);const notes=[];page.on('request',r=>{if(/\/api\/plant/.test(new URL(r.url()).pathname))notes.push(r.url());});
  await page.goto(`/ops/plant?scope=${facility}&view=engineering`);await expect(page.getByText('P5 engineering reference · existing layout',{exact:true})).toBeVisible();await expect(page.locator('.plant-app svg').first()).toBeVisible();
+ const tab=page.getByRole('navigation',{name:'Plant workspace'}).getByRole('link',{name:'Engineering',exact:true});expect((await tab.boundingBox()).height).toBeGreaterThanOrEqual(44);await expect(tab).toHaveAttribute('aria-current','page');
  await page.getByRole('button',{name:'Add engineering revision'}).click();const f=region(page,'Record engineering revision');await f.getByLabel('Revision title').fill('Synthetic pump relocation');await f.getByLabel('Drawing / revision reference').fill('SYN-P5-C1');await save(f,'Save engineering record');
  await expect(page.getByRole('heading',{name:'Synthetic pump relocation',exact:true})).toBeVisible();expect(notes).toEqual([]);expect(trace.errors).toEqual([]);
- await page.screenshot({path:'test-results/workflow-engineering-desktop.png',fullPage:true});
+ await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-engineering-desktop.png',fullPage:true});
 });
 
 test('workflow records are present in the complete development backup, not a separate browser key',async({page})=>{
  await start(page);await person(page,project);await program(page,'BACKUP-CANONICAL');
  await page.getByRole('link',{name:'Development settings',exact:true}).click();const wait=page.waitForEvent('download');await page.getByRole('button',{name:'Download development backup'}).click();const file=await wait;const bytes=await readFile(await file.path());expect(bytes[0]).toBe(0x1f);expect(bytes[1]).toBe(0x8b);expect(bytes.length).toBeGreaterThan(1000);
  // SQL restore, content hash and record identity are also tested in the isolated database suite.
+});
+
+
+test('Home creation shortcuts cannot discard an unsubmitted program without confirmation',async({page})=>{
+ await start(page);await page.getByRole('button',{name:'Create work program',exact:true}).click();
+ const f=region(page,'Plan a work program');await f.getByLabel('Program name').fill('KEEP-UNSUBMITTED');
+ page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'Create task',exact:true}).click();
+ await expect(f.getByLabel('Program name')).toHaveValue('KEEP-UNSUBMITTED');await expect(region(page,'Plan a task')).toHaveCount(0);
+ await save(f,'Save program');await expect(page.getByRole('heading',{name:'KEEP-UNSUBMITTED',exact:true})).toBeVisible();
 });

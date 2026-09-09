@@ -34,3 +34,5 @@ export function nextGoldAction(detail:any,policy:any={}){
  }
  return {key:null,title:'Production recorded — check handover and commercial follow-up',description:'Use the independent custody, ownership and settlement records below. A dispatch is not a received transfer.'};
 }
+
+export function calendarMonthStart(zone:string,date=new Date()){return localDay(zone,date).slice(0,7)+'-01';}

@@ -39,3 +39,9 @@
 @media(max-width:640px){.ops-home-grid,.ops-program-cards,.ops-launch-grid{grid-template-columns:1fr}.ops-task-line{align-items:flex-start}.ops-gold-states{grid-template-columns:1fr 1fr}.ops-gold-journey{padding:14px}.ops-map-programbar label{width:100%}.ops-person{align-items:start;gap:12px}.ops-board{grid-auto-columns:85%}.ops-create-menu>div{left:0;right:auto}.ops-launch-grid a{min-height:100px}.ops-topbar .ops-brand{max-width:160px}.ops-embedded-plant{margin:0 -8px}}
 
 .ops-schedule{min-width:720px;table-layout:fixed;width:100%}.ops-schedule th:first-child{width:260px}.ops-schedule td,.ops-schedule th{padding:8px 2px!important;text-align:center}.ops-schedule th:first-child{text-align:left;padding-left:12px!important}.ops-schedule small{display:block;font-size:11px;font-weight:normal;color:var(--ops-muted,#59676b)}.ops-schedule-bar{display:block;min-height:16px;font-size:12px}.ops-schedule-bar[aria-label]{background:#d7e8df;color:#1b4d37}.ops-schedule-bar.finished{background:#e3e6e5;color:#68716a}
+
+/* Page links and in-page tabs share the same legible target and current-state affordance. */
+.ops-shell .ops-tabs>a{display:inline-flex;align-items:center;min-height:44px;flex-shrink:0;border-bottom:3px solid transparent;padding:11px 15px;color:#65745e;white-space:nowrap;text-decoration:none}
+.ops-shell .ops-tabs>a[aria-current=page]{border-bottom-color:#466544;color:#304d30;font-weight:650}
+.ops-shell .ops-tabs>a:hover{background:#eaf0e4}.ops-shell .ops-tabs>a:focus-visible{outline:2px solid #466544;outline-offset:-3px}
+@media(max-width:767px){.ops-shell .ops-tabs>a{font-size:12px;padding:10px 13px}}
