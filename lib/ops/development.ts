@@ -28,7 +28,7 @@ async function open(){
   db=new PGlite({pgliteWasmModule,initdbWasmModule,fsBundle,loadDataDir:saved?.data,relaxedDurability:false});
   await db.waitReady;const engine=new DevelopmentEngine(db);
   const durable=new DurableDevelopment(engine,saved?.revision||0,writeDevelopmentSnapshot);
-  await durable.perform(e=>e.initialise(),!saved);return durable;
+  await durable.perform(e=>e.initialise(),true);return durable;
  }catch(e){await db?.close().catch(()=>{});release();throw e;}
 }
 async function task<T>(fn:(database:DurableDevelopment)=>Promise<T>):Promise<T>{

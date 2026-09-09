@@ -1,1 +1,2 @@
-export {default} from '@/components/ops/Work';
+import {WorkBoard} from '@/components/ops/Workflow';
+export default function Page(){return <WorkBoard/>;}

@@ -14,7 +14,7 @@ async function open(page,path='/ops'){
  return forbidden;
 }
 async function feed(page,reference){
- await page.getByRole('link',{name:'Plant & Gold',exact:true}).click();
+ await page.getByRole('link',{name:'Plant',exact:true}).click();await page.getByRole('link',{name:'Processing',exact:true}).click();
  await page.getByRole('button',{name:'Feed',exact:true}).click();
  await page.getByRole('button',{name:'Record feed lot',exact:true}).click();
  const form=page.getByRole('region',{name:'Record feed lot',exact:true});
@@ -50,8 +50,8 @@ test('no-login suite uses real local save/reload and never requests protected se
  await lot.getByLabel('Actual clean-up time').fill(plantTime(Date.now()-30*60000));
  await lot.getByRole('button',{name:'Record physical lot'}).click();await expect(lot).toHaveCount(0);
  await page.getByRole('button',{name:'Open DEV-CLEANUP-ONLY'}).click();
- await expect(page.getByText('Not recognised',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Verify gold measurement and assay'}).click();
+ await expect(page.getByRole('region',{name:'Gold lot next action'})).toContainText('Not recognised');
+ await page.getByText('All measurement actions / corrections',{exact:true}).click();await page.getByRole('button',{name:'Verify gold measurement and assay'}).click();
  await expect(page.getByRole('button',{name:'Verify selected evidence'})).toBeDisabled();
  await expect(page.getByText('Development mode cannot approve production or sign custody.',{exact:false})).toBeVisible();
  expect(calls).toEqual([]);

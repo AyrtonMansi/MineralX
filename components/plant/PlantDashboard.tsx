@@ -32,7 +32,7 @@ function download(name: string, content: string, type: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: PlantModel; notesEndpoint?:string }) {
+export function PlantDashboard({ model, notesEndpoint='/api/notes', readOnly=false }: { model: PlantModel; notesEndpoint?:string; readOnly?:boolean }) {
   const full: View = {
     x: -5,
     y: -7,
@@ -62,7 +62,7 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: P
   const [expanded,setExpanded]=useState(false),[sideNotes,setSideNotes]=useState(false);
   const [showPins,setShowPins]=useState(true),[activeNote,setActiveNote]=useState('');
   const [draft,setDraft]=useState<NoteDraft|null>(null);
-  const notes=useReviewNotes(notesEndpoint);
+  const notes=useReviewNotes(readOnly?null:notesEndpoint);
   useEffect(()=>{if(tab!=='plan')setExpanded(false);},[tab]);
   useEffect(()=>{
     if(typeof window==='undefined')return;
@@ -151,7 +151,7 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: P
       if(local.x>=0&&local.x<=model.width&&local.y>=0&&local.y<=model.height)setMeasurement(old=>old.length===1?[...old,local]:[local]);
       return;
     }
-    if(tool==='pin'){
+    if(tool==='pin'&&!readOnly){
       if(local.x<0||local.x>model.width||local.y<0||local.y>model.height)return;
       beginNote(qid?anchorFor('equipment',qid):rid?anchorFor('route',rid):{type:'point',id:null,x:Number(local.x.toFixed(2)),y:Number(local.y.toFixed(2)),revision:model.revision});return;
     }
@@ -226,7 +226,7 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: P
             ["basis", "Layout reasoning"],
             ["notes", `Review notes (${notes.notes.filter(n=>n.status==='open').length})`],
           ] as const
-        ).map(([id, name]) => (
+        ).filter(([id])=>!readOnly||id!=='notes').map(([id, name]) => (
           <button
             key={id}
             role="tab"
@@ -318,9 +318,9 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: P
                 <div role="group" aria-label="Drawing tool">
                   <Button variant="ghost" size="sm" aria-pressed={tool==='pan'} onClick={()=>setTool('pan')}>↔ Pan & select</Button>
                   <Button variant="ghost" size="sm" aria-pressed={tool==='measure'} onClick={()=>{setTool('measure');setMeasurement([]);}}>↗ Measure</Button>
-                  <Button variant="ghost" size="sm" aria-pressed={tool==='pin'} disabled={!!draft} onClick={()=>setTool('pin')}>＋ Pin note</Button>
+                  <Button variant="ghost" size="sm" aria-pressed={tool==='pin'} disabled={!!draft||readOnly} onClick={()=>setTool('pin')}>＋ Pin note</Button>
                 </div>
-                <button className="plant-notes-toggle" aria-pressed={sideNotes} onClick={()=>setSideNotes(v=>!v)}>Notes <span>{notes.notes.filter(n=>n.status==='open').length}</span></button>
+                <button hidden={readOnly} className="plant-notes-toggle" aria-pressed={sideNotes} onClick={()=>setSideNotes(v=>!v)}>Notes <span>{notes.notes.filter(n=>n.status==='open').length}</span></button>
               </div>
               {tool!=='pan'&&<div className="plant-tool-prompt" role="status">{tool==='pin'?'Select a machine, connection or point inside the yard to add a note.':measurement.length===0?'Select the first measurement point.':measurement.length===1?'Select the second point.':'Select another point to start a new measurement.'}<button onClick={()=>{setTool('pan');setMeasurement([]);}}>Done</button></div>}
               <svg
@@ -807,7 +807,7 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: P
                 )}
                 <div className="plant-layer-options">
                   <label><input type="checkbox" checked={showPins} onChange={e=>setShowPins(e.target.checked)}/>Review note pins</label>
-                  {Object.entries(routeLayers).map(([id, name]) => (
+                  {Object.entries(routeLayers).filter(([id])=>!readOnly||id!=='notes').map(([id, name]) => (
                     <label key={id}>
                       <input
                         type="checkbox"
@@ -847,7 +847,7 @@ export function PlantDashboard({ model, notesEndpoint='/api/notes' }: { model: P
                 </div>
               </div>
               <div className="plant-legend">
-                {Object.entries(groupNames).map(([id, name]) => (
+                {Object.entries(groupNames).filter(([id])=>!readOnly||id!=='notes').map(([id, name]) => (
                   <span key={id}>
                     <i style={{ background: palette[id] }} />
                     {name}

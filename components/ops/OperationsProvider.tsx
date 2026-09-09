@@ -1,5 +1,5 @@
 'use client';
-import {mayNavigate} from './navigation';
+import {mayNavigate,entryIsOpen} from './navigation';
 import React,{createContext,useCallback,useContext,useEffect,useRef,useState} from 'react';
 import {useSearchParams,useRouter} from 'next/navigation';
 import {api,authClient} from '@/lib/ops/client';
@@ -23,6 +23,12 @@ export default function OperationsProvider({children,development=false}:{childre
  finally{setLoading(false);}},[]);
  useEffect(()=>{refresh();const change=()=>setOnline(navigator.onLine);change();window.addEventListener('online',change);window.addEventListener('offline',change);return()=>{window.removeEventListener('online',change);window.removeEventListener('offline',change);};},[refresh]);
  useEffect(()=>{if(development)return;let stop=()=>{};try{const {data}=authClient().auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'||session?.user.id&&contextRef.current?.userId&&session.user.id!==contextRef.current.userId){vault.current=null;setPack(null);setContext(null);contextRef.current=null;setOfflineMode(false);setTimeout(()=>void refresh(),0);}});stop=()=>data.subscription.unsubscribe();}catch{}return stop;},[refresh,development]);
+ // Shared views refresh on foreground/resume. Dirty forms retain their original version for conflict checks.
+ useEffect(()=>{if(development)return;let last=0;
+  const current=()=>{if(document.visibilityState!=='visible'||!navigator.onLine||entryIsOpen()||vault.current?.pack.outbox.length||Date.now()-last<15000)return;last=Date.now();void refresh();};
+  window.addEventListener('focus',current);document.addEventListener('visibilitychange',current);
+  return()=>{window.removeEventListener('focus',current);document.removeEventListener('visibilitychange',current);};
+ },[development,refresh]);
  const persist=useCallback(async(update:(p:FieldPack)=>FieldPack|Promise<FieldPack>)=>{
  const identity=vault.current?`${vault.current.pack.userId}:${vault.current.pack.scope.id}`:null;
  const task=queue.current.catch(()=>{}).then(async()=>{const current=vault.current;if(!current||identity!==`${current.pack.userId}:${current.pack.scope.id}`)throw new Error('Unlock or prepare this device workspace before saving offline.');
