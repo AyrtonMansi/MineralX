@@ -3,6 +3,7 @@ import type {PGlite} from '@electric-sql/pglite';
 import schema from './development-schema.generated';
 import {commandSchema,OpsError,classifyDatabaseError,permissionProfiles,rowsToCsv, type Command} from './contracts';
 import {DEVELOPMENT_ACTOR as ACTOR,DEVELOPMENT_ORG as ORG,DEVELOPMENT_FACILITY as FACILITY,DEVELOPMENT_PROJECT as PROJECT} from './development-policy';
+import type {DeviceProgram} from './device-program-bridge';
 import {GEO_KINDS,GEO_ACTIONS,newSharedProject,applyGeoCommand,changeSet,projectMetadata,versionAt} from './geology.js';
 import {parseKml,parseGeoJson,readKmz,spatialStats} from '../../components/mineralx/spatial-import.js';
 
@@ -11,6 +12,7 @@ const json=(value:unknown)=>JSON.stringify(value);
 const fault=(message:string):never=>{throw new OpsError('validation',message);};
 const unsigned='This action needs a named, verified staff account. Development records cannot approve production, sign custody or change staff access.';
 const digest=async(bytes:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
+const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
 export class DevelopmentEngine {
   constructor(readonly db:PGlite){}
   async initialise(){
@@ -71,6 +73,23 @@ export class DevelopmentEngine {
     }
     return {project,versions,revision,metadataVersion,asOf:new Date().toISOString()};
   }
+  /**
+   * Imports only browser-local Globe program metadata into the browser-local
+   * Development project. This deliberately bypasses every staff, cloud and
+   * meeting boundary: the scope is a fixed local PGlite scope, never caller
+   * supplied, and the canonical program command retains its UUID.
+   */
+  async importDevicePrograms(programs:readonly DeviceProgram[]){
+    const current=await this.geology(PROJECT),known=new Set((current.project.programs||[]).map((program:any)=>program.recordId));let created=0;
+    for(const program of programs){
+      if(program.origin!=='globe'||!uuid.test(program.recordId)||!program.name?.trim()||program.name.trim().length>160||known.has(program.recordId))continue;
+      await this.rpc('mx_ops_command',[PROJECT,crypto.randomUUID(),'program.save',program.recordId,0,json({name:program.name.trim(),type:'sampling',state:'planned',method:program.method})]);
+      known.add(program.recordId);created++;
+    }
+    return {created};
+  }
+  /** Exposes only the local Development project's program metadata to the local registry. */
+  async deviceProjectPrograms(){return (await this.geology(PROJECT)).project.programs||[];}
   async source(scopeId:string,id:string){
     this.scope(scopeId);const files=await this.rpc('mx_ops_files',[scopeId,id]),file=files?.[0];if(!file||file.status!=='verified')fault('Choose a verified file saved in this development workspace.');
     const result=await this.db.query<{bytes:Uint8Array}>('select bytes from mineralx_development_bytes where id=$1',[id]);

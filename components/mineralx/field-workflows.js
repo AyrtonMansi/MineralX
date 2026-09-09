@@ -1,11 +1,13 @@
 // Physical records and reviewed analytical results. No network or UI state here.
-import { nextId, today, validateCoordinates, parseAssayCell, elementInfo, ELEMENT_SYMBOLS } from './project-store.js';
+import { nextId, today, validateCoordinates, parseAssayCell, elementInfo, ELEMENT_SYMBOLS, SAMPLE_TYPES } from './project-store.js';
 import { parseCsv } from './csv.js';
 import {idKey,isControl,isReferenceControl,validDate,finiteInput,appendAudit} from './record-rules.js';
 
 export const FIELD_RELEASE = '2026.09.07.2';
 export const newRecordId = () => globalThis.crypto.randomUUID();
 export const emptyStore = () => ({ version: 8, workflowVersion: 1, activeProjectId: null, projects: [] });
+const PROGRAM_STATES = new Set(['draft','planned','ready','in_progress','blocked','on_hold','completed','cancelled']);
+const programState = (value, status) => PROGRAM_STATES.has(value) ? value : status === 'cancelled' ? 'cancelled' : status === 'closed' ? 'completed' : 'planned';
 export function upgradeStore(input) {
   if (!input || input.version !== 8 || !Array.isArray(input.projects)) throw new Error('Unsupported workspace format. Original bytes have been left intact.');
   const ids = new Set();
@@ -18,6 +20,12 @@ export function upgradeStore(input) {
       if (p[key] != null && !Array.isArray(p[key])) throw new Error(`Invalid ${key} in ${p.name || p.id}.`);
       result[key] = (p[key] || []).map(row => ({ ...row, recordId: row.recordId || newRecordId() }));
     }
+    // Keep the historical `status` exactly as recorded, while adding the
+    // canonical fields used by the local Program bridge and Operations.
+    result.programs = result.programs.map(program => {
+      const status = program.status || 'active';
+      return {...program, method:SAMPLE_TYPES.includes(program.method) ? program.method : 'rock_chip', type:program.type || 'sampling', state:programState(program.state,status), status};
+    });
     for(const kind of ['samples','intervals'])result[kind]=result[kind].map(s=>({...s,assayReviewStatus:s.assayReviewStatus||(s.assayHistory?.some(h=>h.reviewedAt)?'released':Object.keys(s.assays||{}).length||Object.keys(s.detectionLimits||{}).length||Object.keys(s.lowerLimits||{}).length?'unreviewed':'pending')}));
     return result;
   });
@@ -49,9 +57,11 @@ export function assertCollar(c) {
 export function collectSample(project, draft) {
   const id = String(draft.id || nextId(project.samples, project.idPrefix)).trim();
   assertUniqueIds(project.samples, [{id}]);
-  if (draft.programId && !(project.programs || []).some(p => p.recordId === draft.programId)) throw new Error('The selected program does not belong to this project.');
+  const program = draft.programId && (project.programs || []).find(p => p.recordId === draft.programId);
+  if (draft.programId && !program) throw new Error('The selected program does not belong to this project.');
+  if (program && ['completed','cancelled'].includes(program.state)) throw new Error('Reopen the program before collecting another sample.');
   const method = draft.sampleType || 'rock_chip', qaqcType = draft.qaqcType || 'none';
-  if (!['rock_chip','soil','float','rc','diamond_core','other'].includes(method)) throw new Error('Select a supported sampling method.');
+  if (!SAMPLE_TYPES.includes(method)) throw new Error('Select a supported sampling method.');
   if (!['none','blank','standard','duplicate','triplicate'].includes(qaqcType)) throw new Error('Select a supported QA/QC type.');
   const reference = isReferenceControl({qaqcType}), duplicate = ['duplicate','triplicate'].includes(qaqcType);
   const original = duplicate && project.samples.find(s => s.recordId === draft.duplicateRecordId);
@@ -85,7 +95,8 @@ export function collectSample(project, draft) {
 }
 export function createProgram(project, name, method) {
   if (!name.trim()) throw new Error('Enter a program name.');
-  return { ...project, programs: [...(project.programs || []), { recordId: newRecordId(), name: name.trim(), method, createdAt: new Date().toISOString(), status: 'active' }] };
+  if (!SAMPLE_TYPES.includes(method)) throw new Error('Select a supported sampling method.');
+  return { ...project, programs: [...(project.programs || []), { recordId: newRecordId(), name: name.trim(), method, type:'sampling', state:'planned', createdAt: new Date().toISOString(), status: 'active' }] };
 }
 export function createDispatch(project, sampleRecordIds, laboratory) {
   const ids = [...new Set(sampleRecordIds)];

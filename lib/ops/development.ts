@@ -3,6 +3,8 @@ import {PGlite} from '@electric-sql/pglite';
 import {DevelopmentEngine} from './development-engine';
 import {DurableDevelopment,readDevelopmentSnapshot,writeDevelopmentSnapshot} from './development-storage';
 import {OpsError} from './contracts';
+import {publishDevelopmentPrograms,readDeviceProgramRegistry} from './device-program-bridge';
+import {DEVELOPMENT_PROJECT} from './development-policy';
 let opened:Promise<DurableDevelopment>|undefined;
 let queue:Promise<unknown>=Promise.resolve();
 /** A single document owns the database and its atomic IndexedDB snapshots. */
@@ -35,7 +37,34 @@ async function task<T>(fn:(database:DurableDevelopment)=>Promise<T>):Promise<T>{
  const pending=queue.catch(()=>{}).then(async()=>{opened??=open().catch(e=>{opened=undefined;throw e;});return fn(await opened);});
  queue=pending;return pending;
 }
-export const developmentApi=(path:string,data?:unknown)=>task(db=>db.perform(engine=>engine.request(path,data),data!==undefined));
+function bridgeRequest(path:string,data?:unknown){
+ const url=new URL(path,'https://development.invalid/'),kind=url.pathname.slice(1);
+ if(data&&typeof data==='object'){
+  const command=data as {scopeId?:unknown;action?:unknown};
+  return command.scopeId===DEVELOPMENT_PROJECT&&['program.save','geo.program.create'].includes(String(command.action));
+ }
+ return kind==='context'||url.searchParams.get('scope')===DEVELOPMENT_PROJECT&&['workflow','geology'].includes(kind);
+}
+/**
+ * This is intentionally reached only through developmentApi. It reads the
+ * device registry, writes the fixed local PGlite project, then reflects only
+ * that project's program metadata back. It has no production client, staff
+ * session, meeting workspace, or network request.
+ */
+async function synchroniseDevicePrograms(engine:DevelopmentEngine){
+ const {registry}=await readDeviceProgramRegistry();
+ await engine.importDevicePrograms(registry.programs);
+ await publishDevelopmentPrograms(await engine.deviceProjectPrograms());
+}
+export const developmentApi=(path:string,data?:unknown)=>task(async db=>{
+ const bridge=bridgeRequest(path,data);
+ return db.perform(async engine=>{
+  if(bridge)await synchroniseDevicePrograms(engine);
+  const result=await engine.request(path,data);
+  if(bridge)await publishDevelopmentPrograms(await engine.deviceProjectPrograms());
+  return result;
+ },data!==undefined||bridge);
+});
 export const developmentUpload=(...args:Parameters<DevelopmentEngine['upload']>)=>task(db=>db.perform(engine=>engine.upload(...args),true));
 export const developmentSource=(scope:string,id:string)=>task(db=>db.perform(engine=>engine.source(scope,id)));
 export const developmentExport=(scope:string,kind:string)=>task(db=>db.perform(engine=>engine.export(scope,kind)));
