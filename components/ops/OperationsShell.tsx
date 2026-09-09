@@ -77,9 +77,11 @@ export default function OperationsShell({ children }: { children: React.ReactNod
       : scope;
     return operationsHref(area, destination?.id, params);
   };
-  const isCurrentItem = (item: { area: OperationsArea; label: string }) => {
+  const isCurrentItem = (item: { area: OperationsArea; label: string; params?: string }) => {
     if (item.label === 'People & workload') return path === '/ops/work' && urlQuery.get('view') === 'people';
     if (item.area === 'work') return path === '/ops/work' && urlQuery.get('view') !== 'people';
+    if (item.area === 'geology' && item.params === 'view=map') return path === '/ops/geology' && urlQuery.get('view') === 'map';
+    if (item.area === 'geology') return path === '/ops/geology' && urlQuery.get('view') !== 'map';
     return isCurrentOperationsArea(path, item.area);
   };
 
@@ -246,7 +248,7 @@ export default function OperationsShell({ children }: { children: React.ReactNod
     <aside ref={drawer} className={`ops-sidebar ${menu ? 'is-open' : ''}`} id="operations-navigation" role={menu ? 'dialog' : undefined} aria-modal={menu || undefined} aria-label={menu ? 'Operations navigation' : undefined} tabIndex={menu ? -1 : undefined}>
       <nav aria-label="Operations">
         <div className="ops-nav-mobile-heading"><span>Navigation</span><button ref={closeButton} type="button" onClick={() => setMenu(false)}>Close</button></div>
-        {groups.map((group) => <section className="ops-nav-group" key={group.label}><span className="ops-nav-caption">{group.label}</span>{group.items.map((item) => <Link key={`${group.label}:${item.area}:${item.label}`} href={item.label === 'People & workload' ? href('work', 'view=people') : href(item.area)} aria-current={isCurrentItem(item) ? 'page' : undefined} onClick={() => setMenu(false)}>{item.label}</Link>)}</section>)}
+        {groups.map((group) => <section className="ops-nav-group" key={group.label}><span className="ops-nav-caption">{group.label}</span>{group.items.map((item) => <Link key={`${group.label}:${item.area}:${item.label}`} href={item.label === 'People & workload' ? href('work', 'view=people') : href(item.area, item.params)} aria-current={isCurrentItem(item) ? 'page' : undefined} onClick={() => setMenu(false)}>{item.label}</Link>)}</section>)}
         <section className="ops-nav-group"><span className="ops-nav-caption">Private records</span><a href="/ops/meetings" aria-label="Meetings" aria-current={path === '/ops/meetings' ? 'page' : undefined} onClick={() => setMenu(false)}>Meetings<small aria-hidden="true">Verified JV access</small></a></section>
         {!development && context.organisations.some((organisation) => organisation.admin) && <section className="ops-nav-group ops-nav-utility"><span className="ops-nav-caption">Other tools</span><Link href={href('admin')} onClick={() => setMenu(false)}>Access & settings</Link></section>}
       </nav>

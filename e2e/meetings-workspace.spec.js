@@ -44,7 +44,7 @@ test('private meeting navigation does not promise staff-only Operations pages',a
  const f=fixture();await page.route('**/api/ops/meetings',r=>json(r,f.index));await page.route('**/api/ops/meetings/'+mid,r=>json(r,f.detail));
  await page.goto('/ops/meetings');const nav=page.getByRole('navigation',{name:'Meetings navigation'});
  await expect(nav.getByRole('link',{name:/Meetings/})).toBeVisible();await expect(nav.getByRole('link',{name:/Device workspace/})).toHaveAttribute('href','/ops?mode=development');await expect(nav.getByRole('link',{name:/Shared Operations/})).toHaveAttribute('href','/ops/login');
- await expect(nav.getByRole('link',{name:'Geology',exact:true})).toHaveCount(0);await expect(nav.getByRole('link',{name:'Plant',exact:true})).toHaveCount(0);
+ await expect(nav.getByRole('link',{name:'Geology Globe',exact:true})).toHaveCount(0);await expect(nav.getByRole('link',{name:'Exploration',exact:true})).toHaveCount(0);await expect(nav.getByRole('link',{name:'Plant',exact:true})).toHaveCount(0);
 });
 
 test('failed review retains the entry and retry uses one request identity',async({page})=>{

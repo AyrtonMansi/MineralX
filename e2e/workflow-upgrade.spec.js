@@ -116,10 +116,11 @@ test('workflow records are present in the complete development backup, not a sep
 });
 
 
-test('Home creation shortcuts cannot discard an unsubmitted program without confirmation',async({page})=>{
+test('Global Create cannot discard an unsubmitted program without confirmation',async({page})=>{
  await start(page);await page.getByRole('button',{name:'Create work program',exact:true}).click();
  const f=region(page,'Plan a work program');await f.getByLabel('Program name').fill('KEEP-UNSUBMITTED');
- page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'Create task',exact:true}).click();
+ const create=page.locator('.ops-topbar .ops-create-menu');await create.locator('summary').click();
+ page.once('dialog',d=>d.dismiss());await create.getByRole('link',{name:'Task',exact:true}).click();
  await expect(f.getByLabel('Program name')).toHaveValue('KEEP-UNSUBMITTED');await expect(region(page,'Plan a task')).toHaveCount(0);
  await save(f,'Save program');await expect(page.getByRole('heading',{name:'KEEP-UNSUBMITTED',exact:true})).toBeVisible();
 });

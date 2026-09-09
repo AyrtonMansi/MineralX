@@ -1,21 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createShortcuts, developmentNavigationGroups, navigationGroups, scopeForOperationsPath, scopeLabel, scopeSwitchDestination, supportsOperationsPath } from '../../lib/ops/suite-navigation';
+import { createShortcuts, developmentNavigationGroups, navigationGroups, operationsHref, scopeForOperationsPath, scopeLabel, scopeSwitchDestination, supportsOperationsPath } from '../../lib/ops/suite-navigation';
 import type { Scope } from '../../lib/ops/contracts';
 
 const project: Scope = { id: 'project-1', org_id: 'org-1', name: 'North project', code: 'NORTH', kind: 'project', timezone: 'Australia/Brisbane', permissions: ['geo.read', 'work.read'], version: 1, policy: {} };
 const facility: Scope = { id: 'facility-1', org_id: 'org-1', name: 'Central plant', code: 'CENTRAL', kind: 'facility', timezone: 'Australia/Brisbane', permissions: ['plant.read', 'gold.read', 'work.read'], version: 1, policy: {} };
 
 test('navigation only shows record surfaces compatible with the active workspace', () => {
-  const projectLabels = navigationGroups(project).flatMap((group) => group.items.map((item) => item.label));
+  const projectItems = navigationGroups(project).flatMap((group) => group.items);
+  const projectLabels = projectItems.map((item) => item.label);
   const facilityLabels = navigationGroups(facility).flatMap((group) => group.items.map((item) => item.label));
-  assert.ok(projectLabels.includes('Geology'));
+  assert.ok(projectLabels.includes('Geology Globe'));
+  assert.ok(projectLabels.includes('Exploration'));
+  assert.equal(projectItems.find((item) => item.label === 'Geology Globe')?.params, 'view=map');
+  assert.equal(operationsHref('geology', project.id, projectItems.find((item) => item.label === 'Geology Globe')?.params), '/ops/geology?view=map&scope=project-1');
   assert.ok(projectLabels.includes('Pits & stockpiles'));
   assert.ok(!projectLabels.includes('Plant'));
   assert.ok(!projectLabels.includes('Gold'));
   assert.ok(facilityLabels.includes('Plant'));
   assert.ok(facilityLabels.includes('Gold'));
-  assert.ok(!facilityLabels.includes('Geology'));
+  assert.ok(!facilityLabels.includes('Geology Globe'));
+  assert.ok(!facilityLabels.includes('Exploration'));
 });
 
 test('development presents one minimal workspace while keeping geology and processing records separated internally', () => {
@@ -23,7 +28,8 @@ test('development presents one minimal workspace while keeping geology and proce
   const labels = groups.flatMap((group) => group.items.map((item) => item.label));
 
   assert.deepEqual(groups.map((group) => group.label), ['Workspace', 'Operations']);
-  assert.deepEqual(labels, ['Home', 'Work', 'Geology', 'Pits & stockpiles', 'Processing', 'Gold']);
+  assert.deepEqual(labels, ['Home', 'Work', 'Geology Globe', 'Exploration', 'Pits & stockpiles', 'Processing', 'Gold']);
+  assert.equal(groups[1].items.find((item) => item.label === 'Geology Globe')?.params, 'view=map');
   for (const removed of ['Programs', 'Reports', 'Field preparation', 'People & workload', 'Files & procedures', 'Development settings', 'Legacy processing register', 'Local geology workspace', 'Plant layout reference']) {
     assert.equal(labels.includes(removed), false, `${removed} must not return as a device-workspace entry point`);
   }

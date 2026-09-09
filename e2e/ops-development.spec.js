@@ -132,7 +132,7 @@ test('development choice never authorises live APIs and switching to staff stays
   headers:{'x-mineralx-ops-mode':'development'},
  });
  expect([401,403,503]).toContain(write.status());
- await page.getByRole('link',{name:'Open protected staff sign-in',exact:true}).click();
+ await page.getByRole('link',{name:'Open protected staff workspace →',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();
  await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','staff');
  await page.getByRole('link',{name:'Continue without sign-in — development workspace'}).click();await expect(page.locator('.ops-development-banner')).toBeVisible();

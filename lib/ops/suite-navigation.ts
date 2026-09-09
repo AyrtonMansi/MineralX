@@ -17,6 +17,8 @@ export type OperationsArea =
 export type NavigationItem = {
   area: OperationsArea;
   label: string;
+  /** Optional stable route query for a distinct destination within an area. */
+  params?: string;
   requiredKind?: ScopeKind;
   permission?: string;
 };
@@ -40,7 +42,8 @@ const shared: NavigationItem[] = [
 ];
 
 const projectWork: NavigationItem[] = [
-  { area: 'geology', label: 'Geology', requiredKind: 'project', permission: 'geo.read' },
+  { area: 'geology', label: 'Geology Globe', params: 'view=map', requiredKind: 'project', permission: 'geo.read' },
+  { area: 'geology', label: 'Exploration', requiredKind: 'project', permission: 'geo.read' },
   { area: 'pit', label: 'Pits & stockpiles', requiredKind: 'project' },
   { area: 'field', label: 'Field preparation', requiredKind: 'project', permission: 'geo.read' },
 ];
@@ -60,7 +63,8 @@ const developmentWorkspace: NavigationGroup[] = [
   {
     label: 'Operations',
     items: [
-      { area: 'geology', label: 'Geology', requiredKind: 'project', permission: 'geo.read' },
+      { area: 'geology', label: 'Geology Globe', params: 'view=map', requiredKind: 'project', permission: 'geo.read' },
+      { area: 'geology', label: 'Exploration', requiredKind: 'project', permission: 'geo.read' },
       { area: 'pit', label: 'Pits & stockpiles', requiredKind: 'project' },
       { area: 'plant', label: 'Processing', requiredKind: 'facility', permission: 'plant.read' },
       { area: 'gold', label: 'Gold', requiredKind: 'facility', permission: 'gold.read' },
