@@ -49,17 +49,17 @@ async function fuel(page,kind,litres,at,reference){
  await f.getByLabel('Measured quantity, L').fill(litres);await f.getByLabel('Actual observation time').fill(at);await f.getByLabel('Docket / observation reference').fill(reference);await save(f,'Save fuel record');
 }
 
-test('Home and the suite Globe create and edit one canonical campaign; reload keeps the same ID',async({page})=>{
+test('Home and the shared Exploration map create and edit one canonical campaign; reload keeps the same ID',async({page})=>{
  const trace=await start(page);await person(page,project);const id=await program(page);
- await page.getByRole('link',{name:'Open in Geology Globe',exact:true}).click();
+ await page.getByRole('link',{name:'Open in Exploration map',exact:true}).click();
  await expect(page.getByRole('combobox',{name:'Work program',exact:true})).toHaveValue(id);
  await expect(page.getByRole('combobox',{name:'Work program',exact:true}).locator(`option[value="${id}"]`)).toHaveText('Synthetic drill campaign');
  await page.getByRole('link',{name:'Program plan & tasks →',exact:true}).click();await page.getByRole('button',{name:'Edit program plan'}).click();
  const f=region(page,'Plan a work program');await f.getByLabel('Program name').fill('Renamed canonical campaign');await save(f,'Save program');
  await page.goto(`/ops?scope=${project}`);await page.reload();await expect(page.getByRole('heading',{name:'Renamed canonical campaign',exact:true})).toBeVisible({timeout:30000});
  await page.goto(`/ops/geology?scope=${project}&view=map`);await page.getByText('Create program',{exact:true}).click();await page.getByRole('link',{name:'Geological mapping',exact:true}).click();
- const map=region(page,'Plan a work program');await expect(map.getByLabel('Type of work')).toHaveValue('mapping');await map.getByLabel('Program name').fill('Created from Globe');await save(map,'Save program');
- await page.goto(`/ops?scope=${project}`);await expect(page.getByRole('heading',{name:'Created from Globe',exact:true})).toBeVisible();
+ const map=region(page,'Plan a work program');await expect(map.getByLabel('Type of work')).toHaveValue('mapping');await map.getByLabel('Program name').fill('Created from Exploration map');await save(map,'Save program');
+ await page.goto(`/ops?scope=${project}`);await expect(page.getByRole('heading',{name:'Created from Exploration map',exact:true})).toBeVisible();
  expect(trace.errors).toEqual([]);expect(trace.protectedRequests).toEqual([]);
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-home-desktop.png',fullPage:true});
 });
