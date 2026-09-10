@@ -1,0 +1,11 @@
+MINERALX DEVELOPMENT TEST FIXTURE
+
+Synthetic shift handover
+Date: 10 September 2026
+Area: Test Plant
+
+- Pre-start inspection completed.
+- Conveyor test completed with no synthetic exceptions recorded.
+- Follow-up: verify the test guard checklist at the next mock shift.
+
+This fixture contains no production, personal, customer, assay, or commercial data.
