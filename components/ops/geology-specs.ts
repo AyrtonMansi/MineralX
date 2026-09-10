@@ -1,11 +1,15 @@
 import type {ActionSpec,Field} from './action-specs';
+import {SAMPLE_TYPES} from '@/components/mineralx/project-store.js';
 const t=(key:string,label:string,required=true):Field=>({key,label,required});
 const n=(key:string,label:string,required=true):Field=>({key,label,type:'number',required});
 const choice=(key:string,label:string,resource:string,required=false):Field=>({key,label,type:'select',resource,required});
 const options=(key:string,label:string,values:string[]):Field=>({key,label,type:'select',options:values,required:true});
 const reason:Field={key:'reason',label:'Decision / correction reason',type:'textarea',required:true};
 const source:Field={key:'sourceFileId',label:'Verified original source',type:'evidence',family:'geo',required:true};
-const methods=['rock_chip','soil','float','rc','diamond_core','other'];
+// Sampling methods are a common vocabulary across Exploration and the
+// Geology Globe. Older field records can retain their original method;
+// this only keeps new-entry choices consistent.
+const methods=[...SAMPLE_TYPES];
 const drilling=(v:any)=>['rc','diamond_core'].includes(v.sampleType)&&!['blank','standard'].includes(v.qaqcType);
 const surface=(v:any)=>!drilling(v)&&!['blank','standard'].includes(v.qaqcType);
 const sampleFields:Field[]=[t('id','Physical sample / bag identifier'),{key:'date',label:'Actual collection date',type:'date',required:true},options('sampleType','Sampling method',methods),choice('programId','Sampling program','programs'),options('qaqcType','QA/QC role',['none','blank','standard','duplicate','triplicate']),{...t('referenceMaterial','Certified reference material'),when:v=>v.qaqcType==='standard'},{...choice('duplicateRecordId','Original physical sample','samples',true),when:v=>['duplicate','triplicate'].includes(v.qaqcType)},{...choice('collarRecordId','Drillhole','collars',true),when:drilling},{...n('from','From, m'),when:drilling},{...n('to','To, m'),when:drilling},{...n('lat','Latitude, WGS84'),when:surface},{...n('lng','Longitude, WGS84'),when:surface},{...options('coordSource','Coordinate source',['gps','survey','manual','unknown']),when:surface},{...n('coordinateAccuracyM','Reported coordinate accuracy, m',false),when:surface},{...n('recoveryPercent','Measured sample recovery, %',false),when:drilling},{...t('splitMethod','Split method',false),when:drilling},{key:'coreFraction',label:'Core fraction',type:'select',options:['whole','half','quarter'],when:v=>v.sampleType==='diamond_core'},t('lith','Lithology / field description',false),{key:'notes',label:'Field notes',type:'textarea'}];

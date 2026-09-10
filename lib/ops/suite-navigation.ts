@@ -46,7 +46,7 @@ const shared: NavigationItem[] = [
 const projectWork: NavigationItem[] = [
   { area: 'geology', label: 'Geology Globe', href: '/mineralx', requiredKind: 'project', permission: 'geo.read' },
   { area: 'geology', label: 'Exploration', requiredKind: 'project', permission: 'geo.read' },
-  { area: 'pit', label: 'Pits & stockpiles', requiredKind: 'project' },
+  { area: 'pit', label: 'Pits & stockpiles', requiredKind: 'project', permission: 'geo.read' },
   { area: 'field', label: 'Field preparation', requiredKind: 'project', permission: 'geo.read' },
 ];
 
@@ -67,7 +67,7 @@ const developmentWorkspace: NavigationGroup[] = [
     items: [
       { area: 'geology', label: 'Geology Globe', href: '/mineralx', requiredKind: 'project', permission: 'geo.read' },
       { area: 'geology', label: 'Exploration', requiredKind: 'project', permission: 'geo.read' },
-      { area: 'pit', label: 'Pits & stockpiles', requiredKind: 'project' },
+      { area: 'pit', label: 'Pits & stockpiles', requiredKind: 'project', permission: 'geo.read' },
       { area: 'plant', label: 'Processing', requiredKind: 'facility', permission: 'plant.read' },
       { area: 'gold', label: 'Gold', requiredKind: 'facility', permission: 'gold.read' },
     ],
@@ -138,7 +138,7 @@ export function supportsOperationsPath(scope: Scope, pathname: string) {
   const required = requiredScopeKind(pathname);
   if (required && scope.kind !== required) return false;
   if (/^\/ops\/(programs|work)(?:\/|$)/.test(pathname)) return scope.permissions.includes('work.read');
-  if (/^\/ops\/(geology|field)(?:\/|$)/.test(pathname)) return scope.permissions.includes('geo.read');
+  if (/^\/ops\/(geology|field|pit)(?:\/|$)/.test(pathname)) return scope.permissions.includes('geo.read');
   if (/^\/ops\/plant(?:\/|$)/.test(pathname)) return scope.permissions.includes('plant.read');
   if (/^\/ops\/gold(?:\/|$)/.test(pathname)) return scope.permissions.includes('gold.read');
   return true;

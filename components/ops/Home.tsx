@@ -12,7 +12,7 @@ import { scopeLabel } from '@/lib/ops/suite-navigation';
 function OperationalSummary() {
   const { scope, context, development } = useOperations();
   const { data, error, loading } = useResource(scope ? `dashboard?scope=${scope.id}` : null);
-  if (!scope) return <><Heading title="Your work" description="No operational workspace is assigned yet." /><Empty title="Access is not a role approval">An administrator can create the project or facility and assign named responsibilities. Existing production records have not been moved.</Empty>{context?.organisations.some((organisation) => organisation.admin) && <LinkTo area="admin">Open access & settings</LinkTo>}</>;
+  if (!scope) return <><Heading title="Your work" description="No operational workspace is assigned yet." /><Empty title="Set up named Operations access">An administrator can create the project or facility and assign named responsibilities. Existing production records have not been moved.</Empty>{context?.organisations.some((organisation) => organisation.admin) ? <LinkTo area="admin">Open access & settings</LinkTo> : <Link href="/ops/admin">Set up or review Operations access</Link>}</>;
   const canGeo = scope.permissions.includes('geo.read');
   const canPlant = scope.permissions.includes('plant.read');
   const canGold = scope.permissions.includes('gold.read');

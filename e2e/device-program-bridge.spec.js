@@ -34,6 +34,7 @@ test('a Globe program keeps its UUID through device Operations and back to Globe
 
  const title='UUID bridge sampling program';
  await page.goto('/mineralx',{waitUntil:'domcontentloaded'});
+ await expect(page.getByRole('link',{name:'Open Device Exploration & work →',exact:true})).toHaveAttribute('href','/ops/geology?mode=development');
  await page.getByLabel('Project name',{exact:true}).fill('UUID bridge project');
  await page.getByRole('button',{name:'Create project',exact:true}).click();
  await saved(page);

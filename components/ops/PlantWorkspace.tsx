@@ -16,7 +16,7 @@ import plan from '@/data/plant-p5.json';
 import Plant from './Plant';
 import '@/app/plant/plant.css';
 const model=plantSchema.parse(plan);
-const registers=['runs','feed','campaigns'];
+const registers=['runs','feed'];
 export default function PlantWorkspace(){
  const {scope,development}=useOperations(),query=useSearchParams(),router=useRouter(),view=query.get('view')||(query.get('action')==='run'?'runs':'overview'), {data,error,loading}=useWorkflow(),[editor,setEditor]=useState<any>(null),[selected,setSelected]=useState<any>(null);
  const tabs=[['overview','Overview'],['engineering','Engineering'],['runs','Processing'],['assets','Equipment'],['maintenance','Maintenance'],['energy','Energy'],['spares','Critical spares']];

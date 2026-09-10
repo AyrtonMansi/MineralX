@@ -104,17 +104,16 @@ test('geology capture, reviewed map import and original bytes survive reload wit
  expect(calls).toEqual([]);
 });
 
-test('local storage failure retains a processing program draft and feeds the canonical selector after retry',async({page})=>{
- await open(page,`/ops/plant?scope=${facility}&view=campaigns`);await page.getByRole('button',{name:'Create processing program'}).click();
- const form=page.getByRole('region',{name:'Create processing program'});await form.getByLabel('Processing program name').fill('RECOVERED-DEVELOPMENT-PROGRAM');
+test('local storage failure retains a canonical processing program draft and feeds the shared selector after retry',async({page})=>{
+ await open(page,`/ops/programs?scope=${facility}`);await page.getByRole('button',{name:'Create work program'}).click();
+ const form=page.getByRole('region',{name:'Plan a work program'});await form.getByLabel('Program name').fill('RECOVERED-DEVELOPMENT-PROGRAM');await form.getByLabel('Type of work').selectOption('processing');
  await page.evaluate(()=>{const original=IDBDatabase.prototype.transaction;window.restoreDevelopmentStorage=()=>{IDBDatabase.prototype.transaction=original;};IDBDatabase.prototype.transaction=function(names,mode,...args){if(mode==='readwrite')throw new DOMException('Injected development storage quota','QuotaExceededError');return original.call(this,names,mode,...args);};});
- await form.getByRole('button',{name:'Create program',exact:true}).click();
- await expect(form.getByRole('alert')).toBeVisible();await expect(form.getByLabel('Processing program name')).toHaveValue('RECOVERED-DEVELOPMENT-PROGRAM');
+ await form.getByRole('button',{name:'Save program',exact:true}).click();
+ await expect(form.getByRole('alert')).toBeVisible();await expect(form.getByLabel('Program name')).toHaveValue('RECOVERED-DEVELOPMENT-PROGRAM');
  await expect(page.locator('.ops-connection')).not.toContainText('Saved in this browser');
  await page.evaluate(()=>window.restoreDevelopmentStorage());
  await form.getByRole('button',{name:'Retry original save',exact:true}).click();await expect(form).toHaveCount(0);
- await page.reload();await expect(page.getByRole('row').filter({hasText:'RECOVERED-DEVELOPMENT-PROGRAM'})).toHaveCount(1,{timeout:30000});
- await page.getByRole('button',{name:'Runs',exact:true}).click();await page.getByRole('button',{name:'Processing run',exact:true}).click();
+ await page.goto(`/ops/plant?scope=${facility}&view=runs&mode=development`);await expect(page.locator('.ops-connection')).toContainText('Device workspace',{timeout:30000});await page.getByRole('button',{name:'Processing run',exact:true}).click();
  const runForm=page.getByRole('region',{name:'Processing run'}),program=runForm.getByLabel('Processing program (optional)');
  await expect(program.locator('option',{hasText:'RECOVERED-DEVELOPMENT-PROGRAM'})).toHaveCount(1,{timeout:30000});await expect(program).toHaveValue('');
 });
@@ -161,6 +160,12 @@ test('a legacy processing URL lands in Gold and keeps only compatible lot contex
  await expect(page).toHaveURL(new RegExp(`/ops/gold\\?scope=${facility}&view=lots&item=legacy-lot&mode=development`));
  await expect(page.getByRole('heading',{name:'Gold',exact:true})).toBeVisible({timeout:30000});
  await expect(page.getByRole('button',{name:'Gold lots',exact:true})).toBeVisible();
+});
+
+test('a legacy processing-program URL lands on the shared canonical program',async({page})=>{
+ await page.goto(`/ops/plant?scope=${facility}&view=campaigns&item=legacy-program&mode=development`,{waitUntil:'domcontentloaded'});
+ await expect(page).toHaveURL(new RegExp(`/ops/programs\\?scope=${facility}&item=legacy-program&mode=development`));
+ await expect(page.getByRole('heading',{name:'Programs',exact:true})).toBeVisible({timeout:30000});
 });
 
 test('the mobile Operations drawer keeps focus and can be closed with its control or Escape',async({page})=>{

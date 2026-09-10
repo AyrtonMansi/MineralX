@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import dynamic from 'next/dynamic';
 import {useOperations} from '../OperationsProvider';
-import {Heading,Message} from '../primitives';
+import {Empty,Heading,Message} from '../primitives';
 import {useEntryGuard} from '../navigation';
 import {bounds,changeSummary,deform,exportOBJ,MAX_FILE_BYTES,practiceProject,surfaceArea,type PitProject,type Vec3} from '@/lib/ops/pit/model';
 import {listProjects,projectJSON,restoreProject,saveProject} from '@/lib/ops/pit/storage';
@@ -14,6 +14,7 @@ function download(name:string,body:BlobPart,type='application/octet-stream'){
 
 export default function PitWorkspace(){
   const {context,scope,development}=useOperations();
+  const canUsePit=scope?.kind==='project'&&scope.permissions.includes('geo.read');
   const namespace=`${development?'development':'staff'}:${context?.userId}:${scope?.id}`;
   const [project,setProject]=useState<PitProject|null>(null),current=useRef<PitProject|null>(null);
   const [saved,setSaved]=useState<PitProject[]>([]),[selectedSaved,setSelectedSaved]=useState('');
@@ -24,7 +25,7 @@ export default function PitWorkspace(){
   const [past,setPast]=useState<number[][]>([]),[future,setFuture]=useState<number[][]>([]),gestureStart=useRef<number[]|null>(null),worker=useRef<Worker|null>(null);
   useEntryGuard(dirty,busy);
   const update=(p:PitProject|null)=>{current.current=p;setProject(p);};
-  useEffect(()=>{let active=true;listProjects(namespace).then(p=>{if(active)setSaved(p);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;worker.current?.terminate();};},[namespace]);
+  useEffect(()=>{if(!canUsePit){setSaved([]);return;}let active=true;listProjects(namespace).then(p=>{if(active)setSaved(p);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;worker.current?.terminate();};},[canUsePit,namespace]);
   const replace=(p:PitProject,isSaved=false)=>{update(p);setDirty(!isSaved);setPast([]);setFuture([]);gestureStart.current=null;setSelection(null);setRadius(Math.max(.1,bounds(p.original.positions).span*.12));setKind(p.kind);setEditing(false);setError('');setStatus(isSaved?'Opened the saved scenario.':'Scan ready. Save the scenario to keep it on this device.');};
   const mayReplace=()=>!dirty||window.confirm('Replace this unsaved scenario? Save or export it first to keep your edits.');
   const edit=(positions:number[],done:boolean)=>{
@@ -72,6 +73,8 @@ export default function PitWorkspace(){
   }
   const metrics=useMemo(()=>project?{...changeSummary(project.original.positions,project.edited),area:surfaceArea({positions:project.edited,indices:project.original.indices})}:null,[project]);
   const canEdit=!!selection&&delta.every(n=>Number.isFinite(n)&&Math.abs(n)<=1000000)&&Number.isFinite(radius)&&radius>0;
+  if(!scope||scope.kind!=='project')return <><Heading title="Pits & stockpiles"/><Empty title={development?'Opening Pits & stockpiles':'Choose an exploration project'}>{development?'Pits & stockpiles opens the compatible project records in your Development workspace automatically.':'A processing facility is a separate operational boundary.'}</Empty></>;
+  if(!scope.permissions.includes('geo.read'))return <><Heading title="Pits & stockpiles"/><Empty title="Pits & stockpiles access is not assigned">This project role cannot open local pit scenarios. Ask an administrator to review the project’s exploration access.</Empty></>;
   return <div className="pit-workspace">
     <Heading title="Pits & stockpiles" description="Bring a ground scan into 3D. Shape a planning scenario against the preserved original."/>
     <p className="pit-note">Device workspace · scans and scenarios stay in this browser, separate from shared operating records and the Operations development backup. Export a scenario backup before changing devices or clearing browser data.</p>

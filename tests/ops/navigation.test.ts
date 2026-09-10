@@ -61,6 +61,7 @@ test('workspace switching falls back to Home when the destination lacks the curr
   const readOnlyProject = { ...project, id: 'project-2', permissions: ['work.read'] };
   assert.equal(supportsOperationsPath(readOnlyFacility, '/ops/gold'), false);
   assert.equal(supportsOperationsPath(readOnlyProject, '/ops/geology'), false);
+  assert.equal(supportsOperationsPath(readOnlyProject, '/ops/pit'), false);
   assert.equal(scopeSwitchDestination('/ops/gold', 'scope=facility-1&view=lots&item=lot-1', readOnlyFacility), '/ops?scope=facility-2');
   assert.equal(scopeSwitchDestination('/ops/geology', 'scope=project-1&view=samples&item=sample-1', readOnlyProject), '/ops?scope=project-2');
 });
