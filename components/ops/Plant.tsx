@@ -18,7 +18,7 @@ export function useChoices(extra:any={},includeProcessingPrograms=false){const {
  Promise.all(requests).then(entries=>{if(stopped)return;setData(d=>({...d,...Object.fromEntries(entries)}));}).catch(e=>{if(!stopped)setError(e.message);});
  api(`directory?scope=${scope.id}`).then(people=>{if(!stopped)setData(d=>({...d,people}));}).catch(()=>{});api(`files?scope=${scope.id}`).then(files=>{if(!stopped)setData(d=>({...d,files}));}).catch(()=>{});
  return()=>{stopped=true;};},[scope,revision,includeProcessingPrograms]);return {resources:{...data,...(includeProcessingPrograms?{processingPrograms:data.processingPrograms||[]}:{}),...extra},error};}
-export default function Plant({asGold=false}:{asGold?:boolean}){
+export default function Plant({asGold=false,embedded=false}:{asGold?:boolean;embedded?:boolean}){
  const {scope,context,development}=useOperations(),query=useSearchParams(),router=useRouter();const views=asGold?goldViews:plantViews,requestedView=query.get('view'),view=views.some(([key])=>key===requestedView)?requestedView!:(asGold?'lots':'runs'),item=query.get('item');const [form,setForm]=useState<any>(query.get('action')==='run'?{key:'run'}:query.get('action')==='cleanup'?{key:'cleanup'}:null);
  const {data:detail,error:detailError}=useResource(scope&&item?`detail?scope=${scope.id}&kind=${view}&id=${item}`:null);
  const {resources,error}=useChoices(detail?{weights:detail.weights||[],assays:detail.assays||[]}:{},true);const record=detail?.record;
@@ -32,7 +32,10 @@ export default function Plant({asGold=false}:{asGold?:boolean}){
  };
  const button=(key:string,label?:string)=>scope.permissions.includes(actions[key].permission)&&<button key={key} onClick={()=>show(key)}>{label||actions[key].title}</button>;
  const primaryKey=view==='runs'?'run':view==='lots'?'cleanup':view==='feed'?'feed':view==='periods'?'period':null,viewLabel=view;
- return <><Heading title={asGold?"Gold":"Processing"} description="Processing observations, physical material and supported production figures." action={primaryKey&&scope.permissions.includes(actions[primaryKey].permission)?<button className="ops-primary" onClick={()=>{if(mayNavigate())setForm({key:primaryKey});}}>{actions[primaryKey].title}</button>:null}/>
+ const primaryAction=primaryKey&&scope.permissions.includes(actions[primaryKey].permission)?<button className="ops-primary" onClick={()=>{if(mayNavigate())setForm({key:primaryKey});}}>{actions[primaryKey].title}</button>:null;
+ // Embedded inside the Processing workspace, the wrapping tab bar already names this
+ // section — repeating "Processing" as a full page heading here would duplicate it.
+ return <>{!embedded?<Heading title={asGold?"Gold":"Processing"} description="Processing observations, physical material and supported production figures." action={primaryAction}/>:primaryAction&&<div className="ops-actions">{primaryAction}</div>}
  {view==='lots'&&scope.permissions.includes('gold.custody')&&<div className="ops-actions"><button onClick={()=>{if(mayNavigate())setForm({key:'transformation'});}}>Record pour / transformation</button></div>}
  <nav className="ops-tabs" aria-label={asGold?'Gold registers':'Processing registers'}>{views.filter(([v])=>scope.permissions.includes(['feed','runs'].includes(v)?'plant.read':['allocations','settlements'].includes(v)?'commercial.read':v==='custody'?'gold.custody.read':v==='periods'?'balance.read':'gold.read')).map(([v,label])=><button key={v} aria-current={view===v?'page':undefined} onClick={()=>{if(!mayNavigate())return;setForm(null);router.push(`/ops/${asGold?'gold':'plant'}?scope=${scope.id}&view=${v}`);}}>{label}</button>)}</nav>
  {!asGold&&scope.permissions.includes('gold.read')&&<div className="ops-actions"><span className="ops-muted">When physical product is collected:</span><a href={`/ops/gold?scope=${scope.id}&view=lots&action=cleanup`}>Record clean-up / gold lot</a></div>}
