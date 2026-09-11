@@ -2,6 +2,7 @@ import type { Scope, ScopeKind } from './contracts';
 
 export type OperationsArea =
   | ''
+  | 'intelligence'
   | 'programs'
   | 'work'
   | 'reports'
@@ -38,6 +39,7 @@ export type CreateShortcut = {
 
 const shared: NavigationItem[] = [
   { area: '', label: 'Home' },
+  { area: 'intelligence', label: 'Intelligence inbox', permission: 'work.read' },
   { area: 'programs', label: 'Programs', permission: 'work.read' },
   { area: 'work', label: 'Work', permission: 'work.read' },
   { area: 'reports', label: 'Reports' },
@@ -137,7 +139,7 @@ export function requiredScopeKind(pathname: string): ScopeKind | null {
 export function supportsOperationsPath(scope: Scope, pathname: string) {
   const required = requiredScopeKind(pathname);
   if (required && scope.kind !== required) return false;
-  if (/^\/ops\/(programs|work)(?:\/|$)/.test(pathname)) return scope.permissions.includes('work.read');
+  if (/^\/ops\/(intelligence|programs|work)(?:\/|$)/.test(pathname)) return scope.permissions.includes('work.read');
   if (/^\/ops\/(geology|field|pit)(?:\/|$)/.test(pathname)) return scope.permissions.includes('geo.read');
   if (/^\/ops\/plant(?:\/|$)/.test(pathname)) return scope.permissions.includes('plant.read');
   if (/^\/ops\/gold(?:\/|$)/.test(pathname)) return scope.permissions.includes('gold.read');

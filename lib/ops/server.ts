@@ -9,7 +9,11 @@ import { readBackup } from '../../components/mineralx/field-workflows.js';
 import { DOMParser } from '@xmldom/xmldom';
 
 export const EVIDENCE_BUCKET='mineralx-ops-evidence';
-export async function rpc(db:Awaited<ReturnType<typeof database>>,name:string,args:Record<string,unknown>={}) {
+export type OperationsRpcError = {message:string;code?:string;details?:string;hint?:string};
+export type OperationsRpcClient = {
+ rpc(name:string,args?:Record<string,unknown>):PromiseLike<{data:any;error:OperationsRpcError|null}>;
+};
+export async function rpc(db:OperationsRpcClient,name:string,args:Record<string,unknown>={}) {
  const {data,error}=await db.rpc(name,args);if(error)throw classifyDatabaseError(error);return data;
 }
 export async function requireSession() {
@@ -34,11 +38,11 @@ export function trustedDatabase() {
  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
 }
 export function capabilities() {return {release:OPS_RELEASE,evidence:!!process.env.SUPABASE_SERVICE_ROLE_KEY,sharedGeology:!!process.env.SUPABASE_SERVICE_ROLE_KEY,invitationEmail:!!process.env.SUPABASE_SERVICE_ROLE_KEY,storage:'shared-postgresql',independentObjectBackup:false};}
-export async function sourceFile(db:Awaited<ReturnType<typeof database>>,scopeId:string,id:string,family?:string) {
+export async function sourceFile(db:OperationsRpcClient,scopeId:string,id:string,family?:string) {
  const files=await rpc(db,'mx_ops_files',{p_scope:scopeId,p_id:id});const f=files?.[0];
  if(!f||family&&f.family!==family)throw new OpsError('forbidden','The source is not accessible in this workspace.');return f;
 }
-export async function verifiedSource(db:Awaited<ReturnType<typeof database>>,scopeId:string,id:string,family='geo') {
+export async function verifiedSource(db:OperationsRpcClient,scopeId:string,id:string,family='geo') {
  const f=await sourceFile(db,scopeId,id,family);if(f.status!=='verified')throw new OpsError('validation','Wait for the original source bytes to be verified.');
  const service=trustedDatabase();const {data,error}=await service.storage.from(EVIDENCE_BUCKET).download(f.object_path);
  if(error||!data)throw new OpsError('unavailable','The source file could not be loaded. Its record has not been changed.');

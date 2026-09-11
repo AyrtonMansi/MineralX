@@ -46,4 +46,8 @@ The production branch is `main`. Confirm the repository's Vercel deployment stat
 
 Next.js is pinned to the patched 15.5 maintenance line. The PostCSS override selects a patched compatible 8.x release for Next's transitive dependency; review it when upgrading Next.js. Use `npm audit --omit=dev` and verify the production build after dependency changes.
 
+## Intelligence and AI connections
+
+The private Operations suite includes a governed Intelligence Inbox and an OAuth-protected MCP endpoint for ChatGPT and compatible clients. Originals are hashed, scanned and retained privately; AI output is proposal-only until a named user reviews it, with MFA and existing MineralX command permissions enforced for writes. Start locally with [docs/intelligence-local-testing.md](docs/intelligence-local-testing.md); production data-boundary controls and the MCP tool contract are in [docs/intelligence-mcp.md](docs/intelligence-mcp.md).
+
 © MineralX Resources Pty Ltd.

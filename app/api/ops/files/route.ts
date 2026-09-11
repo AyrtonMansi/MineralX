@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {requireOperations,rpc,sourceFile,trustedDatabase,EVIDENCE_BUCKET} from '@/lib/ops/server';
-import {OpsError} from '@/lib/ops/contracts';import {body,scopeFrom,uuid,noStore,failure} from '@/lib/ops/http';
+import {OPS_FILE_MAX_BYTES,OpsError} from '@/lib/ops/contracts';import {body,scopeFrom,uuid,noStore,failure} from '@/lib/ops/http';
 export const dynamic='force-dynamic';export const maxDuration=60;
 export async function GET(request:Request){try{const scope=scopeFrom(request),q=new URL(request.url).searchParams,{db}=await requireOperations(scope);
  if(q.get('download')){const file=await sourceFile(db,scope,uuid.parse(q.get('download')));if(file.status!=='verified')throw new OpsError('validation','The file has not been verified.');
@@ -15,7 +15,7 @@ export async function POST(request:Request){try{const p=await body(request,16000
  if(p.action==='upload.finalize'){
   const file=await sourceFile(db,scope,id);const service=trustedDatabase();const {data,error}=await service.storage.from(EVIDENCE_BUCKET).download(file.object_path);
   if(error||!data)throw new OpsError('unavailable','The upload has not completed. Keep the original file and retry verification.');
-  const bytes=Buffer.from(await data.arrayBuffer());if(bytes.length>10485760)throw new OpsError('validation','File exceeds the allowed size.');
+  const bytes=Buffer.from(await data.arrayBuffer());if(bytes.length>OPS_FILE_MAX_BYTES)throw new OpsError('validation','File exceeds the 50 MiB limit.');
   const hash=createHash('sha256').update(bytes).digest('hex');const result=await service.rpc('mx_ops_file_finalize',{p_actor:user.id,p_scope:scope,p_id:id,p_hash:hash,p_bytes:bytes.length});if(result.error)throw new OpsError('validation','Uploaded source integrity or authorisation could not be verified.');return noStore({record:result.data});
  }
  throw new OpsError('validation','Unknown file action');

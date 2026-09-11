@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
-export const OPS_RELEASE = '2026.09.09.5';
-export const OPS_SCHEMA = 9; // v9 also restores closed legacy processing campaigns before exposing new-entry selectors.
+export const OPS_RELEASE = '2026.09.10.1';
+export const OPS_SCHEMA = 10; // v10 adds governed intelligence intakes and MCP-safe proposal lineage.
 export const WORKFLOW_SCHEMA = 7; // Workflow payload format remains v7 while Operations schema v9 adds selector-history correction.
+export const OPS_FILE_MAX_BYTES = 50 * 1024 * 1024;
+export const OPS_INTAKE_MAX_BYTES = 100 * 1024 * 1024;
 export const permissionProfiles = {
   collector: ['geo.read', 'geo.capture', 'files.geo', 'work.read', 'work.write'],
   geologist: ['geo.read', 'geo.capture', 'geo.publish', 'files.geo', 'work.read', 'work.write'],
