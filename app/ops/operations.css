@@ -54,3 +54,36 @@
 /* The Home path is an orientation surface: tell operators what to do next before showing metrics. */
 .ops-journey{max-width:1320px;border-color:#c7d7c6;background:#fbfdf9}.ops-journey .ops-section-heading{margin-bottom:18px}.ops-journey .ops-section-heading p:last-child{margin-top:6px;color:var(--ops-muted);font-size:13px}.ops-journey-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.ops-journey-step{display:flex;gap:14px;min-height:184px;padding:18px 17px;border:1px solid #d6e1d3;border-radius:8px;background:#fffefa;color:var(--ops-ink);text-decoration:none;transition:border-color .15s,box-shadow .15s,transform .15s}.ops-journey-step:hover{border-color:#6f9975;box-shadow:0 4px 15px #294b3212;text-decoration:none;transform:translateY(-1px)}.ops-journey-number{display:flex;align-items:center;justify-content:center;flex:none;width:33px;height:33px;border-radius:50%;background:#e1ecdd;color:#315b42;font-size:11px;font-weight:700;letter-spacing:.4px}.ops-journey-copy{display:flex;flex-direction:column;align-items:flex-start;min-width:0}.ops-journey-copy .ops-eyebrow{margin-bottom:7px!important;color:#6b806c;font-size:9px}.ops-journey-copy strong{font-size:16px;line-height:1.3}.ops-journey-copy small{margin-top:8px;line-height:1.55}.ops-journey-action{margin-top:auto;padding-top:15px;color:#2f6549;font-size:12px;font-weight:650}.ops-journey-action span{padding-left:5px}
 @media(max-width:700px){.ops-journey-grid{grid-template-columns:1fr}.ops-journey-step{min-height:0}}
+
+/* Dense register layout ported from the legacy GIC production-run pages: a bordered
+   stat strip with internal dividers, a search/filter toolbar and a centred empty
+   state. Kept on the existing Ops light palette (var(--ops-*)), not GIC's dark one. */
+.ops-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--ops-line);border-radius:8px;background:#fffefa}
+.ops-stats.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.ops-stats>div{padding:22px 24px;border-right:1px solid var(--ops-line);min-width:0}
+.ops-stats>div:last-child{border-right:0}
+.ops-stats span{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--ops-muted)}
+.ops-stats p{font-size:25px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:9px;overflow-wrap:anywhere;letter-spacing:-.5px}
+.ops-stats p small{font-size:14px;font-weight:400;letter-spacing:0}
+.ops-stats-note{margin:12px 0 26px;color:var(--ops-muted);font-size:12px}
+.ops-toolbar{display:flex;align-items:center;gap:12px;margin:24px 0 16px;flex-wrap:wrap}
+.ops-toolbar label{margin:0}
+.ops-toolbar .ops-search{flex:1;min-width:180px;max-width:340px}
+.ops-toolbar .ops-check{flex-direction:row;align-items:center;gap:8px;font-size:12px;color:var(--ops-muted)}
+.ops-toolbar>.ops-primary,.ops-toolbar>button{margin-left:auto}
+.ops-empty-panel{padding:60px 24px;text-align:center;border:1px solid var(--ops-line);border-radius:8px;background:#fffefa}
+.ops-empty-panel p{max-width:440px;margin:12px auto 22px;color:var(--ops-muted)}
+.ops-empty-mark{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;margin-bottom:16px;border:1px solid #b7cdb5;border-radius:50%;color:#4b735e;font-size:19px}
+.ops-badge{display:inline-flex;border:1px solid #c4d0c5;border-radius:20px;font-size:11px;padding:3px 10px;color:var(--ops-ink)}
+.ops-badge.muted{border-color:var(--ops-line);color:var(--ops-muted)}
+@media(max-width:700px){
+ .ops-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .ops-stats.three{grid-template-columns:1fr}
+ .ops-stats>div{padding:18px}
+ .ops-stats>div:nth-child(2){border-right:0}
+ .ops-stats>div:nth-child(n+3){border-top:1px solid var(--ops-line)}
+ .ops-stats.three>div{border-right:0}
+ .ops-stats.three>div+div{border-top:1px solid var(--ops-line)}
+ .ops-toolbar .ops-search{flex-basis:100%;max-width:none}
+ .ops-toolbar>.ops-primary,.ops-toolbar>button{margin-left:0}
+}
