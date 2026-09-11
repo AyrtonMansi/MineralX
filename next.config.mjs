@@ -17,6 +17,23 @@ const nextConfig = {
   async rewrites() {
     return [{ source: "/clothing", destination: "/clothing/index.html" }];
   },
+  async redirects() {
+    // The GIC pages are retired in favour of their Operations equivalents.
+    // The underlying database and RPCs are untouched — only these routes moved.
+    return [
+      { source: "/gic", destination: "/ops/gold", permanent: true },
+      { source: "/gic/login", destination: "/ops/login", permanent: true },
+      { source: "/gic/forgot-password", destination: "/ops/login", permanent: true },
+      { source: "/gic/access", destination: "/ops", permanent: true },
+      { source: "/gic/password", destination: "/ops/account", permanent: true },
+      { source: "/gic/reports", destination: "/ops/reports", permanent: true },
+      { source: "/gic/runs/new", destination: "/ops/gold", permanent: true },
+      { source: "/gic/runs/:path*", destination: "/ops/gold", permanent: true },
+      { source: "/gic/export", destination: "/ops/reports", permanent: true },
+      { source: "/gic/auth/callback", destination: "/ops/auth/callback", permanent: true },
+      { source: "/gic/auth/complete", destination: "/ops/auth/complete", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

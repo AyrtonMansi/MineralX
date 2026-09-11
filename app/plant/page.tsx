@@ -13,7 +13,7 @@ export default function PlantPage() {
       <nav aria-label="Workspace">
         <Link href="/plant" aria-current="page">Layout reference</Link>
         <Link href="/ops">MineralX workspaces</Link>
-        <Link href="/gic">Gold production</Link>
+        <Link href="/ops/gold">Gold production</Link>
       </nav>
     </header>
     <div className="plant-notice">Read-only engineering reference. Controlled plant records and review decisions belong in an authorised MineralX workspace.</div>

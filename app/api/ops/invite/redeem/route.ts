@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   const email = z.string().trim().email().max(254).parse(p.email).toLowerCase();
   const service = trustedDatabase();
   // Never confirm or deny whether an invitation exists — same non-enumeration
-  // posture as the GIC password reset flow (app/gic/actions.ts).
+  // posture as Ops's own password reset flow (app/ops/actions.ts).
   const { data: pending } = await service.rpc('mx_ops_invitation_pending', { p_email: email });
   if (pending) {
    await service.auth.admin.inviteUserByEmail(email, {
