@@ -7,11 +7,11 @@ function input(overrides: Partial<Parameters<typeof resolveSignInLanding>[0]> = 
   return { userId: 'account-a', requestedNext: '/ops/admin', requiredSchema: 6, readOperations: absent,
     readLegacy: async (userId: string) => { assert.equal(userId, 'account-a'); return { data: [{ role: 'owner' }], error: null }; }, ...overrides };
 }
-test('verified existing owner reaches GIC while Operations schema is absent', async () => {
-  assert.deepEqual(await resolveSignInLanding(input()), { destination: '/gic', operationsReady: false });
+test('verified existing owner reaches Admin to connect their operation while Operations schema is absent', async () => {
+  assert.deepEqual(await resolveSignInLanding(input()), { destination: '/ops/admin', operationsReady: false });
 });
 test('outdated Operations schema does not lock out the existing owner', async () => {
-  assert.equal((await resolveSignInLanding(input({readOperations: async () => ({data: {userId:'account-a',schemaVersion:5},error:null})}))).destination, '/gic');
+  assert.equal((await resolveSignInLanding(input({readOperations: async () => ({data: {userId:'account-a',schemaVersion:5},error:null})}))).destination, '/ops/admin');
 });
 test('activated Operations retains the requested admin workspace without consulting legacy roles', async () => {
   assert.deepEqual(await resolveSignInLanding(input({readOperations: ready, readLegacy: async () => {throw new Error('Legacy must not be needed');}})), {destination:'/ops/admin',operationsReady:true});
@@ -34,11 +34,11 @@ test('legacy lookup errors and unexpected roles cannot establish access', async 
 test('a stale or different Operations identity never falls back to privileged legacy navigation', async () => {
   await assert.rejects(resolveSignInLanding(input({readOperations:async () => ({data:{userId:'account-b',schemaVersion:6},error:null})})),/verification changed/);
 });
-test('read-only legacy accounts keep the same protected register route without receiving admin authority', async () => {
-  assert.equal((await resolveSignInLanding(input({readLegacy:async () => ({data:[{role:'viewer'}],error:null})}))).destination,'/gic');
+test('read-only legacy accounts land on Operations with no admin authority, not a retired register route', async () => {
+  assert.equal((await resolveSignInLanding(input({readLegacy:async () => ({data:[{role:'viewer'}],error:null})}))).destination,'/ops');
 });
-test('transport failure in the new schema does not remove independent legacy access', async () => {
-  assert.equal((await resolveSignInLanding(input({readOperations:async () => {throw new Error('offline RPC');}}))).destination,'/gic');
+test('transport failure in the new schema does not remove an existing owner\'s path to Admin', async () => {
+  assert.equal((await resolveSignInLanding(input({readOperations:async () => {throw new Error('offline RPC');}}))).destination,'/ops/admin');
 });
 test('no unverified identity is accepted', async () => {
   await assert.rejects(resolveSignInLanding(input({userId:''})),/verified account/);

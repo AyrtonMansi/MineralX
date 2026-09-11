@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {useSearchParams} from 'next/navigation';
 import {authClient,api} from '@/lib/ops/client';
 import {safeSignInNext,signInFailureMessage} from '@/lib/gic/login-routing';
-import {requestPasswordReset} from '@/app/gic/actions';
+import {requestPasswordReset} from '@/app/ops/actions';
 import {Message} from './primitives';
 
 /** Identity entry deliberately does not require an Operations workspace context. */

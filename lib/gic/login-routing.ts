@@ -37,11 +37,14 @@ export async function resolveSignInLanding(input: {
     }
   }
   const legacy = await input.readLegacy(input.userId).catch(() => ({ data: null, error: true }));
-  if (!legacy.error && legacy.data?.length === 1 && ['owner', 'editor', 'viewer'].includes(legacy.data[0].role)) {
-    // /gic independently rechecks this account's membership and existing role.
-    return { destination: '/gic', operationsReady: false };
+  if (!legacy.error && legacy.data?.length === 1 && legacy.data[0].role === 'owner') {
+    // The old GIC pages are retired. An existing GIC owner's account still holds
+    // the legacy workspace that Admin's "Connect the existing operation" flow
+    // (mx_ops_bootstrap) uses to establish an Operations organisation from it.
+    return { destination: '/ops/admin', operationsReady: false };
   }
-  // No usable legacy membership: retain the explicit Operations activation/access state.
+  // No usable legacy membership, or a non-owner legacy role with nothing left to
+  // reach now that GIC's own pages are retired: land on the Operations home.
   return { destination: '/ops', operationsReady: false };
 }
 
