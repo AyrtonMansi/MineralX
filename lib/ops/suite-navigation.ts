@@ -40,9 +40,12 @@ export type CreateShortcut = {
 const shared: NavigationItem[] = [
   { area: '', label: 'Home' },
   { area: 'intelligence', label: 'Intelligence inbox', permission: 'work.read' },
+];
+
+const planning: NavigationItem[] = [
   { area: 'programs', label: 'Programs', permission: 'work.read' },
   { area: 'work', label: 'Work', permission: 'work.read' },
-  { area: 'reports', label: 'Reports' },
+  { area: 'work', label: 'People & workload', params: 'view=people', permission: 'work.read' },
 ];
 
 const projectWork: NavigationItem[] = [
@@ -58,8 +61,8 @@ const facilityWork: NavigationItem[] = [
 ];
 
 const resources: NavigationItem[] = [
-  { area: 'work', label: 'People & workload', permission: 'work.read' },
   { area: 'files', label: 'Files & procedures' },
+  { area: 'reports', label: 'Reports' },
 ];
 
 const developmentWorkspace: NavigationGroup[] = [
@@ -99,9 +102,10 @@ export function navigationGroups(scope: Scope | undefined, options?: { developme
   if (!scope) return [];
   const capture = scope.kind === 'project' ? projectWork : scope.kind === 'facility' ? facilityWork : [];
   return [
-    { label: 'Workspace', items: shared.filter((item) => supportsNavigationItem(scope, item)) },
-    { label: 'Record work', items: capture.filter((item) => supportsNavigationItem(scope, item)) },
-    { label: 'Resources', items: resources.filter((item) => supportsNavigationItem(scope, item)) },
+    { label: 'Start', items: shared.filter((item) => supportsNavigationItem(scope, item)) },
+    { label: 'Plan & assign', items: planning.filter((item) => supportsNavigationItem(scope, item)) },
+    { label: 'Operate', items: capture.filter((item) => supportsNavigationItem(scope, item)) },
+    { label: 'Review & records', items: resources.filter((item) => supportsNavigationItem(scope, item)) },
   ].filter((group) => group.items.length);
 }
 

@@ -19,5 +19,14 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "app/api/ops/export/route 2.ts",
+    "app/api/plant/notes/route 2.ts",
+    "app/ops/plant/page 2.tsx",
+    "components/ops/Home 2.tsx",
+    "components/ops/OperationsShell 2.tsx",
+    "components/ops/Reports 2.tsx",
+    "tests/plant/public-page.test 2.ts"
+  ]
 }

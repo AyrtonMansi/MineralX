@@ -7,9 +7,11 @@ const project: Scope = { id: 'project-1', org_id: 'org-1', name: 'North project'
 const facility: Scope = { id: 'facility-1', org_id: 'org-1', name: 'Central plant', code: 'CENTRAL', kind: 'facility', timezone: 'Australia/Brisbane', permissions: ['plant.read', 'gold.read', 'work.read'], version: 1, policy: {} };
 
 test('navigation only shows record surfaces compatible with the active workspace', () => {
-  const projectItems = navigationGroups(project).flatMap((group) => group.items);
+  const projectGroups = navigationGroups(project);
+  const projectItems = projectGroups.flatMap((group) => group.items);
   const projectLabels = projectItems.map((item) => item.label);
   const facilityLabels = navigationGroups(facility).flatMap((group) => group.items.map((item) => item.label));
+  assert.deepEqual(projectGroups.map((group) => group.label), ['Start', 'Plan & assign', 'Operate', 'Review & records']);
   assert.ok(projectLabels.includes('Geology Globe'));
   assert.ok(projectLabels.includes('Exploration'));
   assert.equal(projectItems.find((item) => item.label === 'Geology Globe')?.href, '/mineralx');
