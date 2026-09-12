@@ -9,6 +9,7 @@ import './operations-gic.css';
 import './heading-compact.css';
 import './fullscreen-enterprise.css';
 import './engineering-workspace.css';
+import './navigation-cleanup.css';
 export const metadata: Metadata = {title:'Operations',robots:{index:false,follow:false},alternates:{canonical:null}};
 export default async function OperationsLayout({children}:{children:React.ReactNode}) {
  const requestHeaders=await headers();
