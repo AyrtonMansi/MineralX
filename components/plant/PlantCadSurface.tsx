@@ -98,7 +98,7 @@ export default function PlantCadSurface({model}:{model:PlantModel}){
 
  useEffect(()=>{if(routeGroup.current)routeGroup.current.visible=routesVisible;},[routesVisible]);
  useEffect(()=>{if(gridHelper.current)gridHelper.current.visible=gridVisible;},[gridVisible]);
- useEffect(()=>{equipmentObjects.current.forEach((object,id)=>object.traverse(child=>{const mesh=child as THREE.Mesh;if(!mesh.isMesh)return;const material=mesh.material as THREE.MeshStandardMaterial;if(!material?.emissive)return;material.emissive.set(id===selectedId?0x244c3a:0x000000);material.emissiveIntensity=id===selectedId?.38:0;}));},[selectedId]);
+ useEffect(()=>{equipmentObjects.current.forEach((object,id)=>object.traverse(child=>{const mesh=child as THREE.Mesh;if(!mesh.isMesh)return;const material=mesh.material as THREE.MeshStandardMaterial;if(!material?.emissive)return;material.emissive.set(id===selectedId?0x244c3a:0x000000);material.emissiveIntensity=id===selectedId ? .38 : 0;}));},[selectedId]);
  const setView=(next:'perspective'|'top')=>{setProjection(next);resetView(next);};
 
  return <div className="cad-workspace">
