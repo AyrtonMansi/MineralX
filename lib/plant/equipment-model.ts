@@ -6,7 +6,7 @@ export type EquipmentRenderProfile={
  heightM:number;
  rotationDeg:number;
  dimensions:Record<string,number>;
- source:'explicit'|'inferred';
+ source:'explicit'|'basis'|'inferred';
  rationale:string;
 };
 
@@ -36,6 +36,14 @@ export function inferEquipmentArchetype(equipment:Equipment):EquipmentArchetype{
  if(/conveyor drive|drive station/.test(value))return 'conveyor_drive';
  if(/platform/.test(value))return 'platform';
  return 'generic';
+}
+
+function basisModelStatus(equipment:Equipment):EquipmentModelStatus{
+ const basis=equipment.basis.toLowerCase();
+ if(/as[- ]built|surveyed installed|field verified/.test(basis))return 'as_built';
+ if(/oem reference|vendor reference|manufacturer reference/.test(basis))return 'vendor_reference';
+ if(/specified|selected model|issued for/.test(basis))return 'specified';
+ return 'inferred';
 }
 
 function inferredHeight(equipment:Equipment,archetype:EquipmentArchetype){
@@ -92,17 +100,19 @@ function inferredDimensions(equipment:Equipment,archetype:EquipmentArchetype,hei
 export function equipmentRenderProfile(equipment:Equipment):EquipmentRenderProfile{
  const explicit=equipment.engineering;
  const archetype=explicit?.archetype||inferEquipmentArchetype(equipment);
- const heightM=explicit?.overall_height_m||inferredHeight(equipment,archetype);
+ const heightM=explicit?.overall_height_m||inferredHeight(equipment,archetype),basisStatus=basisModelStatus(equipment),modelStatus=explicit?.model_status||basisStatus;
  return {
   archetype,
-  modelStatus:explicit?.model_status||'inferred',
+  modelStatus,
   heightM,
   rotationDeg:explicit?.rotation_deg||0,
   dimensions:{...inferredDimensions(equipment,archetype,heightM),...(explicit?.dimensions||{})},
-  source:explicit?'explicit':'inferred',
+  source:explicit?'explicit':basisStatus!=='inferred'?'basis':'inferred',
   rationale:explicit
    ?`${explicit.model_status.replaceAll('_',' ')} equipment profile stored with the engineering model.`
-   :`Deterministic ${archetype.replaceAll('_',' ')} geometry inferred from the equipment identity and P5 planning envelope.`,
+   :basisStatus!=='inferred'
+    ?`${basisStatus.replaceAll('_',' ')} authority inherited from the controlled P5 equipment basis; unrecorded 3D dimensions remain conservative parametric geometry.`
+    :`Deterministic ${archetype.replaceAll('_',' ')} geometry inferred from the equipment identity and P5 planning envelope.`,
  };
 }
 
