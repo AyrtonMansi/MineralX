@@ -19,7 +19,9 @@ export function inferEquipmentArchetype(equipment:Equipment):EquipmentArchetype{
  if(/\bvsi\b|vertical.*impact|impact.*crusher/.test(value))return 'vertical_impact_crusher';
  if(/hammer.*crusher|crusher.*hammer|hammer mill|mill crusher/.test(value))return 'hammer_crusher';
  if(/screen|grizzly|vibrat/.test(value))return 'vibrating_screen';
+ if(/gekko.*ipj|\bipj1000\b/.test(value))return 'inline_pressure_jig';
  if(/russell|\bjig\b|j3/.test(value))return 'jig';
+ if(/falcon.*sb|falcon concentrator|centrifugal concentrator/.test(value))return 'centrifugal_concentrator';
  if(/knudsen|kneudsen|bowl concentrator|centrifugal bowl/.test(value))return 'knudsen_bowl';
  if(/sluice/.test(value))return 'sluice';
  if(/shaker|shaking table|wilfley|gemini table/.test(value))return 'shaker_table';
@@ -44,7 +46,9 @@ function inferredHeight(equipment:Equipment,archetype:EquipmentArchetype){
   case 'hammer_crusher':return clamp(minor*.85,2.4,5.5);
   case 'vertical_impact_crusher':return clamp(minor*1.08,2.8,6);
   case 'vibrating_screen':return clamp(minor*.55,1.8,3.8);
+  case 'inline_pressure_jig':return clamp(minor*1.3,2.3,4.8);
   case 'jig':return clamp(minor*.72,1.8,3.6);
+  case 'centrifugal_concentrator':return clamp(minor*1.15,2.2,4.5);
   case 'knudsen_bowl':return clamp(minor*.8,1.7,3.4);
   case 'sluice':return clamp(minor*.32,.65,1.5);
   case 'shaker_table':return clamp(minor*.42,.85,1.5);
@@ -64,7 +68,9 @@ function inferredHeight(equipment:Equipment,archetype:EquipmentArchetype){
 function inferredDimensions(equipment:Equipment,archetype:EquipmentArchetype,heightM:number):Record<string,number>{
  const w=equipment.w,d=equipment.h,minor=Math.min(w,d),span=Math.max(w,d);
  switch(archetype){
+  case 'inline_pressure_jig':return {pressure_vessel_diameter_m:minor*.58,vessel_height_m:heightM*.62,support_height_m:heightM*.25,feed_connection_height_m:heightM*.7};
   case 'jig':return {cell_count:/j3|russell/i.test(named(equipment))?2:2,deck_height_m:heightM*.72,drive_height_m:heightM*.28,cell_width_m:w*.42};
+  case 'centrifugal_concentrator':return {bowl_housing_diameter_m:minor*.64,bowl_housing_height_m:heightM*.42,frame_height_m:heightM*.38,drive_height_m:heightM*.2};
   case 'knudsen_bowl':return {bowl_diameter_m:minor*.62,bowl_height_m:heightM*.48,frame_height_m:heightM*.52};
   case 'hammer_crusher':return {crusher_body_width_m:w*.62,feed_hopper_height_m:heightM*.36,motor_length_m:span*.24};
   case 'vertical_impact_crusher':return {rotor_housing_diameter_m:minor*.62,feed_hopper_height_m:heightM*.28,drive_height_m:heightM*.26};
@@ -106,7 +112,9 @@ const requirements:Partial<Record<EquipmentArchetype,string[]>>={
  hammer_crusher:['OEM overall dimensions','feed hopper dimensions/elevation','crusher body and motor/drive envelope','inlet and discharge connection elevations'],
  vertical_impact_crusher:['OEM overall dimensions','rotor housing diameter/elevation','feed hopper dimensions','drive/motor envelope and discharge elevation'],
  vibrating_screen:['deck length/width','deck inclination','number of decks and screen media/opening','feed/discharge elevations and drive envelope'],
+ inline_pressure_jig:['manufacturer/model confirmation','pressure vessel diameter/height','support/base arrangement','feed/tails/concentrate connection positions','required access and isolation clearances'],
  jig:['manufacturer/model confirmation','cell count and cell dimensions','deck/screen elevation and opening','hutch/diaphragm/drive envelope','feed, tails, concentrate and water connection elevations'],
+ centrifugal_concentrator:['manufacturer/model confirmation','bowl/housing dimensions','frame/overall height','feed/tails/concentrate connection elevations','drive/service envelope'],
  knudsen_bowl:['manufacturer/model confirmation','bowl diameter/depth','frame and overall height','feed/tails/concentrate connection elevations','drive/motor envelope'],
  sluice:['deck length/width','deck inclination','riffle/matting geometry','feed and discharge elevations'],
  shaker_table:['deck length/width','deck inclination','stroke/drive envelope','feed/wash-water and product discharge geometry'],
