@@ -12,6 +12,7 @@ import {
 } from '@/lib/mcp/http';
 import {createMineralXMcpServer} from '@/lib/mcp/server';
 import {registerPlantMcpTools} from '@/lib/mcp/plant-tools';
+import {registerSuiteMcpTools} from '@/lib/mcp/suite-tools';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ const handler = createMcpHandler((context) => {
   const principal = context.authInfo?.extra?.principal as McpPrincipal | undefined;
   if (!principal) throw new Error('Validated MineralX principal missing from MCP request.');
   const server = createMineralXMcpServer(principal);
+  registerSuiteMcpTools(server, principal);
   registerPlantMcpTools(server, principal);
   return server;
 }, {
