@@ -100,12 +100,14 @@ test('diesel balances compare independent dips, and proposed solar never becomes
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-energy-desktop.png',fullPage:true});expect(trace.errors).toEqual([]);expect(trace.protectedRequests).toEqual([]);
 });
 
-test('private engineering reuses the plant diagram without touching public review notes',async({page})=>{
+test('private Engineering uses the 3D plant model and governed change control without touching public review notes',async({page})=>{
  const trace=await start(page,`/ops?scope=${facility}`);const notes=[];page.on('request',r=>{if(/\/api\/plant/.test(new URL(r.url()).pathname))notes.push(r.url());});
- await page.goto(`/ops/plant?scope=${facility}&view=engineering`);await expect(page.getByText('P5 engineering reference · existing layout',{exact:true})).toBeVisible();await expect(page.locator('.plant-app svg').first()).toBeVisible();
+ await page.goto(`/ops/plant?scope=${facility}&view=engineering`);
  const tab=page.getByRole('navigation',{name:'Processing workspace'}).getByRole('link',{name:'Engineering',exact:true});expect((await tab.boundingBox()).height).toBeGreaterThanOrEqual(44);await expect(tab).toHaveAttribute('aria-current','page');
- await page.getByRole('button',{name:'Add engineering revision'}).click();const f=region(page,'Record engineering revision');await f.getByLabel('Revision title').fill('Synthetic pump relocation');await f.getByLabel('Drawing / revision reference').fill('SYN-P5-C1');await save(f,'Save engineering record');
- await expect(page.getByRole('heading',{name:'Synthetic pump relocation',exact:true})).toBeVisible();expect(notes).toEqual([]);expect(trace.errors).toEqual([]);
+ const engineering=page.getByRole('navigation',{name:'Engineering workspace views'});await expect(engineering.getByRole('link',{name:'Plant model',exact:true})).toHaveAttribute('aria-current','page');await expect(page.locator('.cad-stage canvas')).toBeVisible({timeout:30000});
+ await engineering.getByRole('link',{name:'Change control',exact:true}).click();await page.getByRole('button',{name:'New revision',exact:true}).click();
+ const f=region(page,'Record engineering revision');await f.getByLabel('Revision title').fill('Synthetic pump relocation');await f.getByLabel('Drawing / revision reference').fill('SYN-P5-C1');await save(f,'Save engineering record');
+ await expect(page.getByText('Synthetic pump relocation',{exact:true})).toBeVisible();expect(notes).toEqual([]);expect(trace.errors).toEqual([]);
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/workflow-engineering-desktop.png',fullPage:true});
 });
 
