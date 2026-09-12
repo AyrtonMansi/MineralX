@@ -11,6 +11,7 @@ import {
   validatedMcpCorsOrigin,
 } from '@/lib/mcp/http';
 import {createMineralXMcpServer} from '@/lib/mcp/server';
+import {registerPlantMcpTools} from '@/lib/mcp/plant-tools';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,9 @@ export const maxDuration = 120;
 const handler = createMcpHandler((context) => {
   const principal = context.authInfo?.extra?.principal as McpPrincipal | undefined;
   if (!principal) throw new Error('Validated MineralX principal missing from MCP request.');
-  return createMineralXMcpServer(principal);
+  const server = createMineralXMcpServer(principal);
+  registerPlantMcpTools(server, principal);
+  return server;
 }, {
   legacy: 'stateless',
   responseMode: 'json',
