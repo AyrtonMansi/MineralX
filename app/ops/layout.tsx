@@ -6,6 +6,7 @@ import OperationsShell from '@/components/ops/OperationsShell';
 import OperationsEntry from '@/components/ops/OperationsEntry';
 import './operations.css';
 import './operations-gic.css';
+import './heading-compact.css';
 export const metadata: Metadata = {title:'Operations',robots:{index:false,follow:false},alternates:{canonical:null}};
 export default async function OperationsLayout({children}:{children:React.ReactNode}) {
  const requestHeaders=await headers();
