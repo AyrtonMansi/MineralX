@@ -45,6 +45,14 @@ function buildCrusher(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,bod
  const motor=addCylinder(group,e.id,Math.max(.12,Math.min(e.w,e.h)*.12),Math.max(.4,e.w*.28),e.w*.34,p.heightM*.26,e.h*.28,material(darkSteel,.5,.45),20,Math.PI/2);motor.rotation.x=Math.PI/2;
  addBox(group,e.id,e.w*.26,p.heightM*.18,e.h*.18,-e.w*.34,p.heightM*.22,0,frame);
 }
+function buildVsi(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
+ const baseH=p.heightM*.18,rotorH=p.heightM*.36,hopperH=p.heightM*.28,r=Math.max(.24,Math.min(e.w,e.h)*.31);
+ addLegs(group,e.id,e.w*.74,e.h*.7,baseH,frame,.07);addBox(group,e.id,e.w*.86,.12,e.h*.78,0,baseH-.06,0,frame);
+ const housing=addCylinder(group,e.id,r,rotorH,0,baseH+rotorH/2,0,body,28);addEdgeOutline(group,housing);
+ const hopper=addCone(group,e.id,r*.4,r*.88,hopperH,0,baseH+rotorH+hopperH/2,0,body,28);addEdgeOutline(group,hopper);
+ addCylinder(group,e.id,r*.18,p.heightM*.18,0,baseH+rotorH+hopperH+p.heightM*.09,0,frame,20);
+ const motor=addCylinder(group,e.id,Math.max(.1,r*.24),Math.max(.35,e.w*.28),e.w*.34,baseH+rotorH*.5,0,material(darkSteel,.45,.5),20,Math.PI/2);motor.rotation.x=Math.PI/2;
+}
 function buildScreen(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
  const frameH=p.heightM*.38,slope=THREE.MathUtils.degToRad(p.dimensions.deck_slope_deg||8);addLegs(group,e.id,e.w*.82,e.h*.72,frameH,frame);
  const deck=addBox(group,e.id,e.w*.84,p.heightM*.16,e.h*.68,0,frameH+p.heightM*.2,0,body,slope);addEdgeOutline(group,deck);
@@ -69,6 +77,28 @@ function buildBowl(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:T
  const bowl=tag(new THREE.Mesh(new THREE.CylinderGeometry(r*.85,r*.35,p.heightM*.3,32,1,true),material(lightSteel,.38,.4)),e.id) as THREE.Mesh;bowl.position.y=frameH+p.heightM*.21;group.add(bowl);
  addCylinder(group,e.id,r*.11,p.heightM*.26,0,frameH+p.heightM*.52,0,frame,18);
  addBox(group,e.id,e.w*.28,p.heightM*.16,e.h*.22,e.w*.31,p.heightM*.18,0,frame);
+}
+function buildSluice(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
+ const deckY=p.heightM*.72,slope=THREE.MathUtils.degToRad(p.dimensions.deck_slope_deg||6);addLegs(group,e.id,e.w*.84,e.h*.7,p.heightM*.56,frame,.04);
+ const tray=addBox(group,e.id,e.w*.9,.08,e.h*.72,0,deckY,0,body,slope);addEdgeOutline(group,tray);
+ const riffleCount=Math.max(5,Math.min(18,Math.round(e.w/Math.max(.08,p.dimensions.riffle_pitch_m||.08))));
+ for(let i=0;i<riffleCount;i++){const x=-e.w*.41+(e.w*.82)*(i/(riffleCount-1));addBox(group,e.id,.025,.05,e.h*.64,x,deckY+.06,0,frame,slope);}
+ addBox(group,e.id,e.w*.92,.14,.08,0,deckY+.05,-e.h*.36,frame,slope);
+}
+function buildShakerTable(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
+ const tableY=p.heightM*.72,slope=THREE.MathUtils.degToRad(p.dimensions.deck_slope_deg||2.5);addLegs(group,e.id,e.w*.84,e.h*.76,p.heightM*.6,frame,.05);
+ const deck=addBox(group,e.id,e.w*.9,.07,e.h*.78,0,tableY,0,body,0,-slope);addEdgeOutline(group,deck);
+ for(let i=0;i<10;i++){const z=-e.h*.32+i*(e.h*.64/9);addBox(group,e.id,e.w*.72,.025,.025,-e.w*.05,tableY+.055,z,material(lightSteel,.7,.12));}
+ addBox(group,e.id,e.w*.18,p.heightM*.28,e.h*.28,-e.w*.41,p.heightM*.34,0,frame);
+ addCylinder(group,e.id,Math.max(.04,e.h*.045),e.h*.24,-e.w*.31,p.heightM*.42,0,frame,14,Math.PI/2);
+}
+function buildSpiral(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
+ const radius=Math.max(.2,(p.dimensions.spiral_diameter_m||Math.min(e.w,e.h)*.68)/2),height=p.dimensions.column_height_m||p.heightM*.86,turns=Math.max(2,p.dimensions.turns||5.5);
+ addLegs(group,e.id,e.w*.72,e.h*.72,p.heightM*.18,frame,.04);addCylinder(group,e.id,Math.max(.04,radius*.07),height,0,p.heightM*.18+height/2,0,frame,16);
+ const curvePoints:THREE.Vector3[]=[];const segments=Math.ceil(turns*24);
+ for(let i=0;i<=segments;i++){const t=i/segments,angle=t*turns*Math.PI*2;curvePoints.push(new THREE.Vector3(Math.cos(angle)*radius,p.heightM*.18+height*(1-t),Math.sin(angle)*radius));}
+ const curve=new THREE.CatmullRomCurve3(curvePoints),tube=tag(new THREE.Mesh(new THREE.TubeGeometry(curve,segments,Math.max(.025,radius*.1),8,false),body),e.id) as THREE.Mesh;group.add(tube);
+ addCone(group,e.id,radius*.12,radius*.32,p.heightM*.14,0,p.heightM*.18+height+p.heightM*.07,0,body,20);
 }
 function buildCyclone(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
  const legH=p.heightM*.24,r=Math.max(.2,Math.min(e.w,e.h)*.27),coneH=p.heightM*.46,barrelH=p.heightM*.26;addLegs(group,e.id,e.w*.62,e.h*.62,legH,frame,.04);
@@ -122,9 +152,13 @@ export function buildEquipmentAssembly(model:PlantModel,equipment:Equipment){
   case 'stockpile':buildStockpile(group,equipment,profile,body,frame);break;
   case 'hopper':buildHopper(group,equipment,profile,body,frame);break;
   case 'hammer_crusher':buildCrusher(group,equipment,profile,body,frame);break;
+  case 'vertical_impact_crusher':buildVsi(group,equipment,profile,body,frame);break;
   case 'vibrating_screen':buildScreen(group,equipment,profile,body,frame);break;
   case 'jig':buildJig(group,equipment,profile,body,frame);break;
   case 'knudsen_bowl':buildBowl(group,equipment,profile,body,frame);break;
+  case 'sluice':buildSluice(group,equipment,profile,body,frame);break;
+  case 'shaker_table':buildShakerTable(group,equipment,profile,body,frame);break;
+  case 'spiral_concentrator':buildSpiral(group,equipment,profile,body,frame);break;
   case 'cyclone':buildCyclone(group,equipment,profile,body,frame);break;
   case 'tank':buildTank(group,equipment,profile,body,frame);break;
   case 'pump':buildPump(group,equipment,profile,body,frame);break;
