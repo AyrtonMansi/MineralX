@@ -100,6 +100,43 @@ export function equipmentRenderProfile(equipment:Equipment):EquipmentRenderProfi
  };
 }
 
+const requirements:Partial<Record<EquipmentArchetype,string[]>>={
+ stockpile:['surveyed pile toe/crest or design storage envelope','maximum operating pile height','segregation/bund geometry if material classes are separated'],
+ hopper:['overall height','top opening width/depth','outlet width/depth and discharge elevation','support/leg arrangement'],
+ hammer_crusher:['OEM overall dimensions','feed hopper dimensions/elevation','crusher body and motor/drive envelope','inlet and discharge connection elevations'],
+ vertical_impact_crusher:['OEM overall dimensions','rotor housing diameter/elevation','feed hopper dimensions','drive/motor envelope and discharge elevation'],
+ vibrating_screen:['deck length/width','deck inclination','number of decks and screen media/opening','feed/discharge elevations and drive envelope'],
+ jig:['manufacturer/model confirmation','cell count and cell dimensions','deck/screen elevation and opening','hutch/diaphragm/drive envelope','feed, tails, concentrate and water connection elevations'],
+ knudsen_bowl:['manufacturer/model confirmation','bowl diameter/depth','frame and overall height','feed/tails/concentrate connection elevations','drive/motor envelope'],
+ sluice:['deck length/width','deck inclination','riffle/matting geometry','feed and discharge elevations'],
+ shaker_table:['deck length/width','deck inclination','stroke/drive envelope','feed/wash-water and product discharge geometry'],
+ spiral_concentrator:['manufacturer/model confirmation','spiral diameter','number of turns','column height','feed distributor and product splitter elevations'],
+ cyclone:['body diameter','barrel and cone lengths','inlet/overflow/spigot diameters and elevations','support frame height'],
+ tank:['shell diameter','shell/overall height','operating level','inlet/outlet/overflow/nozzle elevations'],
+ pump:['manufacturer/model confirmation','baseplate and motor dimensions','shaft centreline','suction/discharge nozzle sizes and orientations'],
+ generator:['manufacturer/model confirmation','enclosure dimensions','exhaust/ventilation clearances','service access envelope'],
+ solar_array:['module dimensions','row spacing','tilt and azimuth','mounting height'],
+ container:['verified external dimensions','door/opening positions','service penetrations if relevant'],
+ conveyor_drive:['pulley/drive envelope','shaft elevation','motor/gearbox envelope','guard/service clearances'],
+ platform:['deck elevation','deck dimensions','stairs/ladder/handrail footprint','equipment loads if structural design is in scope'],
+ generic:['verified equipment identity/model','overall length/width/height','major connection points and service clearances'],
+};
+
+export function equipmentModelRequirements(equipment:Equipment){
+ const profile=equipmentRenderProfile(equipment),configured=new Set(Object.keys(equipment.engineering?.dimensions||{}));
+ return {
+  equipmentId:equipment.id,
+  name:equipment.name,
+  archetype:profile.archetype,
+  modelStatus:profile.modelStatus,
+  currentDimensions:profile.dimensions,
+  verificationTargets:requirements[profile.archetype]||requirements.generic!,
+  hasExplicitEngineeringProfile:!!equipment.engineering,
+  explicitDimensionKeys:[...configured].sort(),
+  recommendedEvidence:['OEM/vendor general-arrangement drawing or datasheet','site measurements or survey for installed equipment','dated photos for orientation and connection context'],
+ };
+}
+
 export function equipmentRenderSummary(equipment:Equipment){
  const profile=equipmentRenderProfile(equipment);
  return {
