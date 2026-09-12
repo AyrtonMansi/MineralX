@@ -148,10 +148,10 @@ function resizeEquipment(model:PlantModel,equipment:Equipment,width:number,heigh
 }
 
 function applyEngineeringConfig(equipment:Equipment,engineering:z.infer<typeof engineeringConfigSchema>){
-  const current=equipment.engineering;
+  const current=equipment.engineering,renderBefore=equipmentRenderSummary(equipment);
   equipment.engineering={
-    archetype:engineering.archetype||current?.archetype||equipmentRenderSummary(equipment).archetype,
-    model_status:engineering.modelStatus||current?.model_status||'inferred',
+    archetype:engineering.archetype||current?.archetype||renderBefore.archetype,
+    model_status:engineering.modelStatus||current?.model_status||renderBefore.modelStatus,
     ...(engineering.overallHeightM!==undefined||current?.overall_height_m!==undefined?{overall_height_m:engineering.overallHeightM??current?.overall_height_m}:{}),
     ...(engineering.rotationDeg!==undefined||current?.rotation_deg!==undefined?{rotation_deg:engineering.rotationDeg??current?.rotation_deg}:{}),
     ...((engineering.dimensions||current?.dimensions)?{dimensions:{...(current?.dimensions||{}),...(engineering.dimensions||{})}}:{}),
@@ -184,7 +184,8 @@ function validateModel(model:PlantModel,affectedEquipment:Set<string>,affectedSt
     }
     if(affectedEquipment.has(equipment.id)){
       const render=equipmentRenderSummary(equipment);
-      if(render.modelStatus==='inferred')issues.push({severity:'warning',code:'equipment_geometry_inferred',targetId:equipment.id,message:`${equipment.id} uses expert-inferred ${render.archetype.replaceAll('_',' ')} geometry. Confirm vendor or field dimensions before treating it as specified or as-built.`});
+      if(render.source==='inferred')issues.push({severity:'warning',code:'equipment_geometry_inferred',targetId:equipment.id,message:`${equipment.id} uses expert-inferred ${render.archetype.replaceAll('_',' ')} geometry. Confirm vendor or field dimensions before treating it as specified or as-built.`});
+      else if(render.source==='basis')issues.push({severity:'warning',code:'equipment_geometry_partially_inferred',targetId:equipment.id,message:`${equipment.id} has ${render.modelStatus.replaceAll('_',' ')} authority in the P5 basis, but unrecorded 3D dimensions still use conservative parametric geometry. Add verified dimensions before relying on exact clearances or connection elevations.`});
     }
   }
   for(let i=0;i<model.equipment.length;i++)for(let j=i+1;j<model.equipment.length;j++){
