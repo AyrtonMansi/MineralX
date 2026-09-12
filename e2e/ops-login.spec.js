@@ -4,13 +4,14 @@ test('a first visit explains the available workspaces before opening any records
  const protectedCalls=[];page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/ops/'))protectedCalls.push(request.url());});
  await page.goto('/ops',{waitUntil:'domcontentloaded'});
  await expect(page.locator('[data-mineralx-ops-mode]')).toHaveAttribute('data-mineralx-ops-mode','chooser');
- await expect(page.getByRole('heading',{name:'Choose the workspace that holds this work.'})).toBeVisible();
- await expect(page.getByRole('link',{name:'Staff sign in',exact:true})).toHaveAttribute('href','/ops/login');
- await expect(page.getByRole('link',{name:'Open private meetings',exact:true})).toHaveAttribute('href','/ops/meetings');
- await expect(page.getByRole('link',{name:'Open device workspace',exact:true})).toHaveAttribute('href','/ops?mode=development');
+ await expect(page.getByRole('heading',{name:'Choose a workspace.'})).toBeVisible();
+ await expect(page.getByRole('link',{name:'Sign in',exact:true})).toHaveAttribute('href','/ops/login');
+ await expect(page.getByRole('link',{name:'Open meetings',exact:true})).toHaveAttribute('href','/ops/meetings');
+ await expect(page.getByRole('link',{name:'Open workspace',exact:true})).toHaveAttribute('href','/ops?mode=development');
  expect(protectedCalls).toEqual([]);
- await page.getByRole('link',{name:'Staff sign in',exact:true}).click();
+ await page.getByRole('link',{name:'Sign in',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Sign in',exact:true})).toBeVisible();
 });
 
 test('sign-in remains visible while the Operations context request is pending',async({page})=>{
@@ -21,7 +22,7 @@ test('sign-in remains visible while the Operations context request is pending',a
   await expect.poll(()=>requested).toBe(true);
   await expect(page.getByRole('heading',{name:'Your work starts here.'})).toBeVisible({timeout:3000});
   await expect(page.getByRole('link',{name:'Continue without sign-in — development workspace',exact:true})).toHaveAttribute('href','/ops?mode=development');
-  await expect(page.getByRole('link',{name:'Existing processing / admin sign-in',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Forgot password?',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Forgot password?',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Reset your password'})).toBeVisible();
  }finally{release();}
@@ -40,5 +41,4 @@ test('a failed server account check is distinguished from invalid credentials',a
  await page.goto('/ops/login?access=unavailable');
  await expect(page.getByText('Account access could not be checked.',{exact:false})).toBeVisible();
  await expect(page.getByRole('link',{name:'Continue without sign-in — development workspace',exact:true})).toBeVisible();
- await expect(page.getByRole('link',{name:'Existing processing / admin sign-in',exact:true})).toHaveCount(0);
 });
