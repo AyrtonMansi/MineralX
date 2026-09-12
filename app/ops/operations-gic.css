@@ -1,0 +1,41 @@
+/* GIC-inspired Operations refinement: preserve the white/green Ops palette while
+   using the older GIC product's restrained spacing, horizontal hierarchy and low-noise UI. */
+.ops-shell{--ops-paper:#fff;--ops-ink:#1f3029;--ops-green:#2f5b47;--ops-line:#e3e8e2;--ops-muted:#758078;background:#fff}
+.ops-topbar{position:static;height:72px;padding:0 max(28px,calc((100vw - 1120px)/2));gap:22px;background:#fff;border-bottom:1px solid var(--ops-line)}
+.ops-brand{font-size:14px;letter-spacing:2.4px;min-width:auto;color:#202c27!important;white-space:nowrap}
+.ops-brand>span{color:inherit}.ops-brand small{display:none}
+.ops-scope{min-width:210px;max-width:300px}.ops-scope>span{font-size:9px;letter-spacing:1.2px}.ops-shell .ops-scope select{font-size:12px;font-weight:500}
+.ops-search{margin-left:auto;max-width:300px}.ops-search input{min-height:36px!important;padding:7px 10px!important;font-size:12px}.ops-search button{min-height:36px!important;padding:7px 11px!important;font-size:12px}
+.ops-topbar>a:last-child,.ops-topbar>a{font-size:12px;text-decoration:none}.ops-topbar .ops-create-menu summary{font-size:12px}
+
+/* Desktop navigation behaves like the old GIC header: one quiet horizontal strip,
+   not a second application chrome column. */
+.ops-sidebar{position:static;width:auto;min-height:58px;padding:0 max(28px,calc((100vw - 1120px)/2));border-right:0;border-bottom:1px solid var(--ops-line);background:#fff;display:flex;flex-direction:row;align-items:center;justify-content:space-between;overflow:visible}
+.ops-sidebar>nav{display:flex;align-items:center;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}.ops-sidebar>nav::-webkit-scrollbar{display:none}
+.ops-nav-group{display:flex;align-items:center;flex:none}.ops-nav-caption{display:none}.ops-sidebar nav>a,.ops-sidebar .ops-nav-group>a{display:block;margin:0;padding:19px 11px 16px;border-radius:0;border-bottom:2px solid transparent;color:#6f7772;font-size:12px;font-weight:500;white-space:nowrap;text-decoration:none}
+.ops-sidebar nav>a:hover,.ops-sidebar .ops-nav-group>a:hover{background:transparent;color:#26362f;text-decoration:none}
+.ops-sidebar nav>a[aria-current=page],.ops-sidebar .ops-nav-group>a[aria-current=page]{background:transparent;color:#22342d;border-left:0;border-bottom-color:#2f5b47;padding-left:11px;font-weight:600}
+.ops-sidebar .ops-nav-group>a small{display:none}.ops-nav-utility{border-top:0;padding-top:0;margin-top:0}
+.ops-sidebar footer{padding:0 0 0 18px;display:flex;flex-direction:row;align-items:center;gap:9px;white-space:nowrap}.ops-sidebar footer>span{display:none}.ops-sidebar .ops-connection{margin:0;display:flex;flex-direction:row;align-items:center;gap:6px}.ops-sidebar .ops-connection>span:not(.ops-status),.ops-sidebar .ops-connection button:not(:first-of-type){display:none}.ops-sidebar .ops-connection .ops-status{border:0;background:transparent;padding:0;color:#7a817d;font-size:10px}.ops-sidebar .ops-connection button{border:0;background:transparent;min-height:auto;padding:4px 0;color:#607068;font-size:10px}
+
+.ops-content{margin-left:0;max-width:1120px;margin-right:auto;margin-left:auto;padding:34px 28px 70px}
+.ops-heading{margin-bottom:24px;align-items:flex-start}.ops-heading>div>p:last-child{margin-top:8px;font-size:13px;color:#7c847f}.ops-heading .ops-primary{min-height:38px!important;padding:8px 14px!important;font-size:12px}
+.ops-shell h1{font-size:28px;letter-spacing:-.6px;font-weight:550}.ops-shell h2{font-size:18px;font-weight:550}.ops-shell h3{font-size:14px}
+.ops-eyebrow{font-size:9px;letter-spacing:1.5px;color:#8a918d}
+.ops-card{background:#fff;border:1px solid var(--ops-line);box-shadow:none;border-radius:6px;padding:20px 22px;margin:14px 0}
+.ops-kpis{gap:0;border:1px solid var(--ops-line);border-radius:6px;overflow:hidden;background:#fff}.ops-kpis>a,.ops-kpis>div{border:0;border-right:1px solid var(--ops-line);border-radius:0;min-height:112px;padding:18px 20px}.ops-kpis>a:last-child,.ops-kpis>div:last-child{border-right:0}.ops-kpis strong{font-size:29px;font-weight:450}.ops-kpis span{font-size:11px}
+.ops-tabs{gap:22px;margin:8px 0 25px;border-bottom:1px solid var(--ops-line)}.ops-shell .ops-tabs button{padding:10px 0 9px;border-bottom-width:2px;font-size:12px;color:#777f7a}.ops-shell .ops-tabs button[aria-current=page]{color:#20322a;border-bottom-color:#2f5b47}
+.ops-shell button,.ops-shell .ops-file-button{border-radius:5px;min-height:36px;padding:7px 12px;font-size:12px}.ops-shell .ops-primary{border-radius:5px;min-height:38px;padding:8px 14px;font-size:12px}.ops-shell input:not([type=checkbox]),.ops-shell select,.ops-shell textarea{border-color:#d5dcd6;border-radius:4px;min-height:40px;padding:8px 10px;font-size:12px}.ops-shell label{font-size:12px}
+.ops-message{border-radius:4px;font-size:12px;padding:11px 13px}.ops-table-tools{margin-bottom:14px;gap:14px}.ops-shell th{font-size:9px;padding:10px 11px}.ops-shell td{padding:13px 11px}.ops-shell tbody tr:hover{background:#fafbf9}.ops-form-grid{gap:16px 20px}.ops-actions{gap:9px;margin-top:14px}.ops-context-line{margin:10px 0 14px}.ops-facts{gap:14px 20px;margin:18px 0}.ops-facts dt{font-size:9px}.ops-facts dd{font-size:12px}
+
+/* Entry/chooser and sign-in use the same calm centred proportions as GIC. */
+.ops-entry,.ops-loading,.ops-field-unlock{padding:70px max(28px,calc((100vw - 1040px)/2))}.ops-entry h1{font-size:clamp(38px,5vw,58px);line-height:1.08;max-width:720px;margin:24px 0 26px;font-weight:550}.ops-entry>p{max-width:760px;color:#77817b;margin:14px 0}.ops-entry hr{margin:36px 0 20px;border-color:var(--ops-line)}
+.ops-workspace-chooser{max-width:none}.ops-workspace-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;max-width:1040px;margin-top:30px}.ops-workspace-choices .ops-card{padding:22px;min-height:190px;display:flex;flex-direction:column}.ops-workspace-choices .ops-card h2{margin-bottom:7px}.ops-workspace-choices .ops-card>p:not(.ops-eyebrow){font-size:12px;color:#747d78;line-height:1.55}.ops-workspace-choices .ops-card .ops-primary{margin-top:auto;align-self:flex-start}
+.ops-login{max-width:430px;margin:0 auto;padding:76px 26px}.ops-login .ops-brand{font-size:13px}.ops-login h1{font-size:36px;margin:44px 0 14px}.ops-login>p{font-size:13px}.ops-login form{margin:26px 0 10px}.ops-login form>label{margin-top:14px}.ops-login form>.ops-primary{margin-top:20px}.ops-login>a:last-child{margin-top:12px}.ops-login .ops-link{margin-right:13px}
+.ops-empty{padding:44px 20px}.ops-search-results{box-shadow:none;border-color:var(--ops-line);border-radius:5px}
+
+@media(max-width:980px){
+ .ops-topbar{height:64px;padding:0 18px}.ops-search,.ops-topbar .ops-create-menu,.ops-topbar>.ops-scope,.ops-topbar>a:not(.ops-brand){display:none}.ops-mobile-menu{margin-left:auto!important}
+ .ops-sidebar{position:fixed;top:0;bottom:0;left:0;width:min(330px,88vw);padding:18px;background:#fff;border-right:1px solid var(--ops-line);display:block;transform:translateX(-105%);z-index:60;overflow:auto}.ops-sidebar.is-open{transform:translateX(0)}.ops-sidebar>nav{display:block;overflow:visible}.ops-nav-group{display:block}.ops-nav-caption{display:block;padding:18px 10px 6px}.ops-sidebar nav>a,.ops-sidebar .ops-nav-group>a{padding:10px;border-bottom:0;border-radius:4px}.ops-sidebar nav>a[aria-current=page],.ops-sidebar .ops-nav-group>a[aria-current=page]{background:#f1f5f1;border:0;padding-left:10px}.ops-sidebar footer{padding:20px 10px;display:block}.ops-sidebar .ops-connection{display:block}.ops-content{padding:26px 18px 54px}.ops-workspace-choices{grid-template-columns:1fr}.ops-entry,.ops-loading,.ops-field-unlock{padding:48px 22px}.ops-entry h1{font-size:40px}.ops-kpis{grid-template-columns:repeat(2,1fr)}.ops-kpis>a,.ops-kpis>div{border-bottom:1px solid var(--ops-line)}
+}
+@media(max-width:560px){.ops-heading{display:block}.ops-heading>*+*{margin-top:14px}.ops-kpis{grid-template-columns:1fr}.ops-kpis>a,.ops-kpis>div{border-right:0}.ops-tabs{gap:18px}.ops-login h1{font-size:32px}.ops-entry h1{font-size:36px}}
