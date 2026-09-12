@@ -2,6 +2,23 @@ import { z } from "zod";
 const point = z.tuple([z.number().finite(), z.number().finite()]);
 const points = z.array(point).min(2).max(2000);
 const label = z.string().max(200);
+export const equipmentArchetypeSchema = z.enum([
+  'stockpile','hopper','hammer_crusher','vertical_impact_crusher','vibrating_screen','inline_pressure_jig','jig','knudsen_bowl','centrifugal_concentrator','sluice','shaker_table','spiral_concentrator','cyclone','tank','pump','conveyor_drive','generator','solar_array','container','platform','generic',
+]);
+export const equipmentModelStatusSchema = z.enum(['inferred','specified','vendor_reference','as_built']);
+const equipmentEngineeringSchema = z.object({
+  archetype: equipmentArchetypeSchema,
+  model_status: equipmentModelStatusSchema,
+  overall_height_m: z.number().finite().positive().max(60).optional(),
+  rotation_deg: z.number().finite().min(-360).max(360).optional(),
+  dimensions: z.record(z.string().max(80),z.number().finite().nonnegative().max(2000)).optional(),
+  specification: z.array(z.object({
+    key: z.string().trim().min(1).max(100),
+    value: z.string().trim().min(1).max(300),
+    unit: z.string().trim().max(40).optional(),
+    basis: z.string().trim().max(240).optional(),
+  }).strict()).max(60).optional(),
+}).strict();
 export const plantSchema = z.object({
   revision: label,
   title: label,
@@ -30,6 +47,7 @@ export const plantSchema = z.object({
         symbol: z.array(z.object({ points, fill: z.boolean() })),
         label: z.tuple([label, z.number(), z.number()]).optional(),
         geographic: points,
+        engineering: equipmentEngineeringSchema.optional(),
       }),
     )
     .max(1000),
@@ -74,6 +92,8 @@ export const plantSchema = z.object({
 });
 export type PlantModel = z.infer<typeof plantSchema>;
 export type Equipment = PlantModel["equipment"][number];
+export type EquipmentArchetype = z.infer<typeof equipmentArchetypeSchema>;
+export type EquipmentModelStatus = z.infer<typeof equipmentModelStatusSchema>;
 export const palette: Record<string, string> = {
   feed: "#b76a24",
   wet: "#167f89",

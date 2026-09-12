@@ -1,17 +1,13 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {useMemo,useState} from 'react';
 import {useSearchParams} from 'next/navigation';
 import {Empty,Status} from './primitives';
 import {EvidenceLink,WorkflowHistory} from './Workflow';
 import {useOperations} from './OperationsProvider';
-import {plantSchema} from '@/lib/plant/model';
-import plan from '@/data/plant-p5.json';
+import EngineeringCadPreview from './EngineeringCadPreview';
 
-const PlantCadSurface=dynamic(()=>import('@/components/plant/PlantCadSurface'),{ssr:false,loading:()=> <div className="cad-workspace"><p role="status">Loading 3D plant model…</p></div>});
-const model=plantSchema.parse(plan);
 const evidenceRequiredStates=new Set(['review','approved','implementing','commissioned','as_built','superseded']);
 const closedTaskStates=new Set(['resolved','cancelled']);
 
@@ -34,7 +30,7 @@ function operatingBasis(records:any[]){
 export default function EngineeringWorkspace({data,write,edit}:{data:any;write:boolean;edit:(kind:string,record?:any,initial?:any)=>void}){
  const {scope}=useOperations(),query=useSearchParams(),[search,setSearch]=useState(''),[state,setState]=useState('all'),[program,setProgram]=useState('all'),[sort,setSort]=useState('updated'),[implementationOnly,setImplementationOnly]=useState(false),[evidenceOnly,setEvidenceOnly]=useState(false);
  const revisions=data?.engineering||[],item=query.get('item'),selected=revisions.find((r:any)=>r.id===item)||null,surface=(query.get('surface')==='revisions'||item)?'revisions':'cad';
- const scopeId=scope?.id||'';
+ const scopeId=scope?.id||'',changesetId=query.get('changeset'),draft=query.get('draft');
  const surfaceLink=(next:'cad'|'revisions')=>`/ops/plant?scope=${scopeId}&view=engineering&surface=${next}`;
  const linkFor=(id?:string)=>`${surfaceLink('revisions')}${id?`&item=${id}`:''}`;
  const basis=useMemo(()=>operatingBasis(revisions),[revisions]);
@@ -64,9 +60,9 @@ export default function EngineeringWorkspace({data,write,edit}:{data:any;write:b
   <h1 className="ops-sr-only">Engineering</h1>
   <header className="engineering-commandbar">
    <nav className="engineering-commandnav" aria-label="Engineering workspace views"><Link href={surfaceLink('cad')} aria-current={surface==='cad'?'page':undefined}>Plant model</Link><Link href={surfaceLink('revisions')} aria-current={surface==='revisions'?'page':undefined}>Change control</Link></nav>
-   <div className="engineering-command-actions"><span className="engineering-command-meta">P5 · concept engineering basis</span>{surface==='revisions'&&write&&<button className="ops-primary" disabled={!data} onClick={()=>edit('engineering')}>New revision</button>}</div>
+   <div className="engineering-command-actions"><span className="engineering-command-meta">{draft?'ChatGPT preview · unsaved':changesetId?'Design proposal · review only':'P5 · concept engineering basis'}</span>{surface==='revisions'&&write&&<button className="ops-primary" disabled={!data} onClick={()=>edit('engineering')}>New revision</button>}</div>
   </header>
-  {surface==='cad'?<PlantCadSurface model={model}/>:<>
+  {surface==='cad'?<EngineeringCadPreview scopeId={scopeId} changesetId={changesetId} draft={draft}/>:<>
    <div className="engineering-statusline" aria-label="Engineering status">
     <Link href={basis?linkFor(basis.id):linkFor()}><strong>{basis?.reference||'—'}</strong><span>operating basis</span></Link>
     <button onClick={()=>summaryFilter('review')}><strong>{inReview}</strong><span>in review</span></button>
