@@ -1,5 +1,6 @@
 import {z} from 'zod';
-import {plantSchema, type PlantModel, type Equipment} from './model';
+import {equipmentArchetypeSchema,equipmentModelStatusSchema,plantSchema, type PlantModel, type Equipment} from './model';
+import {equipmentRenderSummary} from './equipment-model';
 
 const coordinate = z.number().finite().min(-10000).max(10000);
 const delta = z.number().finite().min(-1000).max(1000);
@@ -7,6 +8,17 @@ const dimension = z.number().finite().positive().max(1000);
 const pointSchema = z.tuple([coordinate, coordinate]);
 const equipmentIdSchema = z.string().trim().min(1).max(48).regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/);
 const equipmentGroupSchema = z.enum(['feed','wet','recirc','con','tail','service']);
+const specificationSchema=z.array(z.object({
+  key:z.string().trim().min(1).max(100),value:z.string().trim().min(1).max(300),unit:z.string().trim().max(40).optional(),basis:z.string().trim().max(240).optional(),
+}).strict()).max(60);
+const engineeringConfigSchema=z.object({
+  archetype:equipmentArchetypeSchema.optional(),
+  modelStatus:equipmentModelStatusSchema.optional(),
+  overallHeightM:z.number().finite().positive().max(60).optional(),
+  rotationDeg:z.number().finite().min(-360).max(360).optional(),
+  dimensions:z.record(z.string().max(80),z.number().finite().nonnegative().max(2000)).optional(),
+  specification:specificationSchema.optional(),
+}).strict().refine(value=>Object.keys(value).length>0,'Provide at least one equipment engineering parameter.');
 
 export const plantDesignOperationSchema = z.discriminatedUnion('type', [
   z.object({
@@ -28,6 +40,11 @@ export const plantDesignOperationSchema = z.discriminatedUnion('type', [
     height: dimension.describe('New planning-envelope depth in metres. The equipment centre is preserved.'),
   }).strict(),
   z.object({
+    type:z.literal('configure_equipment'),
+    equipmentId:equipmentIdSchema,
+    engineering:engineeringConfigSchema.describe('Parametric 3D equipment model settings. Use inferred status for expert-reasoned geometry unless a verified source supports specified/vendor/as-built dimensions.'),
+  }).strict(),
+  z.object({
     type: z.literal('reroute_stream'),
     streamId: z.string().trim().min(1).max(80),
     points: z.array(pointSchema).min(2).max(80).describe('Ordered local-yard X/Y route points in metres.'),
@@ -43,6 +60,7 @@ export const plantDesignOperationSchema = z.discriminatedUnion('type', [
     height: dimension,
     basis: z.string().trim().min(2).max(200).default('ChatGPT design proposal'),
     note: z.string().trim().max(3000).default(''),
+    engineering:engineeringConfigSchema.optional(),
   }).strict(),
 ]);
 
@@ -70,7 +88,7 @@ const routeLength = (points:[number,number][]) => round(points.slice(1).reduce((
 function semanticSnapshot(model:PlantModel){
   return {
     revision:model.revision,width:model.width,height:model.height,
-    equipment:model.equipment.map(e=>({id:e.id,x:e.x,y:e.y,w:e.w,h:e.h,group:e.group})).sort((a,b)=>a.id.localeCompare(b.id)),
+    equipment:model.equipment.map(e=>({id:e.id,x:e.x,y:e.y,w:e.w,h:e.h,group:e.group,engineering:e.engineering||null})).sort((a,b)=>a.id.localeCompare(b.id)),
     streams:model.streams.map(s=>({id:s.id,source:s.source,target:s.target,kind:s.kind,route_type:s.route_type,points:s.points})).sort((a,b)=>a.id.localeCompare(b.id)),
   };
 }
@@ -94,7 +112,7 @@ export function compactPlantModel(model:PlantModel){
     title:model.title,
     status:model.status,
     yard:{width:model.width,height:model.height,coordinateSystem:'local metres; X east, Y north'},
-    equipment:model.equipment.map(e=>({id:e.id,name:e.name,group:e.group,x:e.x,y:e.y,width:e.w,height:e.h,basis:e.basis,note:e.note})),
+    equipment:model.equipment.map(e=>({id:e.id,name:e.name,group:e.group,x:e.x,y:e.y,width:e.w,height:e.h,basis:e.basis,note:e.note,renderModel:equipmentRenderSummary(e),engineering:e.engineering||null})),
     streams:model.streams.map(s=>({id:s.id,source:s.source,target:s.target,kind:s.kind,routeType:s.route_type,points:s.points,horizontalRouteM:s.horizontal_route_m,note:s.note})),
     holds:model.holds,
     traces:model.traces,
@@ -129,14 +147,28 @@ function resizeEquipment(model:PlantModel,equipment:Equipment,width:number,heigh
   equipment.geographic=geoPoints(model,rectangle(equipment.x,equipment.y,equipment.w,equipment.h));
 }
 
+function applyEngineeringConfig(equipment:Equipment,engineering:z.infer<typeof engineeringConfigSchema>){
+  const current=equipment.engineering;
+  equipment.engineering={
+    archetype:engineering.archetype||current?.archetype||equipmentRenderSummary(equipment).archetype,
+    model_status:engineering.modelStatus||current?.model_status||'inferred',
+    ...(engineering.overallHeightM!==undefined||current?.overall_height_m!==undefined?{overall_height_m:engineering.overallHeightM??current?.overall_height_m}:{}),
+    ...(engineering.rotationDeg!==undefined||current?.rotation_deg!==undefined?{rotation_deg:engineering.rotationDeg??current?.rotation_deg}:{}),
+    ...((engineering.dimensions||current?.dimensions)?{dimensions:{...(current?.dimensions||{}),...(engineering.dimensions||{})}}:{}),
+    ...((engineering.specification||current?.specification)?{specification:engineering.specification||current?.specification}:{}),
+  };
+}
+
 function addEquipment(model:PlantModel,operation:Extract<PlantDesignOperation,{type:'add_equipment'}>){
   const points=rectangle(operation.x,operation.y,operation.width,operation.height);
-  model.equipment.push({
+  const equipment:Equipment={
     id:operation.equipmentId,name:operation.name,x:round(operation.x),y:round(operation.y),w:round(operation.width),h:round(operation.height),
     group:operation.group,basis:operation.basis,note:operation.note,
     symbol:[{points,fill:true}],label:[operation.name,round(operation.x+operation.width/2),round(operation.y+operation.height/2)],
     geographic:geoPoints(model,points),
-  });
+  };
+  if(operation.engineering)applyEngineeringConfig(equipment,operation.engineering);
+  model.equipment.push(equipment);
 }
 
 function overlaps(a:Equipment,b:Equipment){
@@ -149,6 +181,10 @@ function validateModel(model:PlantModel,affectedEquipment:Set<string>,affectedSt
   for(const equipment of model.equipment){
     if(equipment.x<0||equipment.y<0||equipment.x+equipment.w>model.width||equipment.y+equipment.h>model.height){
       issues.push({severity:'error',code:'equipment_outside_yard',targetId:equipment.id,message:`${equipment.id} extends outside the ${model.width} × ${model.height} m plant yard.`});
+    }
+    if(affectedEquipment.has(equipment.id)){
+      const render=equipmentRenderSummary(equipment);
+      if(render.modelStatus==='inferred')issues.push({severity:'warning',code:'equipment_geometry_inferred',targetId:equipment.id,message:`${equipment.id} uses expert-inferred ${render.archetype.replaceAll('_',' ')} geometry. Confirm vendor or field dimensions before treating it as specified or as-built.`});
     }
   }
   for(let i=0;i<model.equipment.length;i++)for(let j=i+1;j<model.equipment.length;j++){
@@ -186,7 +222,8 @@ export function applyPlantDesignOperations(base:PlantModel,input:unknown){
     const connected=model.streams.filter(stream=>stream.source===equipment.id||stream.target===equipment.id).map(stream=>stream.id);
     if(operation.type==='move_equipment')translateEquipment(model,equipment,operation.x,operation.y);
     else if(operation.type==='translate_equipment')translateEquipment(model,equipment,equipment.x+operation.dx,equipment.y+operation.dy);
-    else resizeEquipment(model,equipment,operation.width,operation.height);
+    else if(operation.type==='resize_equipment')resizeEquipment(model,equipment,operation.width,operation.height);
+    else applyEngineeringConfig(equipment,operation.engineering);
     affectedEquipment.add(equipment.id);connected.forEach(id=>affectedStreams.add(id));
   }
   const parsed=plantSchema.parse(model),validation=validateModel(parsed,affectedEquipment,affectedStreams);
