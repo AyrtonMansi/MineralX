@@ -4,6 +4,7 @@ import {McpServer} from '@modelcontextprotocol/server';
 import {z} from 'zod';
 import plan from '@/data/plant-p5.json';
 import {plantSchema} from '@/lib/plant/model';
+import {equipmentModelRequirements} from '@/lib/plant/equipment-model';
 import {applyPlantDesignOperations,compactPlantModel,plantDesignOperationsSchema,plantModelFingerprint} from '@/lib/plant/design';
 import {classifyDatabaseError,OpsError,type Scope} from '@/lib/ops/contracts';
 import {intelligenceStableUuid} from '@/lib/intelligence/service';
@@ -53,6 +54,19 @@ export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
   inputSchema:z.object({scopeId:scopeIdSchema}).strict(),outputSchema:dataEnvelopeSchema,
   annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:oauthToolMeta(),
  },async({scopeId})=>{try{assignedFacility(principal,scopeId,'plant.read');return result({...compactPlantModel(baseModel),designBoundary:'Coordinates and P5 footprints are the current concept basis. Parametric equipment geometry is explicit about whether it is inferred, specified, vendor-referenced or as-built. A design proposal never operates physical equipment and never becomes as-built geometry merely because ChatGPT created it.'});}catch(error){return toolFailure(error);}});
+
+ server.registerTool('get_mineralx_equipment_modeling_gaps',{
+  title:'Audit MineralX equipment modelling gaps',
+  description:'Review one or all plant equipment assemblies for modelling authority and the evidence/dimensions that would most improve accuracy. Use this before asking the user for OEM drawings, measurements or photos. Inferred geometry remains useful for layout but is never promoted to specified/vendor/as-built by this read-only tool.',
+  inputSchema:z.object({scopeId:scopeIdSchema,equipmentId:z.string().trim().min(1).max(200).optional()}).strict(),outputSchema:dataEnvelopeSchema,
+  annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:oauthToolMeta(),
+ },async({scopeId,equipmentId})=>{try{
+  assignedFacility(principal,scopeId,'plant.read');
+  const equipment=equipmentId?baseModel.equipment.filter(item=>item.id===equipmentId):baseModel.equipment;
+  if(equipmentId&&!equipment.length)throw new OpsError('not_found',`Equipment ${equipmentId} was not found in the current P5 model.`);
+  const rows=equipment.map(equipmentModelRequirements),counts=rows.reduce((acc,row)=>{acc[row.modelStatus]=(acc[row.modelStatus]||0)+1;return acc;},{} as Record<string,number>);
+  return result({revision:baseModel.revision,fingerprint:plantModelFingerprint(baseModel),counts,equipment:rows,next:'Use verified source evidence when available. Otherwise ChatGPT may create or refine an inferred parametric preview without representing those dimensions as measured, OEM or as-built.'});
+ }catch(error){return toolFailure(error);}});
 
  server.registerTool('preview_mineralx_plant_design',{
   title:'Preview a MineralX plant design',
