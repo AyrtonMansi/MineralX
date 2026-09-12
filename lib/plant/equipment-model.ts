@@ -53,7 +53,7 @@ function inferredHeight(equipment:Equipment,archetype:EquipmentArchetype){
  }
 }
 
-function inferredDimensions(equipment:Equipment,archetype:EquipmentArchetype,heightM:number){
+function inferredDimensions(equipment:Equipment,archetype:EquipmentArchetype,heightM:number):Record<string,number>{
  const w=equipment.w,d=equipment.h,minor=Math.min(w,d),span=Math.max(w,d);
  switch(archetype){
   case 'jig':return {cell_count:/j3|russell/i.test(named(equipment))?2:2,deck_height_m:heightM*.72,drive_height_m:heightM*.28,cell_width_m:w*.42};
