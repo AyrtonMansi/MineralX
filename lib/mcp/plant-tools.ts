@@ -34,9 +34,11 @@ function previewUrl(scopeId:string,changesetId:string){
 }
 function instantPreviewUrl(scopeId:string,operations:unknown){
  const draft=JSON.stringify(operations);
- if(draft.length>7000)throw new OpsError('validation','This instant preview is too large for a safe URL. Store it as a governed design proposal instead.');
- const query=new URLSearchParams({scope:scopeId,view:'engineering',surface:'cad',draft});
- return `${publicOrigin()}/ops/plant?${query.toString()}`;
+ if(draft.length>7000)throw new OpsError('validation','This instant preview is too large for a safe browser fragment. Store it as a governed design proposal instead.');
+ const query=new URLSearchParams({scope:scopeId,view:'engineering',surface:'cad'});
+ const fragment=new URLSearchParams({draft});
+ // Unsaved geometry stays after # so it is never sent to MineralX/Vercel in the HTTP request URL.
+ return `${publicOrigin()}/ops/plant?${query.toString()}#${fragment.toString()}`;
 }
 function validateBasis(baseRevision:string,baseFingerprint:string){
  const currentFingerprint=plantModelFingerprint(baseModel);
