@@ -7,7 +7,13 @@ import {useOperations} from './OperationsProvider';
 export function Status({children,tone='neutral'}:{children:React.ReactNode;tone?:string}){return <span className={`ops-status ${tone}`}>{children}</span>;}
 export function Message({children,error=false}:{children:React.ReactNode;error?:boolean}){return <div role={error?'alert':'status'} className={`ops-message ${error?'ops-error':''}`}>{children}</div>;}
 export function Empty({title,children}:{title:string;children:React.ReactNode}){return <section className="ops-empty"><h3>{title}</h3><p>{children}</p></section>;}
-export function Heading({title,description,action}:{title:string;description?:string;action?:React.ReactNode}){return <header className="ops-heading"><div><p className="ops-eyebrow">MineralX Operations</p><h1>{title}</h1>{description&&<p>{description}</p>}</div>{action}</header>;}
+export function Heading({title,description,action}:{title:string;description?:string;action?:React.ReactNode}){
+ return <header className={`ops-heading ${action?'ops-heading-with-action':'ops-heading-empty'}`}>
+  <h1 className="ops-sr-only">{title}</h1>
+  {description&&<p className="ops-sr-only">{description}</p>}
+  {action}
+ </header>;
+}
 export function Quantity({value,unit='g',missing='Not recorded'}:{value:unknown;unit?:string;missing?:string}){if(value===null||value===undefined||value==='')return <span className="ops-muted">{missing}</span>;const n=Number(value);return <span className="ops-number">{Number.isFinite(n)?new Intl.NumberFormat('en-AU',{maximumFractionDigits:6}).format(n):String(value)} <small>{unit}</small></span>;}
 export function useResource<T=any>(path:string|null){
  const {revision,offlineMode,context}=useOperations();
