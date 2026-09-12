@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {plantSchema, type PlantModel, type Equipment} from './model';
 
 const coordinate = z.number().finite().min(-10000).max(10000);
+const delta = z.number().finite().min(-1000).max(1000);
 const dimension = z.number().finite().positive().max(1000);
 const pointSchema = z.tuple([coordinate, coordinate]);
 const equipmentIdSchema = z.string().trim().min(1).max(48).regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/);
@@ -13,6 +14,12 @@ export const plantDesignOperationSchema = z.discriminatedUnion('type', [
     equipmentId: equipmentIdSchema,
     x: coordinate.describe('New west-edge X coordinate in metres in the P5 plant-yard coordinate system.'),
     y: coordinate.describe('New south-edge Y coordinate in metres in the P5 plant-yard coordinate system.'),
+  }).strict(),
+  z.object({
+    type: z.literal('translate_equipment'),
+    equipmentId: equipmentIdSchema,
+    dx: delta.describe('Relative east/west movement in metres. Positive is east; negative is west.'),
+    dy: delta.describe('Relative north/south movement in metres. Positive is north; negative is south.'),
   }).strict(),
   z.object({
     type: z.literal('resize_equipment'),
@@ -178,6 +185,7 @@ export function applyPlantDesignOperations(base:PlantModel,input:unknown){
     if(!equipment)throw new Error(`RULE: Equipment ${operation.equipmentId} was not found in ${base.revision}.`);
     const connected=model.streams.filter(stream=>stream.source===equipment.id||stream.target===equipment.id).map(stream=>stream.id);
     if(operation.type==='move_equipment')translateEquipment(model,equipment,operation.x,operation.y);
+    else if(operation.type==='translate_equipment')translateEquipment(model,equipment,equipment.x+operation.dx,equipment.y+operation.dy);
     else resizeEquipment(model,equipment,operation.width,operation.height);
     affectedEquipment.add(equipment.id);connected.forEach(id=>affectedStreams.add(id));
   }
