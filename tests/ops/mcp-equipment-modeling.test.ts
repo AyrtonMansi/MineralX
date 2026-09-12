@@ -12,7 +12,9 @@ test('ChatGPT can audit equipment modelling gaps before inventing dimensions',()
 });
 
 test('modelling gap guidance covers core processing and gravity equipment',()=>{
- for(const key of ['hammer_crusher','vertical_impact_crusher','vibrating_screen','jig','knudsen_bowl','sluice','shaker_table','spiral_concentrator','cyclone','tank','pump'])assert.match(model,new RegExp(`${key}:\[`));
+ for(const key of ['hammer_crusher','vertical_impact_crusher','vibrating_screen','jig','knudsen_bowl','sluice','shaker_table','spiral_concentrator','cyclone','tank','pump']){
+  assert.ok(model.includes(`${key}:`),`${key} should have modelling-gap guidance`);
+ }
  assert.match(model,/OEM\/vendor general-arrangement drawing or datasheet/);
  assert.match(model,/site measurements or survey for installed equipment/);
 });
