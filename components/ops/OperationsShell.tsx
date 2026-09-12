@@ -129,9 +129,13 @@ export default function OperationsShell({ children }: { children: React.ReactNod
     if (!dialog) return;
 
     const focusInitialControl = () => {
+      const close = closeButton.current;
+      if (close) {
+        close.focus({ preventScroll: true });
+        return;
+      }
       const focusable = drawerFocusables(dialog);
-      const initial = focusable.find((element) => element === closeButton.current) || focusable[0] || dialog;
-      initial.focus({ preventScroll: true });
+      (focusable[0] || dialog).focus({ preventScroll: true });
     };
     const trapFocus = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -159,6 +163,10 @@ export default function OperationsShell({ children }: { children: React.ReactNod
       }
     };
 
+    // Focus immediately and once again after layout. The mobile drawer is
+    // transformed into view, so waiting for only one animation frame could let
+    // another control keep focus during slower browser/layout runs.
+    focusInitialControl();
     const frame = requestAnimationFrame(focusInitialControl);
     document.addEventListener('keydown', trapFocus);
     return () => {
@@ -256,7 +264,7 @@ export default function OperationsShell({ children }: { children: React.ReactNod
         <span>Release {OPS_RELEASE}</span><span>{development ? 'Device workspace · browser-local records' : 'Named access · source-linked records'}</span>
         {/* Connection/sync status lives in the sidebar, not the main content column, so it
             doesn't push every page's heading down the screen. */}
-        <div className="ops-connection" aria-live="polite"><Status tone={offlineMode || !online ? 'warning' : 'neutral'}>{development ? 'Device workspace · saved on this browser' : offlineMode || !online ? 'Offline · device records only' : 'Connected to MineralX'}</Status>{saveState && <span>{saveState}</span>}<button disabled={loading || !online} onClick={() => { if (mayNavigate()) void refresh(); }}>Refresh records</button>{development && <button onClick={() => void downloadDevelopmentBackup()} disabled={backupBusy}>{backupBusy ? 'Preparing backup…' : 'Download device backup'}</button>}{pack && <><span>{pack.outbox.length} pending</span><button disabled={!online || syncing} onClick={() => sync().catch((caught) => setError(caught.message))}>{syncing ? 'Synchronising…' : 'Sync now'}</button><button onClick={async () => { const envelope = await exportVault(); if (envelope) downloadBlob('MineralX-encrypted-field-recovery.json', JSON.stringify(envelope)); }}>Recovery copy</button></>}</div>
+        <div className="ops-connection" aria-live="polite"><Status tone={offlineMode || !online ? 'warning' : 'neutral'}>{development ? 'Device workspace · saved on this browser' : offlineMode || !online ? 'Offline · device records only' : 'Connected to MineralX'}</Status>{saveState && <span>{saveState}</span>}<button disabled={loading || !online} onClick={() => { if (mayNavigate()) void refresh(); }}>Refresh records</button>{development && <button className="ops-device-backup" onClick={() => void downloadDevelopmentBackup()} disabled={backupBusy}>{backupBusy ? 'Preparing backup…' : 'Download device backup'}</button>}{pack && <><span>{pack.outbox.length} pending</span><button disabled={!online || syncing} onClick={() => sync().catch((caught) => setError(caught.message))}>{syncing ? 'Synchronising…' : 'Sync now'}</button><button onClick={async () => { const envelope = await exportVault(); if (envelope) downloadBlob('MineralX-encrypted-field-recovery.json', JSON.stringify(envelope)); }}>Recovery copy</button></>}</div>
       </footer>
     </aside>
     <div className="ops-content" ref={content}>
