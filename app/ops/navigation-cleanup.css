@@ -1,0 +1,3 @@
+/* The suite-level navigation already names the Processing workspace. The local route is the run register. Keep the existing DOM label for compatibility/accessibility, but present the non-duplicated task name visually. */
+.ops-tabs a[href*="view=runs"]{font-size:0!important}
+.ops-tabs a[href*="view=runs"]::after{content:"Runs";font-size:12px;font-weight:inherit;letter-spacing:inherit;color:inherit}
