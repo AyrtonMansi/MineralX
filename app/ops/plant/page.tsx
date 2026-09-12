@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import PlantWorkspace from '@/components/ops/PlantWorkspace';
+import EngineeringPage from '@/components/ops/EngineeringPage';
 
 const goldViews = new Set(['lots', 'custody', 'periods', 'production', 'allocations', 'settlements']);
 
@@ -24,5 +25,6 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
     if (view === 'lots' && values.action === 'cleanup') query.set('action', 'cleanup');
     redirect(`/ops/gold?${query.toString()}`);
   }
+  if (view === 'engineering') return <EngineeringPage />;
   return <PlantWorkspace />;
 }
