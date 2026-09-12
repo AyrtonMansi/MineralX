@@ -171,6 +171,58 @@
 .ops-map{height:clamp(560px,70dvh,940px)!important}
 .ops-embedded-plant{width:100%;min-height:60dvh}
 
+/* Meetings is a first-class workspace as well: full-width list + detail, joined summary band,
+   and square-edged detail surfaces rather than a small floating card. */
+.ops-shell.mt-shell .mt-main{
+  width:100%!important;
+  max-width:none!important;
+  min-height:var(--ops-workspace-height)!important;
+  margin:0!important;
+  padding:28px var(--ops-gutter) 72px!important;
+}
+.ops-shell.mt-shell .mt-metrics{
+  gap:0!important;
+  border:1px solid var(--mt-line)!important;
+  border-radius:6px!important;
+  overflow:hidden;
+  margin-bottom:30px!important;
+}
+.ops-shell.mt-shell .mt-metrics>div{
+  min-height:112px;
+  border:0!important;
+  border-right:1px solid var(--mt-line)!important;
+  border-radius:0!important;
+  padding:20px 22px!important;
+}
+.ops-shell.mt-shell .mt-metrics>div:last-child{border-right:0!important}
+.ops-shell.mt-shell .mt-workspace{
+  grid-template-columns:minmax(260px,340px) minmax(0,1fr)!important;
+  gap:0!important;
+  min-height:calc(100dvh - 300px);
+  align-items:stretch!important;
+}
+.ops-shell.mt-shell .mt-list{
+  position:relative!important;
+  top:auto!important;
+  align-self:start;
+  padding-right:20px;
+}
+.ops-shell.mt-shell .mt-meeting-row{
+  border-radius:0!important;
+  border-width:0 0 1px!important;
+  padding:17px 14px!important;
+}
+.ops-shell.mt-shell .mt-meeting-row:first-of-type{border-top:1px solid var(--mt-line)!important}
+.ops-shell.mt-shell .mt-detail{
+  min-height:100%;
+  border-radius:0!important;
+}
+.ops-shell.mt-shell .mt-detail-head{padding:28px 32px!important}
+.ops-shell.mt-shell .mt-tabs{padding-inline:32px!important}
+.ops-shell.mt-shell .mt-action-toolbar,
+.ops-shell.mt-shell .mt-action,
+.ops-shell.mt-shell .mt-notes{padding-inline:32px!important}
+
 /* Keep utility and evidence disclosures quiet and full-width. */
 .ops-content details.ops-card>summary{padding:2px 0 10px}
 .ops-content .ops-search-results{width:100%;max-width:none}
@@ -179,6 +231,7 @@
 @media(max-width:1100px){
   .ops-shell{--ops-gutter:24px}
   .ops-content .ops-engineering .engineering-workspace{grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr)!important}
+  .ops-shell.mt-shell .mt-workspace{grid-template-columns:240px minmax(0,1fr)!important}
 }
 
 @media(max-width:980px){
@@ -190,6 +243,20 @@
   .ops-map-layout{grid-template-columns:1fr!important;min-height:auto!important}
   .ops-map-menu{max-height:260px!important}
   .ops-map-canvas{min-height:58dvh!important}
+}
+
+@media(max-width:760px){
+  .ops-shell.mt-shell .mt-main{padding:22px 16px 52px!important}
+  .ops-shell.mt-shell .mt-workspace{grid-template-columns:1fr!important;min-height:0}
+  .ops-shell.mt-shell .mt-list{padding-right:0;max-height:320px;overflow:auto}
+  .ops-shell.mt-shell .mt-metrics{grid-template-columns:repeat(2,1fr)!important}
+  .ops-shell.mt-shell .mt-metrics>div:nth-child(2){border-right:0!important}
+  .ops-shell.mt-shell .mt-metrics>div:nth-child(-n+2){border-bottom:1px solid var(--mt-line)!important}
+  .ops-shell.mt-shell .mt-detail-head,
+  .ops-shell.mt-shell .mt-action-toolbar,
+  .ops-shell.mt-shell .mt-action,
+  .ops-shell.mt-shell .mt-notes{padding-inline:20px!important}
+  .ops-shell.mt-shell .mt-tabs{padding-inline:20px!important}
 }
 
 @media(max-width:700px){
