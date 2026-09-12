@@ -184,7 +184,7 @@ function validateModel(model:PlantModel,affectedEquipment:Set<string>,affectedSt
     }
     if(affectedEquipment.has(equipment.id)){
       const render=equipmentRenderSummary(equipment);
-      if(render.source==='inferred')issues.push({severity:'warning',code:'equipment_geometry_inferred',targetId:equipment.id,message:`${equipment.id} uses expert-inferred ${render.archetype.replaceAll('_',' ')} geometry. Confirm vendor or field dimensions before treating it as specified or as-built.`});
+      if(render.modelStatus==='inferred')issues.push({severity:'warning',code:'equipment_geometry_inferred',targetId:equipment.id,message:`${equipment.id} uses expert-inferred ${render.archetype.replaceAll('_',' ')} geometry. Confirm vendor or field dimensions before treating it as specified or as-built.`});
       else if(render.source==='basis')issues.push({severity:'warning',code:'equipment_geometry_partially_inferred',targetId:equipment.id,message:`${equipment.id} has ${render.modelStatus.replaceAll('_',' ')} authority in the P5 basis, but unrecorded 3D dimensions still use conservative parametric geometry. Add verified dimensions before relying on exact clearances or connection elevations.`});
     }
   }
