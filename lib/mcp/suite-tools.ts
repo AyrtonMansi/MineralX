@@ -44,7 +44,7 @@ function capabilityFor(scope:Scope){
   interactions:{
    read:['search_mineralx','list_mineralx_records','get_mineralx_record'],
    evidence:scope.permissions.includes('work.write')?['stage_mineralx_source','create_mineralx_intake','analyze_mineralx_intake','approve_mineralx_intake','apply_mineralx_intake']:[],
-   engineering:scope.kind==='facility'&&scope.permissions.includes('plant.read')?['get_mineralx_plant_model','preview_mineralx_plant_design','list_mineralx_plant_designs','get_mineralx_plant_design',...(scope.permissions.includes('plant.capture')?['propose_mineralx_plant_design']:[])]:[],
+   engineering:scope.kind==='facility'&&scope.permissions.includes('plant.read')?['get_mineralx_plant_model','get_mineralx_equipment_modeling_gaps','preview_mineralx_plant_design','list_mineralx_plant_designs','get_mineralx_plant_design',...(scope.permissions.includes('plant.capture')?['propose_mineralx_plant_design']:[])]:[],
   },
  };
 }
@@ -55,7 +55,7 @@ export function registerSuiteMcpTools(server:McpServer,principal:McpPrincipal){
   description:'Read the connected account’s complete MineralX workspace/surface map and the supported MCP interaction paths. Use this when the user asks ChatGPT to work across Engineering, Exploration, Processing, Gold, Programs, Work, Files, Reports or Intelligence.',
   inputSchema:z.object({}).strict(),outputSchema:dataEnvelopeSchema,
   annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:oauthToolMeta(),
- },async()=>result({scopes:principal.context.scopes.map(capabilityFor),controlModel:'Read operations are direct. Engineering supports live unsaved parametric previews and governed durable proposals. Other record mutations flow through explicit governed proposal/approval/apply paths; physical plant operation is never exposed.'}));
+ },async()=>result({scopes:principal.context.scopes.map(capabilityFor),controlModel:'Read operations are direct. Engineering supports evidence-aware equipment modelling, live unsaved parametric previews and governed durable proposals. Other record mutations flow through explicit governed proposal/approval/apply paths; physical plant operation is never exposed.'}));
 
  server.registerTool('open_mineralx_surface',{
   title:'Open a MineralX suite surface',
