@@ -7,7 +7,9 @@ function equipment(id:string,name:string,w=3,h=2):Equipment{return {id,name,x:0,
 
 test('gravity circuit names map to functional equipment archetypes',()=>{
  const cases:[string,string,string][]=[
+  ['JG01','Gekko IPJ1000','inline_pressure_jig'],
   ['J3','Russell J3 jig','jig'],
+  ['FC01','Falcon SB400','centrifugal_concentrator'],
   ['KB1','Knudsen bowl 1','knudsen_bowl'],
   ['SL1','Sluice','sluice'],
   ['ST1','Shaker table','shaker_table'],
@@ -20,10 +22,16 @@ test('gravity circuit names map to functional equipment archetypes',()=>{
 });
 
 test('expert-reasoned gravity models expose useful parametric geometry but remain inferred',()=>{
+ const ipj=equipmentRenderProfile(equipment('JG01','Gekko IPJ1000',1.4,1.4));
+ assert.equal(ipj.archetype,'inline_pressure_jig');
+ assert.ok(ipj.dimensions.pressure_vessel_diameter_m>0);
  const jig=equipmentRenderProfile(equipment('J3','Russell J3 jig',2.2,1.6));
  assert.equal(jig.modelStatus,'inferred');
  assert.equal(jig.dimensions.cell_count,2);
  assert.ok(jig.dimensions.deck_height_m>0);
+ const falcon=equipmentRenderProfile(equipment('FC01','Falcon SB400',2,2));
+ assert.equal(falcon.archetype,'centrifugal_concentrator');
+ assert.ok(falcon.dimensions.bowl_housing_diameter_m>0);
  const table=equipmentRenderProfile(equipment('ST1','Shaker table',3.2,1.6));
  assert.equal(table.archetype,'shaker_table');
  assert.ok(table.dimensions.deck_length_m>table.dimensions.deck_width_m);
