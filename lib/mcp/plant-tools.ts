@@ -49,14 +49,14 @@ function validateBasis(baseRevision:string,baseFingerprint:string){
 export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
  server.registerTool('get_mineralx_plant_model',{
   title:'Get MineralX processing plant model',
-  description:'Read the current semantic P5 processing-plant model for design work: yard coordinates, stable equipment IDs, planning envelopes, process routes, design holds and a concurrency fingerprint. Read this before proposing geometry changes.',
+  description:'Read the current semantic P5 processing-plant model for design work: yard coordinates, stable equipment IDs, planning envelopes, deterministic 3D render archetypes, stored engineering parameters, process routes, design holds and a concurrency fingerprint. Read this before proposing geometry changes.',
   inputSchema:z.object({scopeId:scopeIdSchema}).strict(),outputSchema:dataEnvelopeSchema,
   annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:oauthToolMeta(),
- },async({scopeId})=>{try{assignedFacility(principal,scopeId,'plant.read');return result({...compactPlantModel(baseModel),designBoundary:'Coordinates and P5 footprints are the current concept basis. A design proposal never operates physical equipment and never becomes as-built geometry merely because ChatGPT created it.'});}catch(error){return toolFailure(error);}});
+ },async({scopeId})=>{try{assignedFacility(principal,scopeId,'plant.read');return result({...compactPlantModel(baseModel),designBoundary:'Coordinates and P5 footprints are the current concept basis. Parametric equipment geometry is explicit about whether it is inferred, specified, vendor-referenced or as-built. A design proposal never operates physical equipment and never becomes as-built geometry merely because ChatGPT created it.'});}catch(error){return toolFailure(error);}});
 
  server.registerTool('preview_mineralx_plant_design',{
   title:'Preview a MineralX plant design',
-  description:'Create an immediate unsaved 3D Engineering preview from typed plant geometry operations. Use this while iterating conversationally (for example “move the jig 2 m east”). It validates geometry and returns a MineralX Engineering URL, but writes nothing to the database and never controls physical plant.',
+  description:'Create an immediate unsaved 3D Engineering preview from typed plant geometry operations. Use this while iterating conversationally like code: move equipment, resize envelopes, reroute streams, add equipment or configure a parametric equipment archetype/height/orientation/dimensions. Mark expert-reasoned geometry as inferred unless verified source evidence supports a stronger model status. It validates geometry and returns a MineralX Engineering URL, writes nothing to the database and never controls physical plant.',
   inputSchema:z.object({
    scopeId:scopeIdSchema,
    baseRevision:z.string().trim().min(1).max(200),
@@ -68,7 +68,7 @@ export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
   try{
    assignedFacility(principal,scopeId,'plant.read');validateBasis(baseRevision,baseFingerprint);
    const applied=applyPlantDesignOperations(baseModel,operations);
-   if(!applied.validation.ok)return result({previewCreated:false,validation:applied.validation,message:'The proposed geometry is blocked. Revise the move, envelope or route before opening a preview.'});
+   if(!applied.validation.ok)return result({previewCreated:false,validation:applied.validation,message:'The proposed geometry is blocked. Revise the move, envelope, equipment parameters or route before opening a preview.'});
    return result({previewCreated:true,previewUrl:instantPreviewUrl(scopeId,applied.operations),validation:applied.validation,affected:{equipment:applied.validation.affectedEquipment,streams:applied.validation.affectedStreams},saved:false});
   }catch(error){return toolFailure(error);}
  });
@@ -89,14 +89,14 @@ export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
 
  server.registerTool('propose_mineralx_plant_design',{
   title:'Propose a MineralX plant design change',
-  description:'Create a governed, durable and previewable Engineering changeset. Use exact stable equipment/stream IDs from get_mineralx_plant_model. Supports moving/resizing existing equipment, rerouting process streams and adding concept equipment. This creates a proposal only: it does not publish an as-built revision, change operational records or control physical plant.',
+  description:'Create a governed, durable and previewable Engineering changeset. Use exact stable equipment/stream IDs from get_mineralx_plant_model. Supports moving/resizing existing equipment, parametrically configuring realistic equipment assemblies, rerouting process streams and adding concept equipment. Expert-reasoned geometry must remain status=inferred until verified source evidence justifies specified, vendor_reference or as_built. This creates a proposal only: it does not publish an as-built revision, change operational records or control physical plant.',
   inputSchema:z.object({
    scopeId:scopeIdSchema,
    idempotencyKey:z.string().trim().min(8).max(200).describe('Stable key for this logical design proposal. Reuse exactly when retrying.'),
    baseRevision:z.string().trim().min(1).max(200).describe('Exact revision returned by get_mineralx_plant_model.'),
    baseFingerprint:z.string().trim().min(4).max(200).describe('Exact fingerprint returned by get_mineralx_plant_model.'),
    title:z.string().trim().min(3).max(240),
-   rationale:z.string().trim().min(3).max(4000).describe('Engineering purpose, assumptions and requested outcome. Do not invent measured or OEM dimensions.'),
+   rationale:z.string().trim().min(3).max(4000).describe('Engineering purpose, assumptions and requested outcome. Do not invent measured or OEM dimensions; record expert-reasoned geometry as inferred.'),
    operations:plantDesignOperationsSchema,
   }).strict(),outputSchema:dataEnvelopeSchema,
   annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},_meta:oauthToolMeta(),
