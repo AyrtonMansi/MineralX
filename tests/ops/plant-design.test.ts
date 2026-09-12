@@ -27,6 +27,14 @@ test('moving equipment moves its attached route endpoint and keeps the model val
  assert.notEqual(plantModelFingerprint(result.model),plantModelFingerprint(base));
 });
 
+test('relative movement maps directly from conversational east west north south instructions',()=>{
+ const result=applyPlantDesignOperations(base,[{type:'translate_equipment',equipmentId:'B',dx:2,dy:-1}]);
+ assert.equal(result.validation.ok,true);
+ const moved=result.model.equipment.find(e=>e.id==='B')!;
+ assert.deepEqual([moved.x,moved.y],[16,7]);
+ assert.deepEqual(result.model.streams[0].points.at(-1),[16,8.5]);
+});
+
 test('a proposed collision is blocked before persistence',()=>{
  const result=applyPlantDesignOperations(base,[{type:'move_equipment',equipmentId:'A',x:14,y:8}]);
  assert.equal(result.validation.ok,false);
