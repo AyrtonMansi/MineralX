@@ -60,6 +60,15 @@ function buildScreen(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body
  addBox(group,e.id,e.w*.2,p.heightM*.24,e.h*.55,-e.w*.37,frameH+p.heightM*.3,0,frame,slope);
  addBox(group,e.id,e.w*.16,p.heightM*.2,e.h*.5,e.w*.4,frameH+p.heightM*.12,0,frame,slope);
 }
+function buildInlinePressureJig(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
+ const supportH=p.heightM*.25,vesselH=p.dimensions.vessel_height_m||p.heightM*.62,r=Math.max(.22,(p.dimensions.pressure_vessel_diameter_m||Math.min(e.w,e.h)*.58)/2);
+ addLegs(group,e.id,e.w*.68,e.h*.68,supportH,frame,.04);addBox(group,e.id,e.w*.76,.1,e.h*.72,0,supportH-.05,0,frame);
+ const vessel=addCylinder(group,e.id,r,vesselH,0,supportH+vesselH/2,0,body,32);addEdgeOutline(group,vessel);
+ const top=tag(new THREE.Mesh(new THREE.SphereGeometry(r,24,12,0,Math.PI*2,0,Math.PI/2),body),e.id) as THREE.Mesh;top.position.y=supportH+vesselH;group.add(top);
+ addCylinder(group,e.id,r*.16,p.heightM*.18,0,supportH+vesselH+p.heightM*.12,0,frame,18);
+ addCylinder(group,e.id,Math.max(.045,r*.09),Math.max(.25,e.w*.35),e.w*.34,p.heightM*.7,0,frame,14,Math.PI/2);
+ addCylinder(group,e.id,Math.max(.04,r*.075),Math.max(.22,e.w*.28),-e.w*.34,p.heightM*.38,0,frame,14,Math.PI/2);
+}
 function buildJig(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
  const frameH=p.heightM*.22,tankH=p.heightM*.48,cellGap=Math.max(.04,e.w*.035),cellW=(e.w*.78-cellGap)/2;addLegs(group,e.id,e.w*.84,e.h*.78,frameH,frame,.07);
  addBox(group,e.id,e.w*.9,.1,e.h*.85,0,frameH-.05,0,frame);
@@ -77,6 +86,14 @@ function buildBowl(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:T
  const bowl=tag(new THREE.Mesh(new THREE.CylinderGeometry(r*.85,r*.35,p.heightM*.3,32,1,true),material(lightSteel,.38,.4)),e.id) as THREE.Mesh;bowl.position.y=frameH+p.heightM*.21;group.add(bowl);
  addCylinder(group,e.id,r*.11,p.heightM*.26,0,frameH+p.heightM*.52,0,frame,18);
  addBox(group,e.id,e.w*.28,p.heightM*.16,e.h*.22,e.w*.31,p.heightM*.18,0,frame);
+}
+function buildCentrifugalConcentrator(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
+ const frameH=p.heightM*.38,r=Math.max(.22,Math.min(e.w,e.h)*.32),housingH=p.heightM*.4;addLegs(group,e.id,e.w*.7,e.h*.7,frameH,frame,.05);addBox(group,e.id,e.w*.8,.1,e.h*.78,0,frameH-.05,0,frame);
+ const housing=addCylinder(group,e.id,r,housingH,0,frameH+housingH/2,0,body,32);addEdgeOutline(group,housing);
+ const cone=tag(new THREE.Mesh(new THREE.CylinderGeometry(r*.78,r*.35,housingH*.72,32,1,true),material(lightSteel,.4,.38)),e.id) as THREE.Mesh;cone.position.y=frameH+housingH*.54;group.add(cone);
+ addCylinder(group,e.id,r*.1,p.heightM*.3,0,frameH+housingH+p.heightM*.15,0,frame,16);
+ addBox(group,e.id,e.w*.3,p.heightM*.18,e.h*.24,e.w*.31,p.heightM*.18,0,frame);
+ addCylinder(group,e.id,Math.max(.04,r*.07),Math.max(.22,e.w*.28),-e.w*.34,frameH+housingH*.35,0,frame,14,Math.PI/2);
 }
 function buildSluice(group:THREE.Group,e:Equipment,p:EquipmentRenderProfile,body:THREE.Material,frame:THREE.Material){
  const deckY=p.heightM*.72,slope=THREE.MathUtils.degToRad(p.dimensions.deck_slope_deg||6);addLegs(group,e.id,e.w*.84,e.h*.7,p.heightM*.56,frame,.04);
@@ -154,7 +171,9 @@ export function buildEquipmentAssembly(model:PlantModel,equipment:Equipment){
   case 'hammer_crusher':buildCrusher(group,equipment,profile,body,frame);break;
   case 'vertical_impact_crusher':buildVsi(group,equipment,profile,body,frame);break;
   case 'vibrating_screen':buildScreen(group,equipment,profile,body,frame);break;
+  case 'inline_pressure_jig':buildInlinePressureJig(group,equipment,profile,body,frame);break;
   case 'jig':buildJig(group,equipment,profile,body,frame);break;
+  case 'centrifugal_concentrator':buildCentrifugalConcentrator(group,equipment,profile,body,frame);break;
   case 'knudsen_bowl':buildBowl(group,equipment,profile,body,frame);break;
   case 'sluice':buildSluice(group,equipment,profile,body,frame);break;
   case 'shaker_table':buildShakerTable(group,equipment,profile,body,frame);break;
