@@ -76,7 +76,7 @@ export default function PlantCadSurface({model}:{model:PlantModel}){
 
  useEffect(()=>{if(routeGroup.current)routeGroup.current.visible=routesVisible;},[routesVisible]);
  useEffect(()=>{if(gridHelper.current)gridHelper.current.visible=gridVisible;},[gridVisible]);
- useEffect(()=>{equipmentObjects.current.forEach((object,id)=>object.traverse(child=>{const mesh=child as THREE.Mesh;if(!mesh.isMesh)return;const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];for(const item of materials){const material=item as THREE.MeshStandardMaterial;if(!material?.emissive)continue;material.emissive.set(id===selectedId?0x244c3a:0x000000);material.emissiveIntensity=id===selectedId?.34:0;}}));},[selectedId]);
+ useEffect(()=>{equipmentObjects.current.forEach((object,id)=>object.traverse(child=>{const mesh=child as THREE.Mesh;if(!mesh.isMesh)return;const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];for(const item of materials){const material=item as THREE.MeshStandardMaterial;if(!material?.emissive)continue;material.emissive.set(id===selectedId?0x244c3a:0x000000);material.emissiveIntensity=id===selectedId ? .34 : 0;}}));},[selectedId]);
  const setView=(next:'perspective'|'top')=>{setProjection(next);resetView(next);};
  const dimensions=selectedProfile?Object.entries(selectedProfile.dimensions).slice(0,8):[];
 
