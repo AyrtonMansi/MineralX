@@ -1,6 +1,6 @@
 /* The suite navigation already names the active workspace area. Keep page headings in the
    accessibility tree, but do not repeat the same title visually underneath the selected tab. */
-.ops-heading-empty{display:none!important}
+.ops-heading-empty{margin:0!important;min-height:0!important}
 .ops-heading-with-action{display:flex!important;justify-content:flex-end!important;align-items:center!important;margin:10px 0 12px!important;min-height:44px!important}
 .ops-heading-with-action>.ops-primary,.ops-heading-with-action>button,.ops-heading-with-action>a{margin-left:auto}
 @media(max-width:760px){.ops-heading-with-action{margin:8px 0 10px!important;min-height:40px!important}.ops-heading-with-action>.ops-primary,.ops-heading-with-action>button,.ops-heading-with-action>a{width:100%;margin-left:0}}
