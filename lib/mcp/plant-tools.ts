@@ -27,10 +27,21 @@ function assignedFacility(principal:McpPrincipal,scopeId:string,permission:strin
  return scope;
 }
 async function rpc(principal:McpPrincipal,name:string,args:Record<string,unknown>){const {data,error}=await principal.db.rpc(name,args);if(error)throw classifyDatabaseError(error);return data;}
+function publicOrigin(){return (process.env.MINERALX_PUBLIC_ORIGIN||'https://mineral-x.com.au').replace(/\/$/,'');}
 function previewUrl(scopeId:string,changesetId:string){
- const origin=(process.env.MINERALX_PUBLIC_ORIGIN||'https://mineral-x.com.au').replace(/\/$/,'');
  const query=new URLSearchParams({scope:scopeId,view:'engineering',surface:'cad',changeset:changesetId});
- return `${origin}/ops/plant?${query.toString()}`;
+ return `${publicOrigin()}/ops/plant?${query.toString()}`;
+}
+function instantPreviewUrl(scopeId:string,operations:unknown){
+ const draft=JSON.stringify(operations);
+ if(draft.length>7000)throw new OpsError('validation','This instant preview is too large for a safe URL. Store it as a governed design proposal instead.');
+ const query=new URLSearchParams({scope:scopeId,view:'engineering',surface:'cad',draft});
+ return `${publicOrigin()}/ops/plant?${query.toString()}`;
+}
+function validateBasis(baseRevision:string,baseFingerprint:string){
+ const currentFingerprint=plantModelFingerprint(baseModel);
+ if(baseRevision!==baseModel.revision||baseFingerprint!==currentFingerprint)throw new OpsError('conflict','The plant basis changed. Read get_mineralx_plant_model again before proposing geometry.');
+ return currentFingerprint;
 }
 
 export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
@@ -40,6 +51,25 @@ export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
   inputSchema:z.object({scopeId:scopeIdSchema}).strict(),outputSchema:dataEnvelopeSchema,
   annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:oauthToolMeta(),
  },async({scopeId})=>{try{assignedFacility(principal,scopeId,'plant.read');return result({...compactPlantModel(baseModel),designBoundary:'Coordinates and P5 footprints are the current concept basis. A design proposal never operates physical equipment and never becomes as-built geometry merely because ChatGPT created it.'});}catch(error){return toolFailure(error);}});
+
+ server.registerTool('preview_mineralx_plant_design',{
+  title:'Preview a MineralX plant design',
+  description:'Create an immediate unsaved 3D Engineering preview from typed plant geometry operations. Use this while iterating conversationally (for example “move the jig 2 m east”). It validates geometry and returns a MineralX Engineering URL, but writes nothing to the database and never controls physical plant.',
+  inputSchema:z.object({
+   scopeId:scopeIdSchema,
+   baseRevision:z.string().trim().min(1).max(200),
+   baseFingerprint:z.string().trim().min(4).max(200),
+   operations:plantDesignOperationsSchema.max(12),
+  }).strict(),outputSchema:dataEnvelopeSchema,
+  annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:oauthToolMeta(),
+ },async({scopeId,baseRevision,baseFingerprint,operations})=>{
+  try{
+   assignedFacility(principal,scopeId,'plant.read');validateBasis(baseRevision,baseFingerprint);
+   const applied=applyPlantDesignOperations(baseModel,operations);
+   if(!applied.validation.ok)return result({previewCreated:false,validation:applied.validation,message:'The proposed geometry is blocked. Revise the move, envelope or route before opening a preview.'});
+   return result({previewCreated:true,previewUrl:instantPreviewUrl(scopeId,applied.operations),validation:applied.validation,affected:{equipment:applied.validation.affectedEquipment,streams:applied.validation.affectedStreams},saved:false});
+  }catch(error){return toolFailure(error);}
+ });
 
  server.registerTool('list_mineralx_plant_designs',{
   title:'List MineralX plant design proposals',
@@ -57,7 +87,7 @@ export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
 
  server.registerTool('propose_mineralx_plant_design',{
   title:'Propose a MineralX plant design change',
-  description:'Create a governed, previewable Engineering changeset. Use exact stable equipment/stream IDs from get_mineralx_plant_model. Supports moving/resizing existing equipment, rerouting process streams and adding concept equipment. This creates a proposal only: it does not publish an as-built revision, change operational records or control physical plant.',
+  description:'Create a governed, durable and previewable Engineering changeset. Use exact stable equipment/stream IDs from get_mineralx_plant_model. Supports moving/resizing existing equipment, rerouting process streams and adding concept equipment. This creates a proposal only: it does not publish an as-built revision, change operational records or control physical plant.',
   inputSchema:z.object({
    scopeId:scopeIdSchema,
    idempotencyKey:z.string().trim().min(8).max(200).describe('Stable key for this logical design proposal. Reuse exactly when retrying.'),
@@ -71,9 +101,7 @@ export function registerPlantMcpTools(server:McpServer,principal:McpPrincipal){
  },async({scopeId,idempotencyKey,baseRevision,baseFingerprint,title,rationale,operations})=>{
   try{
    assignedFacility(principal,scopeId,'plant.capture');
-   const currentFingerprint=plantModelFingerprint(baseModel);
-   if(baseRevision!==baseModel.revision||baseFingerprint!==currentFingerprint)throw new OpsError('conflict','The plant basis changed. Read get_mineralx_plant_model again before proposing geometry.');
-   const applied=applyPlantDesignOperations(baseModel,operations);
+   const currentFingerprint=validateBasis(baseRevision,baseFingerprint),applied=applyPlantDesignOperations(baseModel,operations);
    if(!applied.validation.ok)return result({proposalCreated:false,baseRevision,baseFingerprint,currentFingerprint,validation:applied.validation,message:'The geometry proposal was not stored because deterministic spatial validation found blocking issues. Revise the operations and retry.'});
    const identity=`${principal.authInfo.clientId}:${principal.user.id}:${scopeId}:${idempotencyKey}`;
    const changesetId=intelligenceStableUuid('mineralx-plant-design',identity),requestId=intelligenceStableUuid('mineralx-plant-design-request',identity);
