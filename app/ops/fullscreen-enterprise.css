@@ -1,0 +1,274 @@
+/* Full-screen enterprise workspace layer.
+   Keep the restrained MineralX/GIC language, but let every Operations route use the viewport
+   instead of presenting the application as a narrow stack of cards. */
+.ops-shell{
+  --ops-gutter:clamp(24px,3.2vw,64px);
+  --ops-workspace-height:calc(100dvh - 126px);
+  min-height:100dvh;
+  background:#fff;
+}
+
+/* The application chrome spans the same canvas as the workspace beneath it. */
+.ops-topbar{
+  height:68px!important;
+  padding-inline:var(--ops-gutter)!important;
+  gap:24px!important;
+}
+.ops-sidebar{
+  min-height:58px!important;
+  padding-inline:var(--ops-gutter)!important;
+}
+.ops-content{
+  width:100%!important;
+  max-width:none!important;
+  min-height:var(--ops-workspace-height);
+  margin:0!important;
+  padding:28px var(--ops-gutter) 72px!important;
+}
+
+/* Route tabs are navigation, not a card header. Give them a full-width, quiet working edge. */
+.ops-tabs{
+  width:100%;
+  gap:28px!important;
+  margin:0 0 30px!important;
+  overflow-x:auto;
+  border-bottom:1px solid var(--ops-line)!important;
+}
+.ops-shell .ops-tabs>a,
+.ops-shell .ops-tabs>button{
+  min-height:44px!important;
+  padding:11px 0 10px!important;
+  border:0!important;
+  border-bottom:2px solid transparent!important;
+  border-radius:0!important;
+  background:transparent!important;
+  color:#707b75!important;
+  font-size:12px!important;
+  font-weight:500!important;
+  text-decoration:none!important;
+  white-space:nowrap;
+}
+.ops-shell .ops-tabs>a[aria-current=page],
+.ops-shell .ops-tabs>button[aria-current=page]{
+  color:var(--ops-ink)!important;
+  border-bottom-color:var(--ops-green)!important;
+  font-weight:650!important;
+}
+.ops-shell .ops-tabs>a:hover,
+.ops-shell .ops-tabs>button:hover{
+  color:var(--ops-ink)!important;
+  background:transparent!important;
+}
+
+/* Use whitespace and rules for primary page structure. Reserve contained cards for choices,
+   grouped summaries and true bounded interactions. */
+.ops-content>.ops-card,
+.ops-content>section.ops-card,
+.ops-content>details.ops-card{
+  width:100%;
+  margin:0!important;
+  padding:28px 0!important;
+  border:0!important;
+  border-bottom:1px solid var(--ops-line)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.ops-content>.ops-card:first-of-type,
+.ops-content>section.ops-card:first-of-type,
+.ops-content>details.ops-card:first-of-type{padding-top:6px!important}
+.ops-section-heading{
+  min-height:44px;
+  margin:2px 0 24px!important;
+  gap:24px!important;
+}
+.ops-section-heading h2{font-size:20px!important;letter-spacing:-.25px}
+
+/* Dense information should occupy the page width rather than being squeezed into small panels. */
+.ops-table-tools{
+  width:100%;
+  margin:0 0 22px!important;
+  gap:18px!important;
+  justify-content:flex-start!important;
+}
+.ops-table-tools>label{min-width:180px}
+.ops-table-tools>label:first-child{max-width:560px!important;flex:1 1 360px!important}
+.ops-table-scroll{width:100%;max-width:none!important;overflow:auto}
+.ops-shell table{width:100%;font-size:13px!important}
+.ops-shell th{font-size:10px!important;padding:13px 14px!important}
+.ops-shell td{padding:17px 14px!important;line-height:1.55!important}
+.ops-task-line{padding:17px 0!important}
+
+/* Let forms use available width while keeping field lengths readable. */
+.ops-form-grid{
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr))!important;
+  gap:20px 28px!important;
+  margin:24px 0!important;
+}
+.ops-card.ops-editor{
+  margin:0 0 30px!important;
+  padding:26px 28px!important;
+  border:1px solid var(--ops-line)!important;
+  border-radius:6px!important;
+  background:#fff!important;
+}
+
+/* Summary bands remain contained because they answer state-at-a-glance questions. */
+.ops-kpis{
+  width:100%;
+  margin:0 0 30px!important;
+  border-radius:6px!important;
+}
+.ops-kpis>a,.ops-kpis>div{min-height:118px!important;padding:20px 22px!important}
+
+/* Choice cards keep their containment; they now fill the full workspace instead of a narrow column. */
+.ops-home-grid,.ops-program-cards,.ops-launch-grid{
+  width:100%;
+  grid-template-columns:repeat(auto-fit,minmax(340px,1fr))!important;
+  gap:18px!important;
+  margin:0 0 32px!important;
+}
+.ops-home-grid>.ops-card,
+.ops-program-cards>.ops-card,
+.ops-launch-grid>.ops-card,
+.ops-workspace-choices .ops-card{
+  margin:0!important;
+  padding:24px 26px!important;
+  border:1px solid var(--ops-line)!important;
+  border-radius:6px!important;
+  background:#fff!important;
+}
+
+/* Engineering becomes a page-scale register + inspector, not two small cards. */
+.ops-content .ops-engineering{width:100%;min-height:var(--ops-workspace-height)}
+.ops-content .ops-engineering .engineering-summary{margin:0 0 28px!important}
+.ops-content .ops-engineering .engineering-tools{margin:0 0 20px!important;gap:12px!important}
+.ops-content .ops-engineering .engineering-workspace{
+  grid-template-columns:minmax(0,3fr) minmax(340px,1fr)!important;
+  gap:0!important;
+  min-height:calc(100dvh - 360px);
+  align-items:stretch!important;
+}
+.ops-content .ops-engineering .engineering-register-pane,
+.ops-content .ops-engineering .engineering-inspector{
+  border-radius:0!important;
+  min-height:100%;
+}
+.ops-content .ops-engineering .engineering-register-pane{border-right:0!important}
+.ops-content .ops-engineering .engineering-inspector{padding:24px!important}
+.ops-content .ops-engineering .engineering-p5{margin-top:30px!important}
+
+/* Spatial and 3D workspaces should feel like work surfaces, not widgets embedded in a dashboard. */
+.ops-map-layout{
+  width:100%;
+  min-height:calc(100dvh - 245px)!important;
+  margin:0!important;
+  grid-template-columns:minmax(240px,300px) minmax(0,1fr)!important;
+  border-radius:6px!important;
+}
+.ops-map-menu{max-height:calc(100dvh - 245px)!important}
+.ops-map-canvas{min-height:calc(100dvh - 245px)!important}
+.ops-map{height:clamp(560px,70dvh,940px)!important}
+.ops-embedded-plant{width:100%;min-height:60dvh}
+
+/* Meetings is a first-class workspace as well: full-width list + detail, joined summary band,
+   and square-edged detail surfaces rather than a small floating card. */
+.ops-shell.mt-shell .mt-main{
+  width:100%!important;
+  max-width:none!important;
+  min-height:var(--ops-workspace-height)!important;
+  margin:0!important;
+  padding:28px var(--ops-gutter) 72px!important;
+}
+.ops-shell.mt-shell .mt-metrics{
+  gap:0!important;
+  border:1px solid var(--mt-line)!important;
+  border-radius:6px!important;
+  overflow:hidden;
+  margin-bottom:30px!important;
+}
+.ops-shell.mt-shell .mt-metrics>div{
+  min-height:112px;
+  border:0!important;
+  border-right:1px solid var(--mt-line)!important;
+  border-radius:0!important;
+  padding:20px 22px!important;
+}
+.ops-shell.mt-shell .mt-metrics>div:last-child{border-right:0!important}
+.ops-shell.mt-shell .mt-workspace{
+  grid-template-columns:minmax(260px,340px) minmax(0,1fr)!important;
+  gap:0!important;
+  min-height:calc(100dvh - 300px);
+  align-items:stretch!important;
+}
+.ops-shell.mt-shell .mt-list{
+  position:relative!important;
+  top:auto!important;
+  align-self:start;
+  padding-right:20px;
+}
+.ops-shell.mt-shell .mt-meeting-row{
+  border-radius:0!important;
+  border-width:0 0 1px!important;
+  padding:17px 14px!important;
+}
+.ops-shell.mt-shell .mt-meeting-row:first-of-type{border-top:1px solid var(--mt-line)!important}
+.ops-shell.mt-shell .mt-detail{
+  min-height:100%;
+  border-radius:0!important;
+}
+.ops-shell.mt-shell .mt-detail-head{padding:28px 32px!important}
+.ops-shell.mt-shell .mt-tabs{padding-inline:32px!important}
+.ops-shell.mt-shell .mt-action-toolbar,
+.ops-shell.mt-shell .mt-action,
+.ops-shell.mt-shell .mt-notes{padding-inline:32px!important}
+
+/* Keep utility and evidence disclosures quiet and full-width. */
+.ops-content details.ops-card>summary{padding:2px 0 10px}
+.ops-content .ops-search-results{width:100%;max-width:none}
+.ops-facts{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))!important;gap:22px 34px!important}
+
+@media(max-width:1100px){
+  .ops-shell{--ops-gutter:24px}
+  .ops-content .ops-engineering .engineering-workspace{grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr)!important}
+  .ops-shell.mt-shell .mt-workspace{grid-template-columns:240px minmax(0,1fr)!important}
+}
+
+@media(max-width:980px){
+  .ops-shell{--ops-gutter:18px;--ops-workspace-height:calc(100dvh - 64px)}
+  .ops-topbar{padding-inline:18px!important}
+  .ops-sidebar{padding:18px!important}
+  .ops-content{padding:24px 18px 56px!important}
+  .ops-tabs{margin-bottom:24px!important;gap:22px!important}
+  .ops-map-layout{grid-template-columns:1fr!important;min-height:auto!important}
+  .ops-map-menu{max-height:260px!important}
+  .ops-map-canvas{min-height:58dvh!important}
+}
+
+@media(max-width:760px){
+  .ops-shell.mt-shell .mt-main{padding:22px 16px 52px!important}
+  .ops-shell.mt-shell .mt-workspace{grid-template-columns:1fr!important;min-height:0}
+  .ops-shell.mt-shell .mt-list{padding-right:0;max-height:320px;overflow:auto}
+  .ops-shell.mt-shell .mt-metrics{grid-template-columns:repeat(2,1fr)!important}
+  .ops-shell.mt-shell .mt-metrics>div:nth-child(2){border-right:0!important}
+  .ops-shell.mt-shell .mt-metrics>div:nth-child(-n+2){border-bottom:1px solid var(--mt-line)!important}
+  .ops-shell.mt-shell .mt-detail-head,
+  .ops-shell.mt-shell .mt-action-toolbar,
+  .ops-shell.mt-shell .mt-action,
+  .ops-shell.mt-shell .mt-notes{padding-inline:20px!important}
+  .ops-shell.mt-shell .mt-tabs{padding-inline:20px!important}
+}
+
+@media(max-width:700px){
+  .ops-content{padding:20px 16px 48px!important}
+  .ops-shell{--ops-gutter:16px}
+  .ops-shell .ops-tabs>a,.ops-shell .ops-tabs>button{min-height:42px!important;font-size:12px!important}
+  .ops-home-grid,.ops-program-cards,.ops-launch-grid{grid-template-columns:1fr!important;gap:12px!important}
+  .ops-content .ops-engineering .engineering-workspace{display:block!important;min-height:0}
+  .ops-content .ops-engineering .engineering-register-pane{border-right:1px solid var(--ops-line)!important}
+  .ops-content .ops-engineering .engineering-inspector{padding:16px!important}
+  .ops-table-tools{align-items:stretch!important;flex-direction:column!important}
+  .ops-table-tools>label{width:100%;max-width:none!important}
+  .ops-card.ops-editor{padding:20px!important}
+  .ops-map{height:58dvh!important;min-height:420px}
+}
