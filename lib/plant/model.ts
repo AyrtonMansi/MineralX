@@ -3,7 +3,7 @@ const point = z.tuple([z.number().finite(), z.number().finite()]);
 const points = z.array(point).min(2).max(2000);
 const label = z.string().max(200);
 export const equipmentArchetypeSchema = z.enum([
-  'stockpile','hopper','hammer_crusher','vibrating_screen','jig','knudsen_bowl','cyclone','tank','pump','conveyor_drive','generator','solar_array','container','platform','generic',
+  'stockpile','hopper','hammer_crusher','vertical_impact_crusher','vibrating_screen','jig','knudsen_bowl','sluice','shaker_table','spiral_concentrator','cyclone','tank','pump','conveyor_drive','generator','solar_array','container','platform','generic',
 ]);
 export const equipmentModelStatusSchema = z.enum(['inferred','specified','vendor_reference','as_built']);
 const equipmentEngineeringSchema = z.object({
