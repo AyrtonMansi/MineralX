@@ -1,26 +1,26 @@
 export default function OperationsEntry() {
   return <main className="ops-shell ops-entry ops-workspace-chooser" id="main-content">
-    <p className="ops-eyebrow">MineralX / workspaces</p>
-    <h1>Choose the workspace that holds this work.</h1>
-    <p>Each workspace has its own access, storage and recovery rules. Select one deliberately so records do not cross an unintended boundary.</p>
+    <p className="ops-eyebrow">MineralX / Operations</p>
+    <h1>Choose a workspace.</h1>
+    <p>Use the shared staff workspace for company records, Meetings for private JV material, or the device workspace for local field and planning work.</p>
     <div className="ops-workspace-choices">
       <section className="ops-card">
-        <p className="ops-eyebrow">SHARED OPERATIONS</p>
-        <h2>Company workspace</h2>
-        <p>Use this when your staff account has been commissioned for shared programs, field records, processing and controlled reports.</p>
-        <a className="ops-primary" href="/ops/login">Staff sign in</a>
+        <p className="ops-eyebrow">STAFF</p>
+        <h2>Operations</h2>
+        <p>Programs, field records, processing, gold, plant and controlled reporting.</p>
+        <a className="ops-primary" href="/ops/login">Sign in</a>
       </section>
       <section className="ops-card">
-        <p className="ops-eyebrow">PRIVATE JV ARCHIVE</p>
-        <h2>Meetings</h2>
-        <p>Verified email access to JV notes, source revisions and reviewed action candidates.</p>
-        <a className="ops-primary" href="/ops/meetings">Open private meetings</a>
+        <p className="ops-eyebrow">PRIVATE</p>
+        <h2>JV meetings</h2>
+        <p>Verified access to private meeting notes, revisions and actions.</p>
+        <a className="ops-primary" href="/ops/meetings">Open meetings</a>
       </section>
       <section className="ops-card">
-        <p className="ops-eyebrow">LOCAL DEVICE TOOLS</p>
-        <h2>Pits, exploration & planning</h2>
-        <p>Browser-local planning tools for device use. Export a recovery copy before changing devices.</p>
-        <a className="ops-primary" href="/ops?mode=development">Open device workspace</a>
+        <p className="ops-eyebrow">THIS DEVICE</p>
+        <h2>Field workspace</h2>
+        <p>Local geology, pit, exploration and planning tools stored on this browser.</p>
+        <a className="ops-primary" href="/ops?mode=development">Open workspace</a>
       </section>
     </div>
   </main>;
