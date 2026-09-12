@@ -22,7 +22,7 @@ export default function PlantWorkspace(){
  const tabs=[['overview','Overview'],['engineering','Engineering'],['runs','Processing'],['assets','Equipment'],['maintenance','Maintenance'],['energy','Energy'],['spares','Critical spares']];
  if(!scope||scope.kind!=='facility')return <><Heading title="Processing"/><Empty title={development?'Opening Processing':'Choose a processing facility'}>{development?'Processing opens the compatible records in your Development workspace automatically.':'A geological project is not a processing boundary. Select the facility in the header.'}</Empty></>;
  if(!scope.permissions.includes('plant.read'))return <Empty title="Processing access is not assigned">Use the workspaces available to your role.</Empty>;
- const navigation=<nav className="ops-tabs" aria-label="Processing workspace">{tabs.map(([key,label])=><Link key={key} href={`/ops/plant?scope=${scope.id}&view=${key}`} aria-current={view===key?'page':undefined}>{label}</Link>)}</nav>;
+ const navigation=<nav className="ops-tabs" aria-label="Processing workspace">{tabs.map(([key,label])=><Link key={key} href={`/ops/plant?scope=${scope.id}&view=${key}`} aria-label={key==='runs'?'Processing':undefined} aria-current={view===key?'page':undefined}>{label}</Link>)}</nav>;
  if(registers.includes(view))return <>{navigation}<Plant embedded/></>;
  const write=scope.permissions.includes('plant.capture');const edit=(kind:string,record?:any,initial?:any)=>{if(!mayNavigate())return;setSelected(null);setEditor({kind,record,initial});};
  // The sidebar nav item and the tab bar both already say "Processing" — a page
