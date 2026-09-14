@@ -55,8 +55,8 @@ export default function PlantCadSurface({model}:{model:PlantModel}){
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(model.width+18,model.height+18),new THREE.MeshStandardMaterial({color:0xf8f9f7,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.02;ground.receiveShadow=true;scene.add(ground);
   const boundaryGeometry=new THREE.BufferGeometry().setFromPoints([[0,0],[model.width,0],[model.width,model.height],[0,model.height],[0,0]].map(p=>sitePoint(model,p,.035)));scene.add(new THREE.Line(boundaryGeometry,new THREE.LineBasicMaterial({color:0x89978f})));
   const grid=new THREE.GridHelper(Math.max(model.width,model.height)*1.15,40,0xb9c2bd,0xdfe4e1);grid.position.y=.01;gridHelper.current=grid;scene.add(grid);
-  const equipmentRoot=new THREE.Group();equipmentRoot.name='Equipment';scene.add(equipmentRoot);equipmentObjects.current.clear();
-  for(const e of model.equipment){const object=buildEquipmentAssembly(model,e);equipmentRoot.add(object);equipmentObjects.current.set(e.id,object);}
+  const equipmentRoot=new THREE.Group();equipmentRoot.name='Equipment';scene.add(equipmentRoot);const equipmentRegistry=equipmentObjects.current;equipmentRegistry.clear();
+  for(const e of model.equipment){const object=buildEquipmentAssembly(model,e);equipmentRoot.add(object);equipmentRegistry.set(e.id,object);}
   const routes=new THREE.Group();routes.name='Process routes';routeGroup.current=routes;scene.add(routes);
   const byId=new Map(model.equipment.map(e=>[e.id,e]));
   for(const stream of model.streams){
@@ -71,7 +71,7 @@ export default function PlantCadSurface({model}:{model:PlantModel}){
   renderer.domElement.addEventListener('pointerdown',onDown);renderer.domElement.addEventListener('pointerup',onUp);
   const resize=()=>{const width=Math.max(1,container.clientWidth),height=Math.max(1,container.clientHeight);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();};const observer=new ResizeObserver(resize);observer.observe(container);resize();resetView('perspective');
   let frame=0;const animate=()=>{frame=requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);};animate();
-  return()=>{cancelAnimationFrame(frame);observer.disconnect();renderer.domElement.removeEventListener('pointerdown',onDown);renderer.domElement.removeEventListener('pointerup',onUp);controls.dispose();disposeObject(scene);renderer.dispose();renderer.domElement.remove();cameraRef.current=null;controlsRef.current=null;routeGroup.current=null;gridHelper.current=null;equipmentObjects.current.clear();};
+  return()=>{cancelAnimationFrame(frame);observer.disconnect();renderer.domElement.removeEventListener('pointerdown',onDown);renderer.domElement.removeEventListener('pointerup',onUp);controls.dispose();disposeObject(scene);renderer.dispose();renderer.domElement.remove();cameraRef.current=null;controlsRef.current=null;routeGroup.current=null;gridHelper.current=null;equipmentRegistry.clear();};
  },[model,resetView]);
 
  useEffect(()=>{if(routeGroup.current)routeGroup.current.visible=routesVisible;},[routesVisible]);

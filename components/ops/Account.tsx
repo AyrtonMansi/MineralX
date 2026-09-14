@@ -1,4 +1,6 @@
 'use client';
+/* QR setup is rendered as a data URI; next/image cannot optimize this local secret. */
+/* eslint-disable @next/next/no-img-element */
 import {useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {api,authClient,downloadBlob} from '@/lib/ops/client';

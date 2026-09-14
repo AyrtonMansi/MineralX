@@ -29,6 +29,8 @@ jobs:
           cache: npm
       - name: Install pinned dependencies
         run: npm ci --no-audit --no-fund
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Geology regression tests
         run: npm run test:geology | tee /tmp/geology-unit.log
       - name: Existing operational regression tests

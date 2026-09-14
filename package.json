@@ -14,7 +14,7 @@
     "prebuild": "node clothing/scripts/verify.mjs && node clothing/scripts/mount.mjs && node scripts/mount-ops-development.mjs && node scripts/mount-maplibre-assets.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --max-warnings 0",
     "test:gic": "node --import tsx --test tests/gic/*.test.ts",
     "test:geology": "node --test test/*.test.js",
     "test:intelligence": "node --import tsx --test tests/intelligence/*.test.ts",

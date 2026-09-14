@@ -2,17 +2,29 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  outputFileTracingRoot: process.cwd(),
   async headers() {
+    const baselineHeaders = [
+      { key: "Strict-Transport-Security", value: "max-age=31536000" },
+      { key: "Permissions-Policy", value: "camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=()" },
+      { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
+      { key: "Cross-Origin-Resource-Policy", value: "same-site" },
+      { key: "X-DNS-Prefetch-Control", value: "off" },
+      { key: "X-Download-Options", value: "noopen" },
+    ];
     const privateHeaders = [
+      ...baselineHeaders,
       { key: "Cache-Control", value: "private, no-store, max-age=0" },
       { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
       { key: "Referrer-Policy", value: "no-referrer" },
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
-      { key: "Strict-Transport-Security", value: "max-age=31536000" },
       { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
     ];
-    return ["/gic/:path*", "/gic-review.html", "/ops/:path*", "/api/ops/:path*"].map(source => ({ source, headers: privateHeaders }));
+    return [
+      { source: "/(.*)", headers: baselineHeaders },
+      ...["/gic/:path*", "/gic-review.html", "/ops/:path*", "/api/ops/:path*"].map(source => ({ source, headers: privateHeaders })),
+    ];
   },
   async rewrites() {
     return [{ source: "/clothing", destination: "/clothing/index.html" }];

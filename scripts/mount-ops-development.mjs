@@ -4,4 +4,4 @@ const migrations=['202609060001_gic.sql','202609060002_run_timing.sql','20260907
 await mkdir('public/ops-development-assets',{recursive:true});
 for(const file of ['pglite.wasm','initdb.wasm','pglite.data'])await copyFile('node_modules/@electric-sql/pglite/dist/'+file,'public/ops-development-assets/'+file);
 const sql=await Promise.all(migrations.map(async name=>({name,sql:await readFile('supabase/migrations/'+name,'utf8')})));
-await writeFile('lib/ops/development-schema.generated.ts','// Generated from the reviewed migrations. Browser-local sandbox only.\nexport default '+JSON.stringify(sql)+';\n');
+await writeFile('lib/ops/development-schema.generated.ts','// Generated from the reviewed migrations. Browser-local sandbox only.\nconst DEVELOPMENT_MIGRATIONS='+JSON.stringify(sql)+';\nexport default DEVELOPMENT_MIGRATIONS;\n');

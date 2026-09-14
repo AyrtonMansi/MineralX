@@ -11,6 +11,7 @@ export function usePlanGestures(svg: RefObject<SVGSVGElement|null>, view: View, 
   useEffect(()=>{
     const el=svg.current;
     if (!el || !active) return;
+    const pointerState=pointers.current;
     const wheel=(event:WheelEvent)=>{
       event.preventDefault();
       const pixelDelta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?500:1);
@@ -18,7 +19,7 @@ export function usePlanGestures(svg: RefObject<SVGSVGElement|null>, view: View, 
       setView(v=>gestureView(v,el.getBoundingClientRect(),point,point,Math.exp(Math.max(-.35,Math.min(.35,pixelDelta*.0015))),maxWidth));
     };
     el.addEventListener('wheel',wheel,{passive:false});
-    return ()=>{el.removeEventListener('wheel',wheel);pointers.current.clear();};
+    return ()=>{el.removeEventListener('wheel',wheel);pointerState.clear();};
   },[svg,active,maxWidth,setView]);
   function onPointerDown(e: PointerEvent<SVGSVGElement>) {
     if (e.button!==0 && e.pointerType==='mouse') return;

@@ -29,7 +29,7 @@ function operatingBasis(records:any[]){
 
 export default function EngineeringWorkspace({data,write,edit}:{data:any;write:boolean;edit:(kind:string,record?:any,initial?:any)=>void}){
  const {scope}=useOperations(),query=useSearchParams(),[search,setSearch]=useState(''),[state,setState]=useState('all'),[program,setProgram]=useState('all'),[sort,setSort]=useState('updated'),[implementationOnly,setImplementationOnly]=useState(false),[evidenceOnly,setEvidenceOnly]=useState(false);
- const revisions=data?.engineering||[],item=query.get('item'),selected=revisions.find((r:any)=>r.id===item)||null,surface=(query.get('surface')==='revisions'||item)?'revisions':'cad';
+ const revisions=useMemo(()=>data?.engineering||[],[data?.engineering]),item=query.get('item'),selected=revisions.find((r:any)=>r.id===item)||null,surface=(query.get('surface')==='revisions'||item)?'revisions':'cad';
  const scopeId=scope?.id||'',changesetId=query.get('changeset'),draft=query.get('draft');
  const surfaceLink=(next:'cad'|'revisions')=>`/ops/plant?scope=${scopeId}&view=engineering&surface=${next}`;
  const linkFor=(id?:string)=>`${surfaceLink('revisions')}${id?`&item=${id}`:''}`;

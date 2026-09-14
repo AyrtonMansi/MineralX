@@ -45,4 +45,4 @@ P5 X/Y coordinates and planning footprints remain the current controlled source 
 
 ## Database commissioning
 
-`supabase/migrations/20260912050000_engineering_design_changesets.sql` adds the durable proposal store and three fixed MCP gateway operations. It versions the existing closed MCP gateway rather than broadening it to arbitrary RPC/SQL execution. The rest of Operations remains on schema v10 because the design store is an additive capability; instant ChatGPT previews work without the durable-store migration, while durable proposals require that migration to be applied to the production Supabase project.
+`supabase/migrations/20260912050000_engineering_design_changesets.sql` adds the durable proposal store and three fixed MCP gateway operations. It versions the existing closed MCP gateway rather than broadening it to arbitrary RPC/SQL execution. The live project is currently at Operations schema v9; durable Engineering proposals require the intelligence v10 migration first because the gateway is shared, followed by this migration. Reporting v11 then adds the report-run operations on the same gateway.

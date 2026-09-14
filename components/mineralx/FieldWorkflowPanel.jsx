@@ -40,7 +40,7 @@ export default function FieldWorkflowPanel({persistence,onNavigate,onTool,onFocu
   },[]);
   useEffect(()=>{fetch('/api/mineralx-release',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(setRelease).catch(()=>{});},[]);
   useEffect(()=>{setCapture(null);setSelected([]);setFilter('');setCsv('');setCertificate('');setRevision('1');setLabName('');setReviewReason('');setBackupPreview(null);},[project?.id]);
-  const programFingerprint=useMemo(()=>(project?.programs||[]).map(program=>[program.recordId,program.name,program.method,program.type,program.state,program.status].join(':')).join('|'),[project?.programs]);
+  const projectPrograms=useMemo(()=>project?.programs||[],[project?.programs]);
   useEffect(()=>{
     if(!hydrated||locked||!project?.id)return;
     let active=true;
@@ -53,13 +53,13 @@ export default function FieldWorkflowPanel({persistence,onNavigate,onTool,onFocu
       });
       setBridgeIssue('');
     };
-    const publish=async()=>{try{apply(await publishGlobePrograms({id:project.id,programs:project.programs||[]},()=>active));}catch(error){if(active)setBridgeIssue('The device-only Program link is unavailable. Globe records remain saved locally; reopen Operations development to retry.');}};
+    const publish=async()=>{try{apply(await publishGlobePrograms({id:project.id,programs:projectPrograms},()=>active));}catch(error){if(active)setBridgeIssue('The device-only Program link is unavailable. Globe records remain saved locally; reopen Operations development to retry.');}};
     const refresh=async()=>{try{apply((await readDeviceProgramRegistry()).registry);}catch(error){if(active)setBridgeIssue('The device-only Program link is unavailable. Globe records remain saved locally; reopen Operations development to retry.');}};
     void publish();
     const unsubscribe=subscribeDeviceProgramRegistry(()=>{void refresh();});
     const onFocus=()=>{void publish();};window.addEventListener('focus',onFocus);
     return()=>{active=false;unsubscribe();window.removeEventListener('focus',onFocus);};
-  },[hydrated,locked,project?.id,programFingerprint,setStore]);
+  },[hydrated,locked,project?.id,projectPrograms,setStore]);
   const choose=(name)=>{if(onNavigate()===false)return;setStage(name);setCapture(null);setFailure('');setMessage('');};
   const commit=(operation,success)=>{
     try{

@@ -56,7 +56,7 @@ When external model processing is disabled, MineralX stores a metadata-only clas
 
 ### 1. Database and storage
 
-Apply `supabase/migrations/20260910022510_operations_intelligence_intakes.sql`. It advances Operations to schema 10, raises the evidence object limit to 50 MiB, adds scan attestation, and installs the intake/proposal/approval/execution state machine.
+Apply `supabase/migrations/20260910022510_operations_intelligence_intakes.sql` after the live Operations ledger reaches schema 9. It advances Operations to schema 10, raises the evidence object limit to 50 MiB, adds scan attestation, and installs the intake/proposal/approval/execution state machine. Apply the invitation, Engineering, reporting, and enterprise-hardening migrations afterward in the release order recorded in `docs/operations-implementation.md`.
 
 Keep these server-only values in the deployment secret store:
 
