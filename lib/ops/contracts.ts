@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-export const OPS_RELEASE = '2026.09.10.1';
-export const OPS_SCHEMA = 10; // v10 adds governed intelligence intakes and MCP-safe proposal lineage.
+export const OPS_RELEASE = '2026.09.14.1';
+export const OPS_SCHEMA = 11; // v11 adds revision-pinned governed report runs and MCP report access.
 export const WORKFLOW_SCHEMA = 7; // Workflow payload format remains v7 while Operations schema v9 adds selector-history correction.
 export const OPS_FILE_MAX_BYTES = 50 * 1024 * 1024;
 export const OPS_INTAKE_MAX_BYTES = 100 * 1024 * 1024;
@@ -12,9 +12,9 @@ export const permissionProfiles = {
   operator: ['plant.read', 'plant.capture', 'gold.read', 'gold.capture', 'files.plant', 'files.gold', 'work.read', 'work.write'],
   supervisor: ['plant.read', 'plant.capture', 'plant.review', 'gold.read', 'gold.capture', 'gold.review', 'balance.prepare', 'balance.read', 'files.plant', 'files.gold', 'work.read', 'work.write'],
   custodian: ['gold.read', 'gold.custody', 'gold.custody.read', 'files.custody', 'files.gold', 'work.read', 'work.write'],
-  accountant: ['commercial.read', 'commercial.write', 'plant.read', 'gold.read', 'balance.read', 'balance.prepare', 'balance.close', 'report.read', 'report.export', 'files.plant', 'files.gold', 'work.read', 'work.write'],
-  manager: ['commercial.read', 'plant.read', 'gold.read', 'geo.read', 'balance.read', 'report.read', 'report.export', 'work.read'],
-  auditor: ['commercial.read', 'plant.read', 'gold.read', 'geo.read', 'balance.read', 'report.read', 'report.export', 'audit.read', 'work.read'],
+  accountant: ['commercial.read', 'commercial.write', 'plant.read', 'gold.read', 'balance.read', 'balance.prepare', 'balance.close', 'report.read', 'report.generate', 'report.export', 'files.plant', 'files.gold', 'work.read', 'work.write'],
+  manager: ['commercial.read', 'plant.read', 'gold.read', 'geo.read', 'balance.read', 'report.read', 'report.generate', 'report.export', 'work.read'],
+  auditor: ['commercial.read', 'plant.read', 'gold.read', 'geo.read', 'balance.read', 'report.read', 'report.generate', 'report.export', 'audit.read', 'work.read'],
 } as const;
 export type Profile = keyof typeof permissionProfiles;
 export type ScopeKind = 'project' | 'facility' | 'reporting';

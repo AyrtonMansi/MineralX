@@ -13,6 +13,8 @@ import {
   readIntelligence,
 } from '@/lib/intelligence/service';
 import {stageMcpSource} from './file-transfer';
+import {generateReportRun, listReportRuns, readReportRun} from '@/lib/ops/report-service';
+import {normaliseReportPeriod, reportCatalogForScope, REPORT_IDS} from '@/lib/ops/reporting-core';
 import {
   canStageMcpSourceFamily,
   isGeologyRecordKind,
@@ -117,6 +119,7 @@ export function createMineralXMcpServer(principal: McpPrincipal) {
       'After creation, call analyze_mineralx_intake repeatedly while the intake remains received; each call advances one durable phase and processing stops at a reviewable proposal.',
       'Authoritative changes require the proposal to be explicitly approved and then separately applied by the user.',
       'Never infer an evidence security family: ask the user to choose geo, plant, gold or custody when it is not explicit, and split mixed-family sources into separate intakes.',
+      'For reports, call get_mineralx_report_catalog or check_mineralx_report_readiness first; generate_mineralx_report only produces a revision-pinned artefact when the catalogue marks the report ready or partial. Blocked reports must remain blocked until their source registers are commissioned.',
       'A tool error is a control decision; explain it and do not bypass it with a different tool.',
     ].join(' '),
   });
@@ -136,6 +139,83 @@ export function createMineralXMcpServer(principal: McpPrincipal) {
     schemaVersion: principal.context.schemaVersion,
     asOf: principal.context.asOf,
   }));
+
+  server.registerTool('get_mineralx_report_catalog', {
+    title: 'Get MineralX report catalogue',
+    description: 'List the governed fundamental mining and exploration reports, their metrics, source registers, cadence and permission-aware readiness for one MineralX workspace.',
+    inputSchema: z.object({scopeId: scopeIdSchema}).strict(),
+    outputSchema: dataEnvelopeSchema,
+    annotations: {readOnlyHint: true, destructiveHint: false, openWorldHint: false},
+    _meta: oauthToolMeta(),
+  }, async ({scopeId}) => {
+    try {
+      const scope = assignedScope(principal, scopeId, 'report.read');
+      return result({schema: 1, scope: {id: scope.id, code: scope.code, name: scope.name, kind: scope.kind}, definitions: reportCatalogForScope(scope)});
+    } catch (error) { return toolFailure(error); }
+  });
+
+  server.registerTool('check_mineralx_report_readiness', {
+    title: 'Check MineralX report readiness',
+    description: 'Check which fundamental reports can be generated for a selected period. Blocked reports retain their missing source-register reasons; partial reports are explicitly marked.',
+    inputSchema: z.object({scopeId: scopeIdSchema, from: z.string().datetime({offset: true}).optional(), to: z.string().datetime({offset: true}).optional()}).strict(),
+    outputSchema: dataEnvelopeSchema,
+    annotations: {readOnlyHint: true, destructiveHint: false, openWorldHint: false},
+    _meta: oauthToolMeta(),
+  }, async ({scopeId, from, to}) => {
+    try {
+      const scope = assignedScope(principal, scopeId, 'report.read');
+      if (Boolean(from) !== Boolean(to)) throw new OpsError('validation', 'Provide both the start and end of a reporting period.');
+      return result({schema: 1, scope: {id: scope.id, code: scope.code, name: scope.name, kind: scope.kind}, period: normaliseReportPeriod(from, to), definitions: reportCatalogForScope(scope)});
+    } catch (error) { return toolFailure(error); }
+  });
+
+  server.registerTool('generate_mineralx_report', {
+    title: 'Generate a MineralX report',
+    description: 'Generate and retain a revision-pinned JSON report artefact from the authorised MineralX source records. Readiness must be checked first; partial outputs retain their data gaps and are not statutory sign-offs.',
+    inputSchema: z.object({
+      scopeId: scopeIdSchema, reportId: z.enum(REPORT_IDS),
+      from: z.string().datetime({offset: true}).optional(), to: z.string().datetime({offset: true}).optional(),
+      idempotencyKey: z.string().trim().min(8).max(200),
+    }).strict(),
+    outputSchema: dataEnvelopeSchema,
+    annotations: {readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false},
+    _meta: oauthToolMeta(),
+  }, async ({scopeId, reportId, from, to, idempotencyKey}) => {
+    try {
+      const scope = assignedScope(principal, scopeId, 'report.generate');
+      if (Boolean(from) !== Boolean(to)) throw new OpsError('validation', 'Provide both the start and end of a reporting period.');
+      const requestId = intelligenceStableUuid('mineralx-mcp-report', `${principal.authInfo.clientId}:${principal.user.id}:${scopeId}:${idempotencyKey}`);
+      return result(await generateReportRun({db: principal.db, scope, reportId, from, to, requestId}));
+    } catch (error) { return toolFailure(error); }
+  });
+
+  server.registerTool('list_mineralx_reports', {
+    title: 'List MineralX report runs',
+    description: 'List retained MineralX report runs for a workspace without returning the full report document. Use get_mineralx_report for one complete artefact.',
+    inputSchema: z.object({scopeId: scopeIdSchema, cursor: z.string().uuid().optional(), limit: z.number().int().min(1).max(100).default(50)}).strict(),
+    outputSchema: dataEnvelopeSchema,
+    annotations: {readOnlyHint: true, destructiveHint: false, openWorldHint: false},
+    _meta: oauthToolMeta(),
+  }, async ({scopeId, cursor, limit}) => {
+    try {
+      assignedScope(principal, scopeId, 'report.read');
+      return result(await listReportRuns(principal.db, scopeId, cursor || null, limit));
+    } catch (error) { return toolFailure(error); }
+  });
+
+  server.registerTool('get_mineralx_report', {
+    title: 'Get a MineralX report run',
+    description: 'Retrieve one retained revision-pinned MineralX report artefact, including its metrics, source revision and explicit readiness gaps.',
+    inputSchema: z.object({scopeId: scopeIdSchema, runId: z.string().uuid()}).strict(),
+    outputSchema: dataEnvelopeSchema,
+    annotations: {readOnlyHint: true, destructiveHint: false, openWorldHint: false},
+    _meta: oauthToolMeta(),
+  }, async ({scopeId, runId}) => {
+    try {
+      assignedScope(principal, scopeId, 'report.read');
+      return result(await readReportRun(principal.db, scopeId, runId));
+    } catch (error) { return toolFailure(error); }
+  });
 
   server.registerTool('search_mineralx', {
     title: 'Search MineralX',

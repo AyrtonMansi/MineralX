@@ -6,6 +6,7 @@ import {DEVELOPMENT_ACTOR as ACTOR,DEVELOPMENT_ORG as ORG,DEVELOPMENT_FACILITY a
 import type {DeviceProgram} from './device-program-bridge';
 import {GEO_KINDS,GEO_ACTIONS,newSharedProject,applyGeoCommand,changeSet,projectMetadata,versionAt} from './geology.js';
 import {parseKml,parseGeoJson,readKmz,spatialStats} from '../../components/mineralx/spatial-import.js';
+import {buildReportDocument,normaliseReportPeriod,reportCatalogForScope,REPORTING_SCHEMA,getReportDefinition,type ReportId} from './reporting-core';
 
 type DB = Pick<PGlite,'query'|'exec'|'transaction'>;
 const json=(value:unknown)=>JSON.stringify(value);
@@ -224,12 +225,39 @@ export class DevelopmentEngine {
     const before=projectMetadata(baseline.project),after=projectMetadata(next),metadata=!baseline.metadataVersion||json(before)!==json(after)?{expectedVersion:baseline.metadataVersion,data:after}:null;
     return this.rpc('mx_ops_geo_commit',[command.scopeId,ACTOR,'aal1',command.requestId,command.action,command.id,json(command),json(changes),metadata?json(metadata):null],true);
   }
+  private async reportRpc(name:string,args:Record<string,unknown>) {
+    const ordered:Record<string,unknown[]>={
+      mx_ops_dashboard:[args.p_scope,args.p_from,args.p_to],
+      mx_ops_report_run_create:[args.p_scope,args.p_request,args.p_id,args.p_report_id,args.p_report_version,args.p_from,args.p_to,args.p_source_revision,args.p_status,json(args.p_document),json(args.p_metrics),json(args.p_gaps)],
+      mx_ops_report_run_list:[args.p_scope,args.p_after,args.p_limit],
+      mx_ops_report_run_read:[args.p_scope,args.p_id],
+    };
+    const values=ordered[name];if(!values)fault('The report operation is not available in the development workspace.');
+    return this.rpc(name,values);
+  }
+  private async reports(scopeId:string) {
+    const context=await this.context(),scope=context.scopes.find((candidate:any)=>candidate.id===scopeId);
+    if(!scope)fault('The report workspace is not available in this development workspace.');
+    const reportScope={...scope,permissions:[...scope.permissions,'report.generate']};
+    return {schema:REPORTING_SCHEMA,scope,period:normaliseReportPeriod(),catalog:reportCatalogForScope(reportScope),runs:{rows:[],next:null,developmentOnly:true}};
+  }
+  private async generateReport(scopeId:string,payload:any) {
+    const context=await this.context(),scope=context.scopes.find((candidate:any)=>candidate.id===scopeId);
+    if(!scope)fault('The report workspace is not available in this development workspace.');
+    const definition=getReportDefinition(String(payload.reportId));if(!definition)fault('That report is not in the governed MineralX catalogue.');const selected=definition!;
+    const period=normaliseReportPeriod(payload.from,payload.to),reportScope={...scope,permissions:[...scope.permissions,'report.generate']};
+    const document=await buildReportDocument({call:(name,args)=>this.reportRpc(name,args),scope:reportScope,reportId:selected.id as ReportId,...period});
+    return {id:crypto.randomUUID(),request_id:payload.requestId||crypto.randomUUID(),report_id:selected.id,report_version:document.reportVersion,period_start:period.from,period_end:period.to,source_revision:document.source.revision||0,status:document.status,document,generated_by:ACTOR,generated_at:new Date().toISOString(),developmentOnly:true};
+  }
   async request(path:string,data?:unknown,globeProjectId?:string|null):Promise<any>{
     try{
       const u=new URL(path,'https://development.invalid/'),q=u.searchParams,kind=u.pathname.slice(1);
       if(kind==='context'&&data===undefined)return this.context();
       if(['admin','claim','bootstrap'].includes(kind))throw new OpsError('forbidden',unsigned);
       if(data!==undefined){
+        if(kind==='reports'){
+          const payload=data as any;this.scope(String(payload.scopeId));return this.generateReport(String(payload.scopeId),payload);
+        }
         if(!['command','geology'].includes(kind))fault('This action is not supported in development mode. Nothing was sent to production.');
         const c=commandSchema.parse(data);this.scope(c.scopeId);if(c.expectedActorId&&c.expectedActorId!==ACTOR)throw new OpsError('forbidden','A named account record cannot be submitted from development mode.');
         const result=c.action.startsWith('geo.')?await this.geoCommand(c,kind==='geology'):await this.rpc('mx_ops_command',[c.scopeId,c.requestId,c.action,c.id,c.expectedVersion,json(c.payload)]);
@@ -241,6 +269,7 @@ export class DevelopmentEngine {
         case 'processing-programs':return this.rpc('mx_ops_processing_programs',[scope]);
         case 'workflow-history':return this.rpc('mx_ops_workflow_history',[scope,q.get('id')]);
         case 'dashboard':return this.rpc('mx_ops_dashboard',[scope,q.get('from')||new Date(Date.now()-30*864e5).toISOString(),q.get('to')||new Date().toISOString()]);
+        case 'reports':return this.reports(scope);
         case 'register':return this.rpc('mx_ops_list',[scope,q.get('kind'),q.get('after'),100,q.get('id')]);
         case 'detail':return this.rpc('mx_ops_detail',[scope,q.get('kind'),q.get('id')]);
         case 'directory':return this.rpc('mx_ops_directory',[scope]);

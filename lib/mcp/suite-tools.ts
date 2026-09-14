@@ -43,6 +43,7 @@ function capabilityFor(scope:Scope){
   scopeId:scope.id,name:scope.name,kind:scope.kind,permissions:scope.permissions,surfaces,
   interactions:{
    read:['search_mineralx','list_mineralx_records','get_mineralx_record'],
+   reports:scope.permissions.includes('report.read')?['get_mineralx_report_catalog','check_mineralx_report_readiness','list_mineralx_reports','get_mineralx_report',...(scope.permissions.includes('report.generate')?['generate_mineralx_report']:[])]:[],
    evidence:scope.permissions.includes('work.write')?['stage_mineralx_source','create_mineralx_intake','analyze_mineralx_intake','approve_mineralx_intake','apply_mineralx_intake']:[],
    engineering:scope.kind==='facility'&&scope.permissions.includes('plant.read')?['get_mineralx_plant_model','get_mineralx_equipment_modeling_gaps','preview_mineralx_plant_design','list_mineralx_plant_designs','get_mineralx_plant_design',...(scope.permissions.includes('plant.capture')?['propose_mineralx_plant_design']:[])]:[],
   },
