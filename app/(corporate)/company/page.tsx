@@ -1,5 +1,5 @@
 import { PageIntro, PartnerCTA, TextLink } from "@/components/Corporate";
-import { company, principles } from "@/lib/content";
+import { company, photos, principles } from "@/lib/content";
 import { pageMetadata } from "@/lib/metadata";
 export const metadata = pageMetadata(
   "Company",
@@ -13,6 +13,7 @@ export default function CompanyPage() {
         eyebrow="The company"
         title="An Australian foundation. A broader future."
         intro={company.description}
+        photo={photos.ranges}
       />
       <section className="py-20 md:py-28">
         <div className="container-site grid gap-10 lg:grid-cols-12">
@@ -61,7 +62,7 @@ export default function CompanyPage() {
           </div>
         </div>
       </section>
-      <PartnerCTA />
+      <PartnerCTA photo={photos.drillRig} />
     </main>
   );
 }

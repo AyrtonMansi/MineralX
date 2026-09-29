@@ -1,5 +1,5 @@
 import { PageIntro, TextLink } from "@/components/Corporate";
-import { company, partnerTypes } from "@/lib/content";
+import { company, partnerTypes, photos } from "@/lib/content";
 import { pageMetadata } from "@/lib/metadata";
 export const metadata = pageMetadata(
   "Partnerships",
@@ -13,6 +13,7 @@ export default function PartnershipsPage() {
         eyebrow="Investors & partnerships"
         title="Build on shared ambition."
         intro="We welcome conversations with investors, industry partners and organisations aligned with the responsible development of Australian resources and industrial capability."
+        photo={photos.operations}
       />
       <section className="py-20 md:py-28">
         <div className="container-site grid gap-10 md:grid-cols-3">

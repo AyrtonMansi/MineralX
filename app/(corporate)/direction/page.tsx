@@ -1,5 +1,5 @@
 import { PageIntro, PartnerCTA } from "@/components/Corporate";
-import { themes } from "@/lib/content";
+import { photos, themes } from "@/lib/content";
 import { pageMetadata } from "@/lib/metadata";
 export const metadata = pageMetadata(
   "Our direction",
@@ -13,6 +13,7 @@ export default function DirectionPage() {
         eyebrow="Our direction"
         title="From mineral potential to industrial possibility."
         intro="A connected direction across mining, research and industrial development. Each strengthens our understanding of how resources can create lasting value."
+        photo={photos.drillRig}
       />
       <div className="container-site">
         {themes.map((t) => (
@@ -44,7 +45,7 @@ export default function DirectionPage() {
           </p>
         </div>
       </section>
-      <PartnerCTA />
+      <PartnerCTA photo={photos.ranges} />
     </main>
   );
 }

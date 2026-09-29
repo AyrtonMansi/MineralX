@@ -3,6 +3,8 @@ export const company = {
   name: "MineralX Resources",
   shortName: "MineralX",
   legalName: "MineralX Resources Pty Ltd",
+  // As recorded on the company's executed agreements; shown in the footer and JSON-LD.
+  abn: "46 688 770 194",
   tagline: "Advancing resources. Building industry.",
   description:
     "MineralX is an Australian resources company advancing mining opportunities and building a broader platform for mineral processing, research and industrial development.",
@@ -33,6 +35,34 @@ export const hero = {
   cta: { label: "Explore our direction", href: "/direction" },
   backgroundImage: "/hero.webp" as string | null,
 };
+/**
+ * MineralX's own 2025 drone survey photography. Files are pre-graded, EXIF/GPS
+ * stripped WebP at 1000w and 2000w (`${src}-1000.webp`). Captions stay regional:
+ * no project names, tenure or claims, per this file's header.
+ */
+export type Photo = { src: string; alt: string; caption: string };
+export const photos = {
+  landscape: {
+    src: "/images/site/field-landscape",
+    alt: "Aerial view of open eucalypt woodland with red-earth workings and a drill rig",
+    caption: "Field operations · North Queensland",
+  },
+  ranges: {
+    src: "/images/site/ranges-landscape",
+    alt: "Aerial view of woodland country and a flooded historic working below distant ranges",
+    caption: "Country · North Queensland",
+  },
+  drillRig: {
+    src: "/images/site/drill-rig",
+    alt: "Drill rig on a cleared red-earth pad in eucalypt woodland",
+    caption: "Drilling · North Queensland",
+  },
+  operations: {
+    src: "/images/site/field-operations",
+    alt: "Excavator, drill rig and open workings seen from above",
+    caption: "Site works · North Queensland",
+  },
+} satisfies Record<string, Photo>;
 export const themes = [
   {
     index: "01",

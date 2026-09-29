@@ -7,6 +7,7 @@ export function StructuredData() {
     "@type": "Organization",
     name: company.name,
     legalName: company.legalName,
+    taxID: `ABN ${company.abn}`,
     url: company.url,
     email: company.email,
     description: company.description,
