@@ -162,7 +162,7 @@ export function Navbar({ hasUpdates = false }: { hasUpdates?: boolean }) {
                     className="mobile-menu-item flex py-5"
                     style={{ animationDelay: `${80 + i * 60}ms` }}
                   >
-                    <span className="text-[34px] font-light leading-none tracking-[-0.03em]">
+                    <span className="text-2xl">
                       {item.label}
                     </span>
                   </Link>

@@ -4,8 +4,6 @@ import { TerrainBackground } from "./TerrainBackground";
 import { ArrowRight } from "./icons";
 
 export function Hero() {
-  // "Advancing resources. Building industry." → statement + serif-italic answer.
-  const [lead, ...rest] = hero.heading.split(/(?<=\.)\s+/);
   return (
     <section
       id="top"
@@ -16,11 +14,8 @@ export function Hero() {
         <p className="t-label animate-fade-up text-white/70">
           Australian resources · A broader ambition
         </p>
-        <h1 className="t-display-xl mt-8 max-w-5xl animate-fade-up [animation-delay:90ms]">
-          {lead}
-          <span className="t-accent">{rest.join(" ")}</span>
-        </h1>
-        <div className="mt-12 grid items-end gap-10 md:mt-16 md:grid-cols-12">
+        <h1 className="sr-only">{company.name}</h1>
+        <div className="mt-8 grid items-end gap-10 md:grid-cols-12">
           <p className="t-lead max-w-xl animate-fade-up md:col-span-6 lg:col-span-5 [animation-delay:180ms]">
             {hero.supporting}
           </p>

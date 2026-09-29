@@ -28,7 +28,7 @@ export default function ContactPage() {
             <h2 className="sr-only">Email address</h2>
             <a
               href={enquiryHref()}
-              className="link-draw mt-10 inline-block break-all text-[clamp(1.5rem,1rem+2vw,2.5rem)] font-light tracking-[-0.02em] text-white"
+              className="link-draw mt-10 inline-block break-all text-xl font-medium sm:text-2xl text-white"
             >
               {company.email}
             </a>

@@ -90,7 +90,7 @@ export default function DirectionPage() {
                   aria-hidden="true"
                   className="absolute left-0 top-1 h-[11px] w-[11px] rounded-full border border-ore bg-ink-900 md:top-0"
                 />
-                <h3 className="t-title text-[22px]">{s.title}</h3>
+                <h3 className="t-title">{s.title}</h3>
                 <p className="body-copy mt-3 max-w-xs">{s.body}</p>
               </li>
             ))}

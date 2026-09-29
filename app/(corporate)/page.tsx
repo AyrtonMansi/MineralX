@@ -90,7 +90,7 @@ export default function Home() {
                 style={revealDelay(i * 110)}
                 className={`group flex flex-col border-b border-white/10 py-10 md:border-b-0 md:px-10 md:first:pl-0 md:last:pr-0 ${i > 0 ? "md:border-l md:border-white/15" : ""}`}
               >
-                <h3 className="t-title text-[22px] md:text-[24px]">
+                <h3 className="t-title">
                   {t.title}
                 </h3>
                 <p className="mt-5 max-w-sm flex-1 text-[15px] leading-[1.7] text-white/70">
