@@ -16,6 +16,8 @@ export const company = {
     label: "Postal address",
     lines: ["PO Box 6088", "Cairns City, Queensland, 4870"],
   },
+  // City of the registered postal address — not a project or site location.
+  base: { place: "Cairns, Queensland", coordinates: "16.92° S  145.77° E" },
   social: [] as Array<{
     label: string;
     href: string;
@@ -141,3 +143,28 @@ export const footer = {
     },
   ],
 };
+/**
+ * The staged approach, stated in the resources theme detail above ("understand
+ * the opportunity, evaluate the technical and commercial fundamentals, and
+ * direct effort where it can create lasting value"), set out as steps.
+ */
+export const stages = [
+  {
+    title: "Understand the opportunity",
+    body: "Build a clear picture of the resource and its potential before committing effort.",
+  },
+  {
+    title: "Evaluate the fundamentals",
+    body: "Test assumptions against the technical and commercial fundamentals.",
+  },
+  {
+    title: "Direct effort where it lasts",
+    body: "Direct investment towards the next meaningful step, with a long-term view.",
+  },
+];
+/** What makes a partnership introduction useful — from the Partnerships page. */
+export const partnershipQualities = [
+  "A clear purpose",
+  "Complementary strengths",
+  "A practical view of what can be achieved together",
+];

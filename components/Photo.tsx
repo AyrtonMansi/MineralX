@@ -36,7 +36,7 @@ export function Photo({
 
 export function PhotoCaption({ children }: { children: string }) {
   return (
-    <p className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-wide text-white/60">
+    <p className="flex items-center gap-3 font-medium text-[10.5px] uppercase tracking-label text-white/70">
       <span aria-hidden="true" className="h-px w-6 bg-white/40" />
       {children}
     </p>

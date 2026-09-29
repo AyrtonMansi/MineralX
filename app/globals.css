@@ -62,8 +62,13 @@ body {
 }
 
 @layer components {
+  /* Fluid editorial gutters; the right edge of this box is what split layouts
+     align to (see .pr-container). */
   .container-site {
-    @apply mx-auto w-full max-w-site px-6 md:px-10;
+    @apply mx-auto w-full max-w-site px-6 md:px-10 xl:px-16;
+  }
+  .pr-container {
+    padding-right: max(1.5rem, calc((100vw - 90rem) / 2 + 4rem));
   }
 
   /* Full visible-viewport height that tracks the mobile browser UI.
@@ -74,46 +79,131 @@ body {
     min-height: 100dvh;
   }
 
-  /* Small tracked uppercase label used for eyebrows, nav and captions. */
+  /* ── Type scale ─────────────────────────────────────────────────────────
+     One light display voice at three fluid sizes; hierarchy comes from scale
+     and space, not weight. */
+  .t-display-xl {
+    font-size: clamp(2.75rem, 1.35rem + 5.6vw, 6.75rem);
+    @apply font-light leading-[0.98] tracking-[-0.038em] text-white;
+  }
+  .t-display-lg {
+    font-size: clamp(2.25rem, 1.3rem + 3.5vw, 4.75rem);
+    @apply font-light leading-[1.02] tracking-[-0.032em] text-white;
+  }
+  .t-display-md {
+    font-size: clamp(1.625rem, 1.15rem + 1.6vw, 2.625rem);
+    @apply font-light leading-[1.12] tracking-[-0.022em] text-white;
+  }
+  .t-title {
+    font-size: clamp(1.125rem, 1rem + 0.45vw, 1.375rem);
+    @apply font-normal leading-snug tracking-[-0.01em] text-white;
+  }
+  .t-lead {
+    font-size: clamp(1.0625rem, 0.98rem + 0.4vw, 1.3125rem);
+    @apply font-light leading-[1.6] text-white/75;
+  }
+  /* Second phrase of a headline: same face and weight, set a tone softer. */
+  .t-accent {
+    @apply block text-white/55;
+  }
+  /* Small tracked uppercase label: section names, captions, metadata. */
+  .t-label {
+    @apply text-[11px] font-medium uppercase leading-none tracking-label text-white/60;
+  }
+
+  /* Legacy names kept so the markdown/article and ops-adjacent pages stay consistent. */
   .eyebrow {
-    @apply text-[11px] font-medium uppercase tracking-wide text-muted;
+    @apply text-[11px] font-medium uppercase tracking-label text-white/60;
   }
-
   .display {
-    @apply font-normal normal-case leading-[1.25] tracking-[-0.015em] text-white;
+    @apply font-light normal-case leading-[1.1] tracking-[-0.025em] text-white;
   }
-
   .body-copy {
-    @apply text-[15px] leading-relaxed text-muted md:text-base;
+    @apply text-[15px] leading-[1.75] text-muted md:text-base;
   }
 
-  /* Bordered button language carried over from the existing site. */
+  /* ── Buttons ────────────────────────────────────────────────────────────
+     Hairline outline; hover wipes a solid fill in from the left (transform
+     only, so it stays on the compositor) and nudges the arrow. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 border px-6 py-3 text-[12px] font-medium uppercase tracking-wide transition-colors duration-300;
+    @apply relative isolate inline-flex min-h-12 items-center justify-center gap-3 overflow-hidden border px-6 text-[11px] font-medium uppercase tracking-label transition-colors duration-500 ease-out;
   }
-  .btn-primary {
-    @apply border-white/85 bg-white text-black hover:bg-transparent hover:text-white;
+  .btn::before {
+    content: "";
+    @apply absolute inset-0 -z-10 origin-left scale-x-0 bg-white transition-transform duration-500 ease-out;
+  }
+  .btn:hover::before,
+  .btn:focus-visible::before {
+    @apply scale-x-100;
+  }
+  .btn svg {
+    @apply transition-transform duration-500 ease-out;
+  }
+  .btn:hover svg {
+    @apply translate-x-1;
   }
   .btn-ghost {
-    @apply border-line-strong text-white/90 hover:border-white hover:text-white;
+    @apply border-white/30 text-white hover:border-white hover:text-black focus-visible:text-black;
+  }
+  .btn-primary {
+    @apply border-white bg-white text-black hover:text-black;
+  }
+  .btn-primary::before {
+    @apply bg-ore;
+  }
+
+  /* Text link with a drawn underline: resting hairline, hover sweeps a full-
+     strength line across. */
+  .link-draw {
+    background-image: linear-gradient(currentColor, currentColor),
+      linear-gradient(rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.28));
+    background-size: 0% 1px, 100% 1px;
+    background-position: 0 100%, 0 100%;
+    background-repeat: no-repeat;
+    padding-bottom: 0.35em;
+    transition: background-size 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .link-draw:hover,
+  .link-draw:focus-visible {
+    background-size: 100% 1px, 100% 1px;
   }
 
   .hairline {
     @apply border-t border-line;
   }
 
+  /* ── Scroll reveal ──────────────────────────────────────────────────────
+     Only armed by RevealObserver after hydration, only for content that
+     starts below the fold, and never under prefers-reduced-motion — so a
+     failed script or a motion-sensitive reader always sees everything. */
+  [data-reveal] {
+    transition:
+      opacity 1s cubic-bezier(0.16, 1, 0.3, 1) var(--reveal-delay, 0ms),
+      transform 1.1s cubic-bezier(0.16, 1, 0.3, 1) var(--reveal-delay, 0ms);
+  }
+  [data-reveal="pending"] {
+    opacity: 0;
+    transform: translate3d(0, 2rem, 0);
+  }
+  [data-reveal-media] img {
+    transition: transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-reveal-media="pending"] img {
+    transform: scale(1.08);
+  }
+
   /* Markdown article body (Updates pages). */
   .article-body {
-    @apply text-[15px] leading-relaxed text-white/80 md:text-base;
+    @apply text-[16px] leading-[1.8] text-white/80 md:text-[17px];
   }
   .article-body p {
     @apply mt-5;
   }
   .article-body h2 {
-    @apply mt-10 text-xl font-semibold text-white md:text-2xl;
+    @apply mt-14 text-[26px] font-light leading-tight tracking-[-0.02em] text-white md:text-[32px];
   }
   .article-body h3 {
-    @apply mt-8 text-lg font-semibold text-white;
+    @apply mt-10 text-[20px] font-normal tracking-[-0.01em] text-white;
   }
   .article-body ul,
   .article-body ol {
@@ -164,7 +254,7 @@ body {
     transition: border-color 0.3s ease;
   }
   .field-input::placeholder {
-    color: #5f5f66;
+    color: #7d7d86;
   }
   .field-input:focus {
     border-color: rgba(255, 255, 255, 0.6);
@@ -198,6 +288,31 @@ main:focus {
 @media (prefers-reduced-motion: reduce) {
   .animate-drift {
     animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* Mobile menu: fade the sheet in and rise each item in sequence on open. */
+.mobile-menu[open] {
+  animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.mobile-menu[open] .mobile-menu-item {
+  animation: fade-up 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Print and other non-scrolling renderers must never inherit an unrevealed state. */
+@media print {
+  [data-reveal],
+  [data-reveal-media] img {
+    opacity: 1 !important;
     transform: none !important;
   }
 }

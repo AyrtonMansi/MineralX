@@ -34,11 +34,11 @@ export default async function ArticlePage({ params }: Props) {
   return (
     <>
       <main id="main-content" tabIndex={-1} className="bg-black">
-        <article className="pb-20 pt-36 md:pb-28 md:pt-44">
+        <article className="pb-24 pt-40 md:pb-36 md:pt-52">
           <div className="container-site">
             <div className="mx-auto max-w-3xl">
               <Eyebrow>
-                {article.category}
+                <span className="text-ore">{article.category}</span>
                 {article.date && (
                   <>
                     <span className="text-muted-dim">·</span>
@@ -46,19 +46,17 @@ export default async function ArticlePage({ params }: Props) {
                   </>
                 )}
               </Eyebrow>
-              <h1 className="mt-6 text-[28px] font-normal leading-[1.25] tracking-[-0.015em] text-white md:text-[36px]">
-                {article.title}
-              </h1>
+              <h1 className="t-display-lg mt-8">{article.title}</h1>
 
               <div
-                className="article-body mt-10"
+                className="article-body mt-14"
                 dangerouslySetInnerHTML={{ __html: article.html }}
               />
 
-              <div className="mt-14 border-t border-line pt-8">
+              <div className="mt-16 border-t border-line pt-8">
                 <Link
                   href="/updates"
-                  className="inline-flex items-center gap-2 text-[12px] font-medium uppercase tracking-wide text-muted transition-colors hover:text-white"
+                  className="inline-flex min-h-11 items-center gap-2 text-[11px] font-medium uppercase tracking-label text-white/70 transition-colors hover:text-white"
                 >
                   <span aria-hidden="true">←</span> All updates
                 </Link>
