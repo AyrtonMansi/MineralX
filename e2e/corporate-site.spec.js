@@ -5,9 +5,11 @@ test('header carries the MineralX Resources lockup and only live destinations',a
  await page.goto('/',{waitUntil:'domcontentloaded'});
  const nav=page.getByRole('navigation',{name:'Main navigation'});
  await expect(nav.getByRole('link',{name:'MineralX Resources home'})).toContainText(/MineralX\s*Resources/i);
- for(const [name,href] of [['Company','/company'],['Our direction','/direction'],['Partnerships','/partnerships'],['Staff sign in','/ops/login'],['Contact','/contact']]){
+ for(const [name,href] of [['Company','/company'],['Our direction','/direction'],['Partnerships','/partnerships'],['Contact','/contact']]){
   await expect(nav.getByRole('link',{name,exact:true})).toHaveAttribute('href',href);
  }
+ // Staff sign-in is footer-only for now.
+ await expect(nav.getByRole('link',{name:'Staff sign in'})).toHaveCount(0);
  // The GIC pages are retired and redirect into Operations; the header must not advertise them.
  await expect(page.locator('a[href^="/gic"]')).toHaveCount(0);
  await page.goto('/company',{waitUntil:'domcontentloaded'});

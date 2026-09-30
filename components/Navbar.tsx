@@ -18,7 +18,6 @@ export function Navbar({ hasUpdates = false }: { hasUpdates?: boolean }) {
     ...nav,
     ...(hasUpdates ? [{ label: "Updates", href: "/updates" }] : []),
   ];
-  const signIn = { label: "Staff sign in", href: "/ops/login" };
   const contact = { label: "Contact", href: "/contact" };
   const menu = [...primary, contact];
   const isCurrent = (href: string) =>
@@ -99,12 +98,6 @@ export function Navbar({ hasUpdates = false }: { hasUpdates?: boolean }) {
           </ul>
           <div className="hidden items-center gap-8 justify-self-end lg:flex">
             <Link
-              href={signIn.href}
-              className="py-3 text-[11px] font-medium uppercase tracking-label text-white/60 transition-colors hover:text-white"
-            >
-              {signIn.label}
-            </Link>
-            <Link
               href={contact.href}
               aria-current={isCurrent(contact.href) ? "page" : undefined}
               className="btn btn-ghost min-h-10 px-5"
@@ -169,13 +162,6 @@ export function Navbar({ hasUpdates = false }: { hasUpdates?: boolean }) {
                 </li>
               ))}
             </ol>
-            <Link
-              href={signIn.href}
-              onClick={closeMenu}
-              className="mt-8 inline-flex min-h-11 items-center self-start text-[11px] font-medium uppercase tracking-label text-white/70"
-            >
-              {signIn.label} →
-            </Link>
             <div className="mt-auto grid gap-2 border-t border-line pt-6 font-medium text-[11px] uppercase tracking-label text-white/60">
               <a href={`mailto:${company.email}`} className="normal-case tracking-normal text-[13px] text-white/80">
                 {company.email}
