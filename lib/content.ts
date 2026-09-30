@@ -16,8 +16,8 @@ export const company = {
     label: "Postal address",
     lines: ["PO Box 6088", "Cairns City, Queensland, 4870"],
   },
-  // City of the registered postal address — not a project or site location.
-  base: { place: "Cairns, Queensland", coordinates: "16.92° S  145.77° E" },
+  // Region of the registered postal address (coordinates: Cairns) — not a project or site location.
+  base: { place: "Far North Queensland", coordinates: "16.92° S  145.77° E" },
   social: [] as Array<{
     label: string;
     href: string;
@@ -63,6 +63,11 @@ export const photos = {
     src: "/images/site/field-operations",
     alt: "Excavator, drill rig and open workings seen from above",
     caption: "Site works · North Queensland",
+  },
+  haulage: {
+    src: "/images/site/ore-haulage",
+    alt: "Road train with a loaded side-tipper trailer beside ore stockpiles",
+    caption: "Ore haulage · North Queensland",
   },
 } satisfies Record<string, Photo>;
 export const themes = [

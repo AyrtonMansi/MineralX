@@ -109,24 +109,8 @@ export default function Home() {
 
       {/* 03 — Approach: diagonal photographic split. */}
       <section id="approach" className="border-b border-line bg-ink-900">
-        <div className="grid lg:grid-cols-2">
-          {/* Diagonal right edge echoes the angled photo crops of the brand's print work. */}
-          <figure
-            data-reveal-media=""
-            className="relative min-h-[380px] overflow-hidden md:min-h-[520px] lg:[clip-path:polygon(0_0,100%_0,84%_100%,0_100%)]"
-          >
-            <Photo
-              photo={photos.operations}
-              sizes="(min-width: 1024px) 50vw, 100vw"
-              className="absolute inset-0"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/25" />
-            <figcaption className="absolute bottom-7 left-6 md:left-10 xl:left-16">
-              <PhotoCaption>{photos.operations.caption}</PhotoCaption>
-            </figcaption>
-          </figure>
-          <div className="pr-container px-6 py-24 md:px-10 md:py-32 lg:pl-8">
-            <div data-reveal="">
+        <div className="container-site grid gap-12 py-24 md:py-32 lg:grid-cols-12">
+            <div data-reveal="" className="lg:col-span-5">
               <SectionMark>Our approach</SectionMark>
               <Headline
                 text="Ambition, backed by"
@@ -134,7 +118,7 @@ export default function Home() {
                 className="t-display-md mt-10 max-w-lg"
               />
             </div>
-            <ol className="mt-14 border-t border-line">
+            <ol className="border-t border-line lg:col-span-6 lg:col-start-7">
               {principles.map((p, i) => (
                 <li
                   key={p.title}
@@ -149,7 +133,6 @@ export default function Home() {
                 </li>
               ))}
             </ol>
-          </div>
         </div>
       </section>
 

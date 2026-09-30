@@ -34,11 +34,7 @@ export function Hero() {
         </div>
       </div>
       <div className="container-site mt-14 w-full md:mt-20">
-        <div className="flex items-center justify-between border-t border-white/15 py-5">
-          <p className="t-label text-white/55">
-            {company.base.place}
-            <span className="ml-4 hidden sm:inline">{company.base.coordinates}</span>
-          </p>
+        <div className="flex items-center justify-end border-t border-white/15 py-5">
           <a
             href="#overview"
             className="group flex min-h-11 items-center gap-3 t-label text-white/60 transition-colors hover:text-white"

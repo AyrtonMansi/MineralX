@@ -15,7 +15,6 @@ export function Footer() {
             ...column.links,
             ...(hasUpdates ? [{ label: "Updates", href: "/updates" }] : []),
             { label: "Staff sign in", href: "/ops/login" },
-            { label: "Private meetings", href: "/ops/meetings" },
           ],
         }
       : column,

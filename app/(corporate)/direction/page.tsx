@@ -47,6 +47,7 @@ export default function DirectionPage() {
             </div>
           </section>
           {i === 0 && <Figure photo={photos.landscape} height="band" />}
+          {i === 1 && <Figure photo={photos.haulage} height="band" />}
         </Fragment>
       ))}
 
