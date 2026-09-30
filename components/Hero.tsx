@@ -7,7 +7,7 @@ export function Hero() {
   return (
     <section
       id="top"
-      className="relative isolate flex min-h-screen-dyn flex-col justify-end overflow-hidden pt-32"
+      className="relative isolate flex min-h-screen-dyn flex-col justify-end overflow-hidden pb-16 pt-32 md:pb-24"
     >
       <TerrainBackground />
       <div className="container-site w-full">
@@ -31,19 +31,6 @@ export function Hero() {
               Discover MineralX
             </Link>
           </div>
-        </div>
-      </div>
-      <div className="container-site mt-14 w-full md:mt-20">
-        <div className="flex items-center justify-end border-t border-white/15 py-5">
-          <a
-            href="#overview"
-            className="group flex min-h-11 items-center gap-3 t-label text-white/60 transition-colors hover:text-white"
-          >
-            Scroll
-            <span aria-hidden="true" className="relative block h-6 w-px overflow-hidden bg-white/20">
-              <span className="absolute inset-x-0 top-0 h-full origin-top animate-scroll-cue bg-white/80" />
-            </span>
-          </a>
         </div>
       </div>
     </section>
