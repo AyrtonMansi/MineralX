@@ -28,7 +28,7 @@ test('footer states the legal entity, ABN and postal address',async({page})=>{
 
 test('site photography loads on every page that uses it',async({page})=>{
  const failed=[];page.on('response',r=>{if(r.url().includes('/images/site/')&&r.status()>=400)failed.push(`${r.status()} ${r.url()}`);});
- for(const [path,expected] of [['/',2],['/company',2],['/direction',4],['/partnerships',1]]){
+ for(const [path,expected] of [['/',2],['/company',2],['/direction',3],['/partnerships',0]]){
   await page.goto(path,{waitUntil:'domcontentloaded'});
   const photos=page.locator('img[src*="/images/site/"]');
   await expect(photos).toHaveCount(expected);

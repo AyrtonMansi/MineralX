@@ -76,12 +76,15 @@ export function PageIntro({
   accent,
   intro,
   photo,
+  plain = false,
 }: {
   label: string;
   title: string;
   accent?: string;
   intro: string;
   photo?: PhotoData;
+  /** Solid black, without the contour field. */
+  plain?: boolean;
 }) {
   return (
     <section
@@ -103,7 +106,7 @@ export function PageIntro({
             <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-black/75 to-transparent" />
           </>
         ) : (
-          <ContourField className="animate-fade-in" />
+          !plain && <ContourField className="animate-fade-in" />
         )}
       </div>
       <div className="container-site w-full">
@@ -139,6 +142,32 @@ export function Figure({ photo, height = "tall" }: { photo: PhotoData; height?: 
       <Photo photo={photo} className="absolute inset-0 object-[center_80%]" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
       <figcaption className="container-site absolute inset-x-0 bottom-6 md:bottom-8">
+        <PhotoCaption>{photo.caption}</PhotoCaption>
+      </figcaption>
+    </figure>
+  );
+}
+
+/**
+ * Inset photograph for lower-resolution sources: held to the left ~60% of the
+ * page so it isn't stretched full-bleed, and fading into black on its right.
+ */
+export function SideFigure({ photo }: { photo: PhotoData }) {
+  return (
+    <figure
+      data-reveal-media=""
+      className="relative h-[46svh] min-h-[300px] overflow-hidden border-y border-line bg-black md:h-[56svh] md:min-h-[380px]"
+    >
+      <div className="absolute inset-y-0 left-0 w-full md:w-[62%]">
+        <Photo
+          photo={photo}
+          sizes="(min-width: 768px) 62vw, 100vw"
+          className="object-[12%_center]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+        <div className="absolute inset-y-0 right-0 hidden w-2/3 bg-gradient-to-l from-black via-black/60 to-transparent md:block" />
+      </div>
+      <figcaption className="container-site absolute inset-x-0 bottom-6 flex md:bottom-8 md:justify-end">
         <PhotoCaption>{photo.caption}</PhotoCaption>
       </figcaption>
     </figure>

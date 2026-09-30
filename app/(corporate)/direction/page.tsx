@@ -5,6 +5,7 @@ import {
   PageIntro,
   PartnerCTA,
   SectionMark,
+  SideFigure,
   revealDelay,
 } from "@/components/Corporate";
 import { photos, stages, themes } from "@/lib/content";
@@ -22,7 +23,7 @@ export default function DirectionPage() {
         title="From mineral potential"
         accent="to industrial possibility."
         intro="A connected direction across mining, research and industrial development. Each strengthens our understanding of how resources can create lasting value."
-        photo={photos.drillRig}
+        plain
       />
 
       {themes.map((t, i) => (
@@ -47,7 +48,7 @@ export default function DirectionPage() {
             </div>
           </section>
           {i === 0 && <Figure photo={photos.landscape} height="band" />}
-          {i === 1 && <Figure photo={photos.haulage} height="band" />}
+          {i === 1 && <SideFigure photo={photos.haulage} />}
         </Fragment>
       ))}
 

@@ -11,7 +11,6 @@ import {
   enquiryHref,
   partnerTypes,
   partnershipQualities,
-  photos,
 } from "@/lib/content";
 import { pageMetadata } from "@/lib/metadata";
 export const metadata = pageMetadata(
@@ -27,7 +26,7 @@ export default function PartnershipsPage() {
         title="Build on"
         accent="shared ambition."
         intro="We welcome conversations with investors, industry partners and organisations aligned with the responsible development of Australian resources and industrial capability."
-        photo={photos.operations}
+        plain
       />
 
       <section className="py-28 md:py-40">
